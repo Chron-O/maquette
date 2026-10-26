@@ -163,6 +163,7 @@ body.mob #main.coll .m-hd,body.mob #main.coll .m-top{max-height:0;opacity:0;padd
 .zex2{display:flex;flex-direction:column;align-items:flex-start;gap:12px;font-size:13px}.zex2>span{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 body.mob.real{background:var(--page)}body.mob.real #app{width:100vw;height:100vh;height:100dvh;margin:0;border-radius:0;box-shadow:none}
 body.real .x-ctl{bottom:120px;left:8px;max-width:calc(100vw - 16px);flex-wrap:wrap}
+.x-tab.on.ghost{background:#C3DCCC;color:var(--forest)}.x-tab.on.ghost .sbt{color:#3F6150}.x-tab.on.ghost .sbt.on{background:rgba(255,255,255,.55);color:var(--forest);box-shadow:none}
 </style></head><body>
 <h1 class="sr-only">Maquette utilisable de Chron'O : onglets, bulle Matériel, tiroir Direct, fenêtre Diffuser.</h1>
 <div id="app"><div id="main" style="display:flex;flex-direction:column;height:100%"></div><div id="dr" class="hide"></div><div id="ov"></div></div>
@@ -734,7 +735,7 @@ IC.sort='<path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>';
 var MT={c:'map',p:'users',d:'tri',b:'box',r:'trophy'};
 function mInd(){var c=S.matPb?['#FDE4E1','#D92D20','#D92D20']:['#FFF1B8','#6B5200','#C9A200'];return '<span class="x-ind" style="background:'+c[0]+';color:'+c[1]+';padding:7px 10px" onclick="S.mat=!S.mat;r()"><span class="dot" style="background:'+c[2]+'"></span>'+(S.matPb?'Arrivée 1':'Matériel')+'</span>'}
 function mHead(){return '<div class="x-hd" style="padding:10px 14px"><div style="min-width:0"><div style="font-size:11px;color:#9FD9B8"><span style="text-decoration:underline;cursor:pointer" onclick="S.view=\'home\';S.dr=false;r()">‹ Accueil</span></div><div style="font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+D.ev+'</div></div><span style="margin-left:auto">'+mInd()+'</span></div>'}
-function mTabs(){var t='';for(var i=0;i<TABS.length;i++){var k=TABS[i][0],on=S.tab===k&&!S.dr;t+='<span class="x-tab'+(on?' on':'')+'" onclick="goTab(\''+k+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:8px '+(on?'12px':'10px')+'">'+ic(MT[k],'width:18px;height:18px')+(on?TABS[i][1]:'')+'</span>'}
+function mTabs(){var t='';for(var i=0;i<TABS.length;i++){var k=TABS[i][0],on=S.tab===k;t+='<span class="x-tab'+(on?' on':'')+(on&&S.dr?' ghost':'')+'" onclick="goTab(\''+k+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:8px '+(on?'12px':'10px')+'">'+ic(MT[k],'width:18px;height:18px')+(on?TABS[i][1]:'')+'</span>'}
 return '<div class="x-tabsrow" style="padding:8px 10px 0;gap:6px"><span class="x-tabs" style="flex:1;justify-content:space-between">'+t+'</span><span class="x-direct'+(S.dr?' on':'')+'" style="margin:0;padding:8px 10px;position:relative" onclick="drTog()">'+ic('radio','width:18px;height:18px')+(nTodo()?'<span style="position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:#E0281B;box-shadow:0 0 0 2px #E3EEE6"></span>':'')+'</span></div>'}
 function mZone(sum){return '<div class="x-zone" style="display:flex;width:100%;align-items:center;gap:8px;padding:6px">'+gearBtn(S.pg,'S.pg=!S.pg;r()',44)+'<span class="m" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+sum.join(' · ')+'</span></div>'}
 function mAlert(t,d,btn){return '<div class="x-alert" style="display:block;margin-top:8px;padding:10px 12px"><b style="font-size:13px">'+t+'</b><div class="m">'+d+'</div><span class="b p" style="width:100%;justify-content:center;margin-top:8px;padding:9px">'+btn+'</span></div>'}
@@ -1131,11 +1132,11 @@ function posOf(tab,sub){var o=[];TABS.forEach(function(t){var s=SUBT[t[0]];if(s)
 function goSub(s){var mn=document.getElementById('main');if(mn)mn.classList.remove('coll');var a=posOf(S.tab,S.bsub);S.bsub=s;if(s!=='reg')S.bmode=s;S.bread=-1;S.slide=posOf(S.tab,s)>a?1:-1;S.pop=null;r()}
 function goTab(k){var mn=document.getElementById('main');if(mn)mn.classList.remove('coll');var a=posOf(S.tab,subOf(S.tab));S.slide=posOf(k,subOf(k))>a?1:(k===S.tab?0:-1);S.tab=k;S.mat=false;S.pop=null;if(S.dr){S.dr=false;drSync()}r()}
 /* ordinateur : rangée d'onglets */
-function tabsRow(){var t='';for(var i=0;i<TABS.length;i++){var k=TABS[i][0],on=S.tab===k&&!S.dr,sb=SUBT[k];
+function tabsRow(){var t='';for(var i=0;i<TABS.length;i++){var k=TABS[i][0],on=S.tab===k,sb=SUBT[k],gh=S.dr?' ghost':'';
 if(on&&sb){var g='',h='';sb.forEach(function(x){var a=S.bsub===x[0];if(!x[1])g='<span class="sbt'+(a?' on':'')+'" title="Réglages de l\'onglet" style="padding:4px 7px;display:inline-flex" onclick="event.stopPropagation();goSub(\''+x[0]+'\')">'+GEAR+'</span>';else h+='<span class="sbt'+(a?' on':'')+'" onclick="event.stopPropagation();goSub(\''+x[0]+'\')">'+x[1]+'</span>'});
-t+='<span class="x-tab on" style="display:inline-flex;align-items:center;padding:4px 5px 4px 5px;gap:0" onclick="goTab(\''+k+'\')"><span style="padding-left:10px">'+TABS[i][1]+'</span><span style="display:inline-flex;margin-left:8px;gap:2px">'+g+h+'</span></span>'}
-else t+='<span class="x-tab'+(on?' on':'')+'" onclick="goTab(\''+k+'\')">'+TABS[i][1]+'</span>'}
-return '<div class="x-tabsrow"><span class="x-tabs">'+t+'</span><span class="x-direct'+(S.dr?' on':'')+'" onclick="drTog()"><span class="live"></span>Direct</span></div>'}
+t+='<span class="x-tab on'+gh+'" style="display:inline-flex;align-items:center;padding:4px 5px 4px 5px;gap:0" onclick="goTab(\''+k+'\')"><span style="padding-left:10px">'+TABS[i][1]+'</span><span style="display:inline-flex;margin-left:8px;gap:2px">'+g+h+'</span></span>'}
+else t+='<span class="x-tab'+(on?' on'+gh:'')+'" onclick="goTab(\''+k+'\')">'+TABS[i][1]+'</span>'}
+return '<div class="x-tabsrow"><span class="x-tabs">'+t+'</span><span class="x-direct'+(S.dr?' on':'')+'" style="margin-left:10px" onclick="drTog()"><span class="live"></span>Direct</span></div>'}
 /* page Réglages de l'onglet Boîtiers */
 function setRow(l,d,v){return '<div class="sr"><div style="flex:1;min-width:0"><div style="font-weight:600">'+l+'</div>'+(d?'<div class="m">'+d+'</div>':'')+'</div><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">'+v+'</div></div>'}
 function bxSettings(){return '<div class="x-card" style="padding:4px 18px 10px;max-width:760px;margin:6px auto 0">'+
