@@ -1185,8 +1185,10 @@ var app=document.getElementById('app');if(app)app.style.height=(!S.mob&&z!==1)?(
 var _rA=r;r=function(){_rA();document.body.classList.toggle('real',!!(S.mob&&S.real))};
 var _ctlA=ctl;ctl=function(){_ctlA();var e=document.getElementById('ctl');if(!e)return;e.innerHTML=e.innerHTML.replace(/S\.mob=(true|false);/g,'S.forced=true;S.mob=$1;autoMode();')};
 autoMode();window.addEventListener('resize',function(){var was=S.mob;autoMode();if(was!==S.mob){S.pop=null;r();setTimeout(drSync,30)}});
-/* ---------- 26/10 : Direct déployé — tout clic hors du tiroir le referme et ramène à la vue d'avant ---------- */
+/* ---------- 26/10 : Direct déployé — tout clic hors du tiroir le referme et ramène à la vue d'avant ;
+   30/10 : un clic sur un onglet ou un sous-onglet le referme ET ouvre cet onglet ---------- */
 document.addEventListener('click',function(e){if(!S.dr)return;var t=e.target;
 if(t.closest('#dr')||t.closest('#pv')||t.closest('#ctl')||t.closest('.x-direct')||t.closest('.x-modal'))return;
+if(t.closest('.x-tab')||t.closest('.ms')){S.dr=false;S.filt=false;drSync();return}
 e.stopPropagation();e.preventDefault();S.dr=false;S.filt=false;drSync();r()},true);
 r();setTimeout(drSync,50);</script></body></html>
