@@ -1,0 +1,42 @@
+import { Theme } from "../theme.slint";
+
+// Breathing dot: "En course", Direct. Stays still when the system asks for reduced motion.
+export component LiveDot {
+    in property <color> tone;
+    in property <length> size;
+
+    property <float> breath: Theme.reduced-motion ? 1
+        : (1 + Math.sin(animation-tick() / Theme.breathing-period * 360deg)) / 2;
+
+    width: size;
+    height: size;
+
+    Rectangle {
+        width: root.size * (Theme.breathing-size-min + (1 - Theme.breathing-size-min) * root.breath);
+        height: self.width;
+        border-radius: self.width / 2;
+        background: root.tone;
+        opacity: Theme.breathing-opacity-min + (1 - Theme.breathing-opacity-min) * root.breath;
+    }
+}
+
+// Spinning icon: reading, syncing. Stays still when the system asks for reduced motion.
+export component SpinningIcon {
+    in property <image> source;
+    in property <color> tone;
+    in property <length> size;
+
+    property <angle> angle: Theme.reduced-motion ? 0deg
+        : Math.mod(animation-tick() / 1ms, Theme.rotation-period / 1ms) / (Theme.rotation-period / 1ms) * 360deg;
+
+    width: size;
+    height: size;
+
+    Image {
+        source: root.source;
+        colorize: root.tone;
+        width: root.size;
+        height: root.size;
+        transform-rotation: root.angle;
+    }
+}

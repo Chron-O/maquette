@@ -4,245 +4,247 @@
 import { Palette } from "std-widgets.slint";
 
 // Fonts embedded in the program (IBM Plex Sans, OFL license).
-import "polices/IBMPlexSans-Regular.ttf";
-import "polices/IBMPlexSans-Medium.ttf";
-import "polices/IBMPlexSans-SemiBold.ttf";
-import "polices/IBMPlexSans-Bold.ttf";
+import "fonts/IBMPlexSans-Regular.ttf";
+import "fonts/IBMPlexSans-Medium.ttf";
+import "fonts/IBMPlexSans-SemiBold.ttf";
+import "fonts/IBMPlexSans-Bold.ttf";
 
-export enum ModeTheme { auto, clair, sombre }
+export enum ThemeMode { auto, light, dark }
 
 // A state family: the color gives the family, the icon and the word give the status.
-export struct FamilleEtat {
-    badge-texte: color,
-    badge-fond: color,
-    pave-texte: color,
-    pave-fond: color,
+export struct StateFamily {
+    badge-text: color,
+    badge-background: color,
+    block-text: color,
+    block-background: color,
 }
 
 export global Theme {
     // `auto` follows the system setting; the others are only used by the capture tool.
-    in-out property <ModeTheme> mode: ModeTheme.auto;
-    out property <bool> sombre: mode == ModeTheme.auto
+    in-out property <ThemeMode> mode: ThemeMode.auto;
+    out property <bool> dark: mode == ThemeMode.auto
         ? Palette.color-scheme == ColorScheme.dark
-        : mode == ModeTheme.sombre;
+        : mode == ThemeMode.dark;
 
     // Animations. Off when the system asks for reduced motion (set from Rust).
-    in-out property <bool> moins-de-mouvements: false;
-    out property <duration> duree-teinte: moins-de-mouvements ? 0ms : 120ms;
-    out property <duration> duree-onglet: moins-de-mouvements ? 0ms : 220ms;
-    out property <duration> duree-arrivee: moins-de-mouvements ? 0ms : 220ms;
-    out property <duration> periode-respiration: 1800ms;
-    out property <duration> periode-rotation: 1200ms;
-    out property <float> respiration-taille-min: 0.8;
-    out property <float> respiration-opacite-min: 0.55;
+    in-out property <bool> reduced-motion: false;
+    out property <duration> tint-duration: reduced-motion ? 0ms : 120ms;
+    out property <duration> tab-duration: reduced-motion ? 0ms : 220ms;
+    out property <duration> arrival-duration: reduced-motion ? 0ms : 220ms;
+    out property <duration> breathing-period: 1800ms;
+    out property <duration> rotation-period: 1200ms;
+    out property <float> breathing-size-min: 0.8;
+    out property <float> breathing-opacity-min: 0.55;
 
     // Font
-    out property <string> police: "IBM Plex Sans";
+    out property <string> font: "IBM Plex Sans";
 
     // Base colors
-    out property <color> fond-page: sombre ? #0F1A14 : #F5F8F4;
-    out property <color> entete: sombre ? #17241C : #163628;   // dark: neutral, like the cards
-    out property <color> entete-texte: sombre ? #E8F0EA : #FFFFFF;
-    out property <color> carte: sombre ? #17241C : #FFFFFF;
-    out property <color> carte-contour: sombre ? #24352B : transparent;
-    out property <length> carte-contour-epaisseur: sombre ? 1px : 0px;
-    out property <color> carte-ombre: sombre ? transparent : #16362814;
-    out property <color> surface: sombre ? #1F2F26 : #F0F5F1;
-    out property <color> texte: sombre ? #E8F0EA : #163628;
-    out property <color> texte-secondaire: sombre ? #8FA398 : #4A5D52;   // light: measured on the captures
-    out property <color> contour-fin: sombre ? #24352B : #C9D6CE;        // light: measured on the captures
+    out property <color> page-background: dark ? #0F1A14 : #F5F8F4;
+    out property <color> header: dark ? #17241C : #163628;   // dark: neutral, like the cards
+    out property <color> header-text: dark ? #E8F0EA : #FFFFFF;
+    out property <color> card: dark ? #17241C : #FFFFFF;
+    out property <color> card-outline: dark ? #24352B : transparent;
+    out property <length> card-outline-width: dark ? 1px : 0px;
+    out property <color> card-shadow: dark ? transparent : #16362814;
+    out property <color> surface: dark ? #1F2F26 : #F0F5F1;
+    out property <color> text: dark ? #E8F0EA : #163628;
+    out property <color> text-secondary: dark ? #8FA398 : #4A5D52;   // light: measured on the captures
+    out property <color> thin-outline: dark ? #24352B : #C9D6CE;        // light: measured on the captures
 
     // Selected tab
-    out property <color> onglet-actif-fond: sombre ? #E8F0EA : #163628;
-    out property <color> onglet-actif-texte: sombre ? #0F1A14 : #FFFFFF;
+    out property <color> active-tab-background: dark ? #E8F0EA : #163628;
+    out property <color> active-tab-text: dark ? #0F1A14 : #FFFFFF;
 
     // Buttons
-    out property <color> bouton-principal: #D9650C;
-    out property <color> bouton-principal-texte: #FFFFFF;
-    out property <color> bouton-secondaire: sombre ? #1F2F26 : #FFFFFF;   // light: white, as on the captures
+    out property <color> primary-button: #D9650C;
+    out property <color> primary-button-text: #FFFFFF;
+    out property <color> secondary-button: dark ? #1F2F26 : #FFFFFF;   // light: white, as on the captures
 
     // Button on the header (tint changes on hover and press)
-    out property <color> entete-bouton: sombre ? #1F2F26 : #FFFFFF1F;
-    out property <color> entete-bouton-survol: sombre ? #24352B : #FFFFFF33;
-    out property <color> entete-bouton-appui: sombre ? #2C4034 : #FFFFFF47;
+    out property <color> header-button: dark ? #1F2F26 : #FFFFFF1F;
+    out property <color> header-button-hover: dark ? #24352B : #FFFFFF33;
+    out property <color> header-button-pressed: dark ? #2C4034 : #FFFFFF47;
 
     // Accents
-    out property <color> vivant: #3DDC97;
-    out property <color> violine: #B5179E;
-    out property <color> violine-bande: #FFFFFF;
+    out property <color> live: #3DDC97;
+    out property <color> purple: #B5179E;
+    out property <color> purple-band: #FFFFFF;
 
     // Input field
-    out property <color> champ-saisie-fond: sombre ? #17241C : #FFFFFF;
-    out property <color> champ-saisie-contour: sombre ? #3DDC97 : #163628;
-    out property <color> champ-erreur-contour: sombre ? #FF6B5E : #D92D20;
-    out property <length> champ-contour-epaisseur: 2px;
+    out property <color> field-editing-background: dark ? #17241C : #FFFFFF;
+    out property <color> field-editing-outline: dark ? #3DDC97 : #163628;
+    out property <color> field-error-outline: dark ? #FF6B5E : #D92D20;
+    out property <length> field-outline-width: 2px;
 
     // Tabs. Light: measured on 02-participants.png and 08-direct.png.
-    out property <color> onglets-fond: sombre ? #1F2F26 : #E3EEE6;
-    out property <color> onglet-texte: sombre ? #8FA398 : #2F4A3B;
-    out property <color> onglet-survol: sombre ? #24352B : #D3E3D9;
+    out property <color> tabs-background: dark ? #1F2F26 : #E3EEE6;
+    out property <color> tab-text: dark ? #8FA398 : #2F4A3B;
+    out property <color> tab-hover: dark ? #24352B : #D3E3D9;
 
     // Hover and press feedback: a tint change, never a shadow.
-    out property <color> bouton-principal-survol: #C65A09;
-    out property <color> bouton-principal-appui: #AE4F07;
-    out property <color> bouton-secondaire-survol: sombre ? #24352B : #F0F5F1;
-    out property <color> bouton-secondaire-appui: sombre ? #2C4034 : #E3EEE6;
+    out property <color> primary-button-hover: #C65A09;
+    out property <color> primary-button-pressed: #AE4F07;
+    out property <color> secondary-button-hover: dark ? #24352B : #F0F5F1;
+    out property <color> secondary-button-pressed: dark ? #2C4034 : #E3EEE6;
 
     // List row. Light: measured on the captures. Dark: neutral surfaces.
-    out property <color> ligne-a-traiter: sombre ? #17241C : #FFF7F0;
-    out property <color> separateur: sombre ? #24352B : #EEF2EF;
+    out property <color> row-to-handle: dark ? #17241C : #FFF7F0;
+    out property <color> separator: dark ? #24352B : #EEF2EF;
 
     // Courses (square chip), measured on 08-direct.png
-    out property <color> circuit-rouge: #E0402B;
-    out property <color> circuit-vert: #1E9E4A;
-    out property <color> circuit-bleu: #2B6CD8;
+    out property <color> course-red: #E0402B;
+    out property <color> course-green: #1E9E4A;
+    out property <color> course-blue: #2B6CD8;
 
     // State families. Dark: color on the text only, neutral surface.
-    out property <FamilleEtat> valide: {
-        badge-texte: sombre ? #7EE2A0 : #17663A,
-        badge-fond: sombre ? surface : #DDF3E5,
-        pave-texte: sombre ? #7EE2A0 : #0E4F2A,
-        pave-fond: sombre ? surface : #A8E5BF,
+    out property <StateFamily> valid: {
+        badge-text: dark ? #7EE2A0 : #17663A,
+        badge-background: dark ? surface : #DDF3E5,
+        block-text: dark ? #7EE2A0 : #0E4F2A,
+        block-background: dark ? surface : #A8E5BF,
     };
-    out property <FamilleEtat> en-cours: {
-        badge-texte: sombre ? #5FE0C8 : #0B6B5A,
-        badge-fond: sombre ? surface : #D3F5EC,
-        pave-texte: sombre ? #5FE0C8 : #074B3F,
-        pave-fond: sombre ? surface : #A7EBDA,
+    out property <StateFamily> in-progress: {
+        badge-text: dark ? #5FE0C8 : #0B6B5A,
+        badge-background: dark ? surface : #D3F5EC,
+        block-text: dark ? #5FE0C8 : #074B3F,
+        block-background: dark ? surface : #A7EBDA,
     };
-    out property <FamilleEtat> a-verifier: {
-        badge-texte: sombre ? #FFE066 : #6B5200,
-        badge-fond: sombre ? surface : #FFF1B8,
-        pave-texte: sombre ? #FFE066 : #4D3B00,
-        pave-fond: sombre ? surface : #FFE07A,
+    out property <StateFamily> to-check: {
+        badge-text: dark ? #FFE066 : #6B5200,
+        badge-background: dark ? surface : #FFF1B8,
+        block-text: dark ? #FFE066 : #4D3B00,
+        block-background: dark ? surface : #FFE07A,
     };
-    out property <FamilleEtat> probleme: {
-        badge-texte: sombre ? #FF6B5E : #D92D20,
-        badge-fond: sombre ? surface : #FDE4E1,
-        pave-texte: sombre ? #FF6B5E : #A3170D,
-        pave-fond: sombre ? surface : #FFCBC4,
+    out property <StateFamily> problem: {
+        badge-text: dark ? #FF6B5E : #D92D20,
+        badge-background: dark ? surface : #FDE4E1,
+        block-text: dark ? #FF6B5E : #A3170D,
+        block-background: dark ? surface : #FFCBC4,
     };
-    out property <FamilleEtat> inactif: {
-        badge-texte: sombre ? #B4BEC6 : #4F5A63,
-        badge-fond: sombre ? surface : #ECEFF1,
-        pave-texte: sombre ? #B4BEC6 : #39434B,
-        pave-fond: sombre ? surface : #D5DBDF,
+    out property <StateFamily> inactive: {
+        badge-text: dark ? #B4BEC6 : #4F5A63,
+        badge-background: dark ? surface : #ECEFF1,
+        block-text: dark ? #B4BEC6 : #39434B,
+        block-background: dark ? surface : #D5DBDF,
     };
 
     // Header indicators and tables. Light: measured on 08-direct.png.
-    out property <color> entete-secondaire: sombre ? #8FA398 : #9FD9B8;
-    out property <color> entete-contour: sombre ? #2C4034 : #60766D;
+    out property <color> header-secondary: dark ? #8FA398 : #9FD9B8;
+    out property <color> header-outline: dark ? #2C4034 : #60766D;
     out property <color> attention: #E5B400;
-    out property <color> tableau-contour: sombre ? #24352B : #E3EAE5;
+    out property <color> table-outline: dark ? #24352B : #E3EAE5;
 
     // Text scale
-    out property <length> texte-temps-bandeau: 36px;
-    out property <length> texte-temps-geant: 48px;
-    out property <length> texte-titre-ecran: 22px;
-    out property <length> texte-bouton-principal: 18px;
-    out property <length> texte-titre-bloc: 17px;
-    out property <length> texte-courant: 16px;
-    out property <length> texte-libelle: 14px;
-    out property <length> texte-aide: 13px;
+    out property <length> text-time-banner: 36px;
+    out property <length> text-time-giant: 48px;
+    out property <length> text-screen-title: 22px;
+    out property <length> text-primary-button: 18px;
+    out property <length> text-block-title: 17px;
+    out property <length> text-body: 16px;
+    out property <length> text-label: 14px;
+    out property <length> text-help: 13px;
 
     // Font weights
-    out property <int> graisse-lecture: 400;
-    out property <int> graisse-libelle: 500;
-    out property <int> graisse-titre-bloc: 600;
-    out property <int> graisse-titre-ecran: 700;
+    out property <int> weight-regular: 400;
+    out property <int> weight-label: 500;
+    out property <int> weight-block-title: 600;
+    out property <int> weight-screen-title: 700;
 
     // Sizes follow the device, not the width: touch 48 px, mouse 36 px (set from Rust).
-    in-out property <bool> tactile: false;
-    out property <length> zone: tactile ? 48px : 36px;
-    out property <length> zone-terrain: 56px;
-    out property <length> hauteur-champ: tactile ? 48px : 36px;
-    out property <length> hauteur-bouton-principal: tactile ? 48px : 36px;
-    out property <length> hauteur-action-ligne: tactile ? 40px : 32px;
-    out property <length> hauteur-bouton-secondaire: tactile ? 40px : 32px;
-    out property <length> hauteur-barre-onglets: tactile ? 52px : 40px;
-    out property <length> hauteur-onglet: tactile ? 44px : 32px;
+    in-out property <bool> touch: false;
+    out property <length> zone: touch ? 48px : 36px;
+    out property <length> field-zone: 56px;
+    out property <length> field-height: touch ? 48px : 36px;
+    out property <length> primary-button-height: touch ? 48px : 36px;
+    out property <length> row-action-height: touch ? 40px : 32px;
+    out property <length> secondary-button-height: touch ? 40px : 32px;
+    out property <length> tab-bar-height: touch ? 52px : 40px;
+    out property <length> tab-height: touch ? 44px : 32px;
 
     // Shapes
-    out property <length> rayon-carte: 16px;
-    out property <length> rayon-champ: 12px;
-    out property <length> rayon-bouton-secondaire: 10px;
-    out property <length> rayon-pave: 12px;
-    out property <length> contour-fin-epaisseur: 1px;
-    out property <length> ombre-flou: 12px;
-    out property <length> ombre-demo: 24px;
+    out property <length> card-radius: 16px;
+    out property <length> field-radius: 12px;
+    out property <length> secondary-button-radius: 10px;
+    out property <length> block-radius: 12px;
+    out property <length> thin-outline-width: 1px;
+    out property <length> shadow-blur: 12px;
+    out property <length> demo-shadow: 24px;
 
     // Status badge and block (measured on 08-direct.png)
-    out property <length> hauteur-badge: 22px;
-    out property <length> largeur-pave: 80px;
-    out property <length> hauteur-pave: 54px;
+    out property <length> badge-height: 22px;
+    out property <length> block-width: 80px;
+    out property <length> block-height: 54px;
 
     // Buttons (measured on the captures). The click area stays the one from the charter.
-    out property <length> hauteur-bouton-petit: 24px;
-    out property <length> largeur-bouton-petit: 32px;
-    out property <length> soulignement: 1px;
-    out property <length> barre-temps: 1px;
-    out property <length> barre-temps-grand: 2px;
-    out property <length> marge-bouton: 12px;
-    out property <length> marge-bouton-principal: 16px;
-    out property <length> espace-petit: 4px;
-    out property <length> espace-icone-bouton: 6px;
-    out property <length> marge-badge: 7px;
-    out property <length> espace-icone-badge: 2px;
+    out property <length> small-button-height: 24px;
+    out property <length> small-button-width: 32px;
+    out property <length> underline: 1px;
+    out property <length> time-strike: 1px;
+    out property <length> time-strike-large: 2px;
+    out property <length> button-margin: 12px;
+    out property <length> primary-button-margin: 16px;
+    out property <length> space-small: 4px;
+    out property <length> button-icon-gap: 6px;
+    out property <length> badge-margin: 7px;
+    out property <length> badge-icon-gap: 2px;
 
     // Tabs (measured on 02-participants.png)
-    out property <length> marge-onglet: 15px;
+    out property <length> tab-margin: 15px;
 
     // Tab icons
-    out property <length> icone-onglet: 20px;
+    out property <length> tab-icon: 20px;
 
     // Header indicator (measured on 08-direct.png)
-    out property <length> hauteur-indicateur: 29px;
-    out property <length> marge-indicateur: 12px;
-    out property <length> icone-indicateur: 16px;
-    out property <length> point-indicateur: 8px;
-    out property <length> contour-attention: 2px;
+    out property <length> indicator-height: 29px;
+    out property <length> indicator-margin: 12px;
+    out property <length> indicator-icon: 16px;
+    out property <length> indicator-dot: 8px;
+    out property <length> attention-outline: 2px;
 
     // Icons and markers
-    out property <length> icone-badge: 14px;
-    out property <length> icone-bouton: 18px;
-    out property <length> icone-message: 16px;
-    out property <length> icone-pave: 18px;
-    out property <length> point-badge: 6px;
-    out property <length> point-pave: 10px;
-    out property <length> circuit-carre: 11px;
-    out property <length> circuit-carre-rayon: 2px;
-    out property <length> largeur-colonne-action: 120px;
+    out property <length> badge-icon: 14px;
+    out property <length> button-icon: 18px;
+    out property <length> message-icon: 16px;
+    out property <length> block-icon: 18px;
+    out property <length> badge-dot: 6px;
+    out property <length> block-dot: 10px;
+    out property <length> course-chip: 11px;
+    out property <length> course-chip-radius: 2px;
+    out property <length> action-column-width: 120px;
 
     // Table (08-direct.png, fitted to the window width)
-    out property <length> hauteur-ligne-tableau: 39px;
-    out property <length> tableau-colonne-etat: 120px;
-    out property <length> tableau-colonne-categorie: 110px;
-    out property <length> tableau-colonne-temps: 90px;
-    out property <length> tableau-colonne-place: 70px;
-    out property <length> tableau-colonne-lu: 90px;
+    out property <length> table-row-height: 39px;
+    out property <length> table-column-state: 120px;
+    out property <length> table-column-category: 110px;
+    out property <length> table-column-time: 90px;
+    out property <length> table-column-place: 70px;
+    out property <length> table-column-read: 90px;
 
     // Table columns, as a share of the usable width (08-direct.png)
-    out property <float> tableau-x-nom: 0.1664;
-    out property <float> tableau-x-categorie: 0.3638;
-    out property <float> tableau-x-temps: 0.5104;
-    out property <float> tableau-x-place: 0.6336;
-    out property <float> tableau-x-lu: 0.7244;
+    out property <float> table-x-name: 0.1664;
+    out property <float> table-x-category: 0.3638;
+    out property <float> table-x-time: 0.5104;
+    out property <float> table-x-place: 0.6336;
+    out property <float> table-x-read: 0.7244;
 
     // Table header
-    out property <length> hauteur-entete-tableau: 31px;
+    out property <length> table-header-height: 31px;
 
     // Layout: the width picks the layout (narrow, medium, wide).
-    out property <length> seuil-moyen: 600px;
-    out property <length> seuil-large: 1000px;
-    out property <length> fenetre-largeur: 1100px;
-    out property <length> fenetre-hauteur: 700px;
-    out property <length> fenetre-largeur-min: 320px;
-    out property <length> fenetre-hauteur-min: 480px;
-    out property <length> marge-etroite: 16px;
-    out property <length> largeur-demo: 288px;
-    out property <length> marge: 24px;
-    out property <length> marge-carte: 24px;
-    out property <length> espace: 8px;
-    out property <length> espace-moyen: 16px;
+    out property <length> medium-threshold: 600px;
+    out property <length> wide-threshold: 1000px;
+    out property <length> window-width: 1100px;
+    out property <length> window-height: 700px;
+    out property <length> window-min-width: 320px;
+    out property <length> window-min-height: 480px;
+    out property <length> narrow-margin: 16px;
+    out property <length> demo-width: 288px;
+    out property <length> home-max-width: 1072px;
+    out property <length> club-column-width: 340px;
+    out property <length> margin: 24px;
+    out property <length> card-margin: 24px;
+    out property <length> space: 8px;
+    out property <length> space-medium: 16px;
 
 }

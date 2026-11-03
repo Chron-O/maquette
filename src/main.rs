@@ -1,3 +1,3 @@
 fn main() -> Result<(), slint::PlatformError> {
-    maquette::lancer()
+    maquette::run()
 }

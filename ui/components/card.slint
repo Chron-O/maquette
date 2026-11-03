@@ -1,0 +1,65 @@
+import { Theme } from "../theme.slint";
+
+export component HelpText inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-regular;
+    wrap: word-wrap;
+}
+
+// Card: radius 16; light shadow in light mode, thin outline all around in dark mode.
+export component Card inherits Rectangle {
+    in property <string> title;
+    in property <length> margin: Theme.card-margin;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.shadow-blur;
+    drop-shadow-color: Theme.card-shadow;
+
+    VerticalLayout {
+        padding: root.margin;
+        spacing: Theme.space-medium;
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.text-block-title;
+            font-weight: Theme.weight-block-title;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// List card: the title keeps its margin, rows run from edge to edge.
+export component ListCard inherits Rectangle {
+    in property <string> title;
+    in property <length> margin: Theme.card-margin;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.shadow-blur;
+    drop-shadow-color: Theme.card-shadow;
+    clip: true;   // the last row follows the card radius
+
+    VerticalLayout {
+        padding-top: root.margin;
+        spacing: Theme.space-medium;
+        HorizontalLayout {
+            padding-left: root.margin;
+            padding-right: root.margin;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Theme.text-block-title;
+                font-weight: Theme.weight-block-title;
+                wrap: word-wrap;
+            }
+        }
+        @children
+    }
+}

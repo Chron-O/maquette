@@ -1,65 +1,59 @@
-// The navigation state: two levels, the software and one event.
+// The navigation state, as in the HTML prototype: the home page leads to an event
+// or to a club page, and every other view goes back to it.
 
-use crate::{App, EvenementAffiche, Navigation, donnees, modele};
+use crate::{App, Navigation, data};
 use slint::ComponentHandle;
 
-pub const RUBRIQUES: [&str; 6] = ["Accueil", "Événements", "Boîtiers", "Puces", "Base coureurs", "Réglages"];
-pub const ONGLETS: [&str; 6] = ["Circuits", "Participants", "Départs", "Boîtiers", "Direct", "Résultats"];
+pub const HOME: &str = "Accueil";
+pub const CLUB_PAGES: [&str; 3] = ["Puces de prêt", "Boîtiers", "Coureurs et clubs"];
+pub const TABS: [&str; 6] = ["Circuits", "Participants", "Départs", "Boîtiers", "Direct", "Résultats"];
 
-const RUBRIQUE_EVENEMENTS: usize = 1;
+const APP_NAME: &str = "Chron'O";
 
 #[derive(Default)]
-pub struct Navigateur {
-    rubrique: usize,
-    onglet: usize,
-    evenement: Option<usize>,
+enum View {
+    #[default]
+    Home,
+    ClubPage(usize),
+    Event { event: usize, tab: usize },
 }
 
-impl Navigateur {
-    pub fn choisir_rubrique(&mut self, rubrique: usize) {
-        self.rubrique = rubrique;
+#[derive(Default)]
+pub struct Navigator {
+    view: View,
+}
+
+impl Navigator {
+    pub fn go_home(&mut self) {
+        self.view = View::Home;
     }
 
-    pub fn choisir_onglet(&mut self, onglet: usize) {
-        self.onglet = onglet;
+    pub fn open_club_page(&mut self, page: usize) {
+        self.view = View::ClubPage(page);
     }
 
-    pub fn ouvrir_evenement(&mut self, evenement: usize) {
-        self.evenement = Some(evenement);
-        self.onglet = 0;
+    pub fn open_event(&mut self, event: usize) {
+        self.view = View::Event { event, tab: 0 };
     }
 
-    pub fn revenir(&mut self) {
-        self.evenement = None;
-        self.rubrique = RUBRIQUE_EVENEMENTS;
+    pub fn select_tab(&mut self, tab: usize) {
+        if let View::Event { event, .. } = self.view {
+            self.view = View::Event { event, tab };
+        }
     }
 
-    pub fn afficher(&self, fenetre: &App) {
-        let navigation = fenetre.global::<Navigation>();
-        navigation.set_rubrique_active(self.rubrique as i32);
-        navigation.set_onglet_actif(self.onglet as i32);
-        navigation.set_dans_evenement(self.evenement.is_some());
-        navigation.set_retour(format!("‹ {}", RUBRIQUES[RUBRIQUE_EVENEMENTS]).into());
-        navigation.set_nom_evenement(
-            self.evenement.map_or("", |e| donnees::EVENEMENTS[e].nom).into(),
-        );
-        navigation.set_titre(
-            match self.evenement {
-                Some(_) => ONGLETS[self.onglet],
-                None => RUBRIQUES[self.rubrique],
-            }
-            .into(),
-        );
+    pub fn show(&self, window: &App) {
+        let navigation = window.global::<Navigation>();
+        navigation.set_home(matches!(self.view, View::Home));
+        navigation.set_in_event(matches!(self.view, View::Event { .. }));
 
-        // The event list only shows on the Événements page.
-        let liste = self.evenement.is_none() && self.rubrique == RUBRIQUE_EVENEMENTS;
-        navigation.set_evenements(modele(if liste {
-            donnees::EVENEMENTS
-                .iter()
-                .map(|e| EvenementAffiche { nom: e.nom.into(), detail: e.detail.into() })
-                .collect()
-        } else {
-            Vec::new()
-        }));
+        let (header, page, tab) = match self.view {
+            View::Home => (APP_NAME, HOME, 0),
+            View::ClubPage(page) => (APP_NAME, CLUB_PAGES[page], 0),
+            View::Event { event, tab } => (data::EVENTS[event].name, TABS[tab], tab),
+        };
+        navigation.set_header_title(header.into());
+        navigation.set_page_title(page.into());
+        navigation.set_active_tab(tab as i32);
     }
 }

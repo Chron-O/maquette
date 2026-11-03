@@ -1,0 +1,202 @@
+import { Theme } from "../theme.slint";
+
+export struct TabItem {
+    label: string,
+    icon: image,
+}
+
+component Tab {
+    callback clicked();
+    callback position(length, length);   // tells the bar where to place the pill
+    in property <string> label;
+    in property <bool> active;
+
+    // Width reserved for the bold text: tabs do not move when the selection changes.
+    min-height: Theme.zone;
+    min-width: reference.preferred-width + 2 * Theme.tab-margin;
+
+    function report() {
+        if root.active {
+            root.position(root.x, root.width);
+        }
+    }
+    init => { root.report(); }
+    changed active => { root.report(); }
+    changed x => { root.report(); }
+    changed width => { root.report(); }
+
+    reference := Text {
+        text: root.label;
+        font-size: Theme.text-label;
+        font-weight: Theme.weight-block-title;
+        opacity: 0;
+    }
+    Rectangle {
+        height: Theme.tab-height;
+        border-radius: self.height / 2;
+        background: !root.active && zone.has-hover ? Theme.tab-hover : transparent;
+        animate background { duration: Theme.tint-duration; }
+    }
+    Text {
+        text: root.label;
+        color: root.active ? Theme.active-tab-text : Theme.tab-text;
+        animate color { duration: Theme.tab-duration; }
+        font-size: Theme.text-label;
+        font-weight: root.active ? Theme.weight-block-title : Theme.weight-label;
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Pill tab bar with words: a single dark pill slides to the active tab.
+export component Tabs inherits Rectangle {
+    callback clicked(int);
+    in property <[TabItem]> tabs;
+    in property <int> active: -1;
+
+    property <length> pill-x;
+    property <length> pill-width;
+    property <bool> ready: false;   // no animation while everything settles at launch
+
+    height: Theme.tab-bar-height;
+    border-radius: self.height / 2;
+    background: Theme.tabs-background;
+
+    Timer {
+        interval: Theme.tab-duration + Theme.tint-duration;
+        running: !root.ready;
+        triggered => { root.ready = true; }
+    }
+    Rectangle {
+        x: root.pill-x;
+        y: (root.height - self.height) / 2;
+        width: root.pill-width;
+        height: Theme.tab-height;
+        border-radius: self.height / 2;
+        background: Theme.active-tab-background;
+        opacity: root.active >= 0 ? 1 : 0;
+        animate x, width {
+            duration: root.ready ? Theme.tab-duration : 0ms;
+            easing: ease-out;
+        }
+        animate opacity { duration: Theme.tab-duration; }
+    }
+    HorizontalLayout {
+        padding-left: Theme.space-small;
+        padding-right: Theme.space-small;
+        for tab[i] in root.tabs: Tab {
+            label: tab.label;
+            active: i == root.active;
+            clicked => { root.clicked(i); }
+            position(x, span) => {
+                root.pill-x = x;
+                root.pill-width = span;
+            }
+        }
+    }
+}
+
+component IconTab {
+    callback clicked();
+    in property <TabItem> tab;
+    in property <bool> active;
+    in property <length> word-width;
+
+    property <color> tint: active ? Theme.active-tab-text : Theme.tab-text;
+    animate tint { duration: Theme.tab-duration; }
+
+    HorizontalLayout {
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.tab.icon;
+                colorize: root.tint;
+                width: Theme.tab-icon;
+                height: Theme.tab-icon;
+            }
+        }
+        // The word opens next to the icon.
+        Rectangle {
+            clip: true;
+            width: root.active ? root.word-width : 0px;
+            animate width {
+                duration: Theme.tab-duration;
+                easing: ease-out;
+            }
+            Text {
+                x: Theme.space-small;
+                text: root.tab.label;
+                color: root.tint;
+                opacity: root.active ? 1 : 0;
+                animate opacity { duration: Theme.tab-duration; }
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+        }
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// Narrow tab bar (09-telephone-boitiers.png): icons, with the word on the active tab only.
+// The bar computes each tab's place itself: everything slides together, pill included.
+export component IconTabs inherits Rectangle {
+    callback clicked(int);
+    in property <[TabItem]> tabs;
+    in property <int> active: -1;
+
+    property <length> margin: Theme.space-small / 2;
+    property <length> extra: root.active >= 0 ? measure.preferred-width + Theme.space-small : 0px;
+    property <length> base: (root.width - 2 * root.margin - root.extra) / root.tabs.length;
+    property <bool> ready: false;   // no animation while everything settles at launch
+
+    height: Theme.tab-bar-height;
+    border-radius: self.height / 2;
+    background: Theme.tabs-background;
+
+    Timer {
+        interval: Theme.tab-duration + Theme.tint-duration;
+        running: !root.ready;
+        triggered => { root.ready = true; }
+    }
+    // Only used to measure the active tab's word.
+    measure := Text {
+        text: root.active >= 0 ? root.tabs[root.active].label : "";
+        font-size: Theme.text-label;
+        font-weight: Theme.weight-block-title;
+        opacity: 0;
+    }
+    Rectangle {
+        x: root.margin + max(root.active, 0) * root.base;
+        y: root.margin;
+        width: root.base + root.extra;
+        height: root.height - 2 * root.margin;
+        border-radius: self.height / 2;
+        background: Theme.active-tab-background;
+        opacity: root.active >= 0 ? 1 : 0;
+        animate x, width {
+            duration: root.ready ? Theme.tab-duration : 0ms;
+            easing: ease-out;
+        }
+        animate opacity { duration: Theme.tab-duration; }
+    }
+    for tab[i] in root.tabs: IconTab {
+        x: root.margin + i * root.base + (root.active >= 0 && i > root.active ? root.extra : 0px);
+        y: root.margin;
+        width: root.base + (i == root.active ? root.extra : 0px);
+        height: root.height - 2 * root.margin;
+        animate x, width {
+            duration: root.ready ? Theme.tab-duration : 0ms;
+            easing: ease-out;
+        }
+        tab: tab;
+        active: i == root.active;
+        word-width: root.extra;
+        clicked => { root.clicked(i); }
+    }
+}

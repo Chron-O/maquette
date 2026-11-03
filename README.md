@@ -16,7 +16,7 @@ Install [Rust](https://rustup.rs), then:
 cargo run
 ```
 
-The layout follows the window width (narrow under 600 px, medium up to 1000 px, wide above) and the theme follows the system. The **Démo** button forces touch or mouse sizes.
+The layout follows the window width (narrow under 600 px, medium up to 1000 px, wide above) and the theme follows the system. On-screen text is in French. The **Démo** button forces touch or mouse sizes.
 
 ## Other targets
 
@@ -43,17 +43,15 @@ To run on a real device, first create `ios/Local.xcconfig` with `DEVELOPMENT_TEA
 Saves a screen's 8 captures (4 formats, light and dark) in `captures/`, on macOS:
 
 ```bash
-scripts/captures.sh 00-evenement onglet 1
+scripts/captures.sh 00-event tab 1
 ```
 
 ## Layout of the code
 
-- `src/`: state and data (Rust). Made-up data lives in `src/donnees/`.
+- `src/`: state and data (Rust). Made-up data lives in `src/data/`.
 - `ui/`: what is displayed (Slint). Every design value comes from `ui/theme.slint`.
 - `references/`: visual charter and captures of the HTML prototype.
 
-Some names are in French, like the charter they come from.
-
 ## License
 
-GPLv3. IBM Plex Sans: OFL (`ui/polices/`). Lucide icons: ISC (`ui/icones/`).
+GPLv3. IBM Plex Sans: OFL (`ui/fonts/`). Lucide icons: ISC (`ui/icons/`).

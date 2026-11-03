@@ -1,0 +1,33 @@
+import { Theme } from "../theme.slint";
+
+// Pill button on the header.
+export component HeaderButton inherits Rectangle {
+    callback clicked();
+    in property <string> label;
+    in property <length> label-size: Theme.text-label;
+
+    min-height: Theme.zone;
+    min-width: Theme.zone;
+    border-radius: self.height / 2;
+    background: zone.pressed ? Theme.header-button-pressed
+        : zone.has-hover ? Theme.header-button-hover
+        : Theme.header-button;
+    animate background { duration: Theme.tint-duration; }
+
+    HorizontalLayout {
+        padding-left: Theme.space-medium;
+        padding-right: Theme.space-medium;
+        Text {
+            text: root.label;
+            color: Theme.header-text;
+            font-size: root.label-size;
+            font-weight: Theme.weight-label;
+            vertical-alignment: center;
+        }
+    }
+
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

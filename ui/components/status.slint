@@ -1,0 +1,93 @@
+import { Theme, StateFamily } from "../theme.slint";
+import { Icons } from "icons.slint";
+import { LiveDot } from "dot.slint";
+
+// A status = a family (the color) + an icon + a word.
+// `dot`: "En course" shows a solid dot instead of an icon (02-participants.png).
+export struct Status {
+    word: string,
+    state: StateFamily,
+    icon: image,
+    dot: bool,
+}
+
+export global Statuses {
+    out property <Status> ok: { word: "OK", state: Theme.valid, icon: Icons.check };
+    out property <Status> racing: { word: "En course", state: Theme.in-progress, dot: true };
+    out property <Status> unknown: { word: "Inconnue", state: Theme.to-check, icon: Icons.circle-help };
+    out property <Status> pm: { word: "PM", state: Theme.problem, icon: Icons.x };
+    out property <Status> retired: { word: "Abandon", state: Theme.inactive, icon: Icons.log-out };
+    out property <Status> already-read: { word: "Déjà lue", state: Theme.to-check, icon: Icons.triangle-alert };
+}
+
+// Status badge: small pill, icon + word.
+export component StatusBadge inherits Rectangle {
+    in property <Status> status;
+
+    height: Theme.badge-height;
+    border-radius: self.height / 2;
+    background: status.state.badge-background;
+    HorizontalLayout {
+        padding-left: Theme.badge-margin;
+        padding-right: Theme.badge-margin;
+        spacing: status.dot ? Theme.space-small : Theme.badge-icon-gap;
+        VerticalLayout {
+            alignment: center;
+            if status.dot: LiveDot {
+                size: Theme.badge-dot;
+                tone: status.state.badge-text;
+            }
+            if !status.dot: Image {
+                source: status.icon;
+                colorize: status.state.badge-text;
+                width: Theme.badge-icon;
+                height: Theme.badge-icon;
+            }
+        }
+        Text {
+            text: status.word;
+            color: status.state.badge-text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Status block: fixed width, icon above the full word (08-direct.png).
+export component StatusBlock inherits Rectangle {
+    in property <Status> status;
+
+    width: Theme.block-width;
+    height: Theme.block-height;
+    border-radius: Theme.block-radius;
+    background: status.state.block-background;
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                alignment: center;
+                height: Theme.block-icon;
+                if status.dot: LiveDot {
+                    size: Theme.block-dot;
+                    tone: status.state.block-text;
+                }
+                if !status.dot: Image {
+                    source: status.icon;
+                    colorize: status.state.block-text;
+                    width: Theme.block-icon;
+                    height: Theme.block-icon;
+                }
+            }
+        }
+        Text {
+            text: status.word;
+            color: status.state.block-text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            horizontal-alignment: center;
+        }
+    }
+}

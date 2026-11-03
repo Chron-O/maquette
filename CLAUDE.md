@@ -11,16 +11,18 @@ Le code pourra servir de point de départ à l'app (à confirmer avec Severin) :
 - Aucune copie de code depuis chrono-swift, pyMeOS (AGPL) ou MeOS.
 - Pas de logo Chron'O tant que Robin ne l'a pas fourni.
 - Robin découvre Rust : expliquer en français simple et court. **Avant d'écrire du code, reformuler et attendre l'accord.**
-- Commits, code et README en anglais ; échanges avec Robin en français.
+- Commits, code (noms compris) et README en anglais ; textes affichés à l'écran et échanges avec Robin en français.
 
 ## Architecture
 - Un projet Cargo, un seul binaire `maquette`. Version web (WebAssembly) publiée sur GitHub Pages à chaque fusion sur `main`.
 - **Rust donne les données, Slint affiche.** Aucune règle de course dans les `.slint` : ils affichent ce qu'on leur donne et renvoient les clics.
-- Données factices dans `src/donnees/` (noms, clubs, puces inventés).
-- Point de départ : `ui/theme.slint`, `ui/composants/`, `ui/icones/`, `ui/polices/` repris de `../essais-slint` (déjà validés), et les leçons de `../essais-slint/LECONS-SLINT.md`.
+- Données factices dans `src/data/` (noms, clubs, puces inventés).
+- Point de départ : `ui/theme.slint`, `ui/components/`, `ui/icons/`, `ui/fonts/` repris de `../essais-slint` (déjà validés, puis renommés en anglais), et les leçons de `../essais-slint/LECONS-SLINT.md`.
 
 ## Navigation (cadrage validé)
-- Niveau logiciel : Accueil · Événements · Boîtiers (inventaire du club) · Puces (stock de prêt) · Base coureurs (fédérale) · Réglages.
+- Comme le prototype : l'**Accueil** est une page qui défile, **sans onglets**, avec deux sections : Événements et Le club.
+- Depuis Le club : Puces de prêt (stock de prêt), Boîtiers (inventaire du club), Coureurs et clubs (base fédérale). Retour par « ‹ Accueil » (« ‹ » seul en largeur étroite).
+- Réglages : emplacement à décider, le prototype n'en a pas.
 - Un événement : 6 onglets **toujours présents**, dans l'ordre : Circuits · Participants · Départs · Boîtiers · Direct · Résultats.
 - Deux niveaux de navigation, pas plus. Le détail s'ouvre à côté (large) ou par-dessus (étroit, moyen).
 

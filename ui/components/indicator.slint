@@ -1,0 +1,45 @@
+import { Theme } from "../theme.slint";
+
+// Header indicator: icon, dot, text, in an outlined pill.
+// `attention`: yellow outline and dot (08-direct.png).
+export component Indicator inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> attention: false;
+
+    height: Theme.indicator-height;
+    border-radius: self.height / 2;
+    border-width: root.attention ? Theme.attention-outline : Theme.thin-outline-width;
+    border-color: root.attention ? Theme.attention : Theme.header-outline;
+
+    HorizontalLayout {
+        padding-left: Theme.indicator-margin;
+        padding-right: Theme.indicator-margin;
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.header-text;
+                width: Theme.indicator-icon;
+                height: Theme.indicator-icon;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.indicator-dot;
+                height: Theme.indicator-dot;
+                border-radius: self.width / 2;
+                background: root.attention ? Theme.attention : Theme.live;
+            }
+        }
+        Text {
+            text: root.text;
+            color: Theme.header-text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+    }
+}

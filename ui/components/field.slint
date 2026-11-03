@@ -1,0 +1,90 @@
+import { Theme } from "../theme.slint";
+import { Icons } from "icons.slint";
+
+// Input field. Idle: surface, no outline. Editing and error: full outline.
+// `show-editing` shows the editing state without focus.
+export component InputField {
+    callback focus-received();
+    // Gives focus back: on a phone, this closes the keyboard.
+    public function release() { input.clear-focus(); }
+    in property <string> label;
+    in property <string> placeholder;   // gray text while the field is empty
+    in-out property <string> text <=> input.text;
+    in property <string> error;
+    in property <bool> show-editing: false;
+    in property <InputType> input-kind: InputType.text;   // picks the phone keyboard
+
+    property <bool> has-error: error != "";
+    property <bool> editing: input.has-focus || show-editing;
+
+    VerticalLayout {
+        alignment: start;   // top aligned, even when a neighbor shows an error message
+        spacing: Theme.space-small;
+        if root.label != "": Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-regular;
+            wrap: word-wrap;
+        }
+        Rectangle {
+            height: Theme.field-height;
+            border-radius: Theme.field-radius;
+            background: root.editing || root.has-error ? Theme.field-editing-background : Theme.surface;
+            border-width: Theme.field-outline-width;
+            border-color: root.has-error ? Theme.field-error-outline
+                : root.editing ? Theme.field-editing-outline
+                : transparent;
+            animate background, border-color { duration: Theme.tint-duration; }
+            HorizontalLayout {
+                padding-left: Theme.button-margin;
+                padding-right: Theme.button-margin;
+                Rectangle {
+                    if input.text == "": Text {
+                        width: parent.width;
+                        height: parent.height;
+                        text: root.placeholder;
+                        color: Theme.text-secondary;
+                        font-size: Theme.text-help;
+                        vertical-alignment: center;
+                    }
+                    input := TextInput {
+                        color: Theme.text;
+                        font-size: Theme.text-body;
+                        font-weight: Theme.weight-block-title;
+                        vertical-alignment: center;
+                        single-line: true;
+                        input-type: root.input-kind;
+                        accepted => { self.clear-focus(); }   // Return key
+                        changed has-focus => {
+                            if self.has-focus {
+                                root.focus-received();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if root.has-error: HorizontalLayout {
+            spacing: Theme.space-small;
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.triangle-alert;
+                    colorize: Theme.field-error-outline;
+                    width: Theme.message-icon;
+                    height: Theme.message-icon;
+                }
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: root.error;
+                color: Theme.field-error-outline;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-label;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+    }
+}

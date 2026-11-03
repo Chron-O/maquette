@@ -2,112 +2,122 @@
 
 slint::include_modules!();
 
-mod appareil;
 #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
 mod capture;
-mod donnees;
+mod data;
+mod device;
 mod navigation;
 
-use appareil::Appareil;
-use navigation::Navigateur;
-use slint::{ComponentHandle, ModelRc, VecModel};
+use device::Device;
+use navigation::Navigator;
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-fn sans_icone(libelle: &str) -> OngletIcone {
-    OngletIcone { libelle: libelle.into(), icone: Default::default() }
+fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
+    ModelRc::new(VecModel::from(rows))
 }
 
-fn modele<T: Clone + 'static>(lignes: Vec<T>) -> ModelRc<T> {
-    ModelRc::new(VecModel::from(lignes))
-}
+fn connect_navigation(window: &App) -> Rc<RefCell<Navigator>> {
+    let navigator = Rc::new(RefCell::new(Navigator::default()));
+    let navigation = window.global::<Navigation>();
 
-fn brancher_navigation(fenetre: &App) -> Rc<RefCell<Navigateur>> {
-    let navigateur = Rc::new(RefCell::new(Navigateur::default()));
-    let navigation = fenetre.global::<Navigation>();
+    navigation.set_back_label(navigation::HOME.into());
+    navigation.set_events(model(
+        data::EVENTS
+            .iter()
+            .map(|e| EventItem { name: e.name.into(), detail: e.detail.into() })
+            .collect(),
+    ));
+    navigation.set_club_pages(model(
+        navigation::CLUB_PAGES.iter().map(|page| SharedString::from(*page)).collect(),
+    ));
 
-    navigation.set_rubriques(modele(navigation::RUBRIQUES.iter().map(|r| sans_icone(r)).collect()));
-
-    let icones = fenetre.global::<Icones>();
+    let icons = window.global::<Icons>();
     let images = [
-        icones.get_co_circuit(),
-        icones.get_users(),
-        icones.get_co_depart(),
-        icones.get_co_boitier(),
-        icones.get_radio(),
-        icones.get_trophy(),
+        icons.get_co_course(),
+        icons.get_users(),
+        icons.get_co_start(),
+        icons.get_co_station(),
+        icons.get_radio(),
+        icons.get_trophy(),
     ];
-    navigation.set_onglets(modele(
-        navigation::ONGLETS
+    navigation.set_tabs(model(
+        navigation::TABS
             .iter()
             .zip(images)
-            .map(|(libelle, icone)| OngletIcone { libelle: (*libelle).into(), icone })
+            .map(|(label, icon)| TabItem { label: (*label).into(), icon })
             .collect(),
     ));
 
     // Every click changes the state in Rust, then the screen is refreshed from it.
-    fn sur_clic(
-        fenetre: &App,
-        navigateur: &Rc<RefCell<Navigateur>>,
-        action: impl Fn(&mut Navigateur, usize) + 'static,
+    fn on_click(
+        window: &App,
+        navigator: &Rc<RefCell<Navigator>>,
+        action: impl Fn(&mut Navigator, usize) + 'static,
     ) -> impl Fn(i32) + 'static {
-        let (faible, navigateur) = (fenetre.as_weak(), navigateur.clone());
+        let (weak, navigator) = (window.as_weak(), navigator.clone());
         move |i| {
-            action(&mut navigateur.borrow_mut(), i as usize);
-            if let Some(fenetre) = faible.upgrade() {
-                navigateur.borrow().afficher(&fenetre);
+            action(&mut navigator.borrow_mut(), i as usize);
+            if let Some(window) = weak.upgrade() {
+                navigator.borrow().show(&window);
             }
         }
     }
-    navigation.on_choisir_rubrique(sur_clic(fenetre, &navigateur, Navigateur::choisir_rubrique));
-    navigation.on_choisir_onglet(sur_clic(fenetre, &navigateur, Navigateur::choisir_onglet));
-    navigation.on_ouvrir_evenement(sur_clic(fenetre, &navigateur, Navigateur::ouvrir_evenement));
-    let revenir = sur_clic(fenetre, &navigateur, |n, _| n.revenir());
-    navigation.on_revenir(move || revenir(0));
+    navigation.on_open_event(on_click(window, &navigator, Navigator::open_event));
+    navigation.on_open_club_page(on_click(window, &navigator, Navigator::open_club_page));
+    navigation.on_select_tab(on_click(window, &navigator, Navigator::select_tab));
+    let go_back = on_click(window, &navigator, |n, _| n.go_home());
+    navigation.on_go_back(move || go_back(0));
 
-    navigateur.borrow().afficher(fenetre);
-    navigateur
+    navigator.borrow().show(window);
+    navigator
 }
 
-fn brancher_demo(fenetre: &App) -> Rc<Cell<Appareil>> {
-    let choix = Rc::new(Cell::new(Appareil::Auto));
-    let demo = fenetre.global::<Demo>();
-    demo.set_appareils(modele(Appareil::TOUS.iter().map(|a| sans_icone(a.libelle())).collect()));
+fn connect_demo(window: &App) -> Rc<Cell<Device>> {
+    let choice = Rc::new(Cell::new(Device::Auto));
+    let demo = window.global::<Demo>();
+    demo.set_devices(model(
+        Device::ALL
+            .iter()
+            .map(|d| TabItem { label: d.label().into(), icon: Default::default() })
+            .collect(),
+    ));
 
-    let (faible, choix_clic) = (fenetre.as_weak(), choix.clone());
-    demo.on_choisir_appareil(move |i| {
-        choix_clic.set(Appareil::TOUS[i as usize]);
-        if let Some(fenetre) = faible.upgrade() {
-            appareil::appliquer(&fenetre, choix_clic.get());
+    let (weak, clicked_choice) = (window.as_weak(), choice.clone());
+    demo.on_select_device(move |i| {
+        clicked_choice.set(Device::ALL[i as usize]);
+        if let Some(window) = weak.upgrade() {
+            device::apply(&window, clicked_choice.get());
         }
     });
-    appareil::appliquer(fenetre, choix.get());
-    choix
+    device::apply(window, choice.get());
+    choice
 }
 
-pub fn lancer() -> Result<(), slint::PlatformError> {
-    let fenetre = App::new()?;
-    let navigateur = brancher_navigation(&fenetre);
-    let choix = brancher_demo(&fenetre);
+pub fn run() -> Result<(), slint::PlatformError> {
+    let window = App::new()?;
+    let navigator = connect_navigation(&window);
+    let choice = connect_demo(&window);
 
-    let faible = fenetre.as_weak();
-    let _suivi_mouvements = appareil::suivre_moins_de_mouvements(move |actif| {
-        if let Some(fenetre) = faible.upgrade() {
-            fenetre.global::<Theme>().set_moins_de_mouvements(actif);
+    let weak = window.as_weak();
+    let _reduced_motion = device::follow_reduced_motion(move |active| {
+        if let Some(window) = weak.upgrade() {
+            window.global::<Theme>().set_reduced_motion(active);
         }
     });
 
     #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
-    capture::preparer(&fenetre, &navigateur, &choix);
+    capture::prepare(&window, &navigator, &choice);
     #[cfg(any(target_os = "ios", target_arch = "wasm32"))]
-    let _ = (&navigateur, &choix);
+    let _ = (&navigator, &choice);
 
-    fenetre.run()
+    window.run()
 }
 
 // The web page calls this when the WebAssembly module loads.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
-pub fn demarrer_web() {
-    lancer().unwrap();
+pub fn start_web() {
+    run().unwrap();
 }
