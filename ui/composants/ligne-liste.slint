@@ -1,0 +1,247 @@
+import { Theme } from "../theme.slint";
+import { PaveStatut, PastilleStatut, Statut } from "statut.slint";
+import { BoutonPrincipal, BoutonPlus } from "boutons.slint";
+
+// A time. `barre`: the time does not count (PM): gray, lighter, struck through.
+// Slint cannot strike through: the line is drawn over the text, at its width.
+component Temps inherits Rectangle {
+    in property <string> texte;
+    in property <length> taille;
+    in property <int> graisse;
+    in property <int> graisse-barre;
+    in property <length> epaisseur;
+    in property <bool> barre: false;
+
+    min-width: valeur.preferred-width;
+    min-height: valeur.preferred-height;
+
+    valeur := Text {
+        text: root.texte;
+        color: root.barre ? Theme.texte-secondaire : Theme.texte;
+        font-size: root.taille;
+        font-weight: root.barre ? root.graisse-barre : root.graisse;
+        vertical-alignment: center;
+    }
+    if root.barre: Rectangle {
+        height: root.epaisseur;
+        y: (root.height - self.height) / 2;
+        background: Theme.texte-secondaire;
+    }
+}
+
+// Narrow form. List row: status › who and where › details.
+export component LigneListe inherits Rectangle {
+    callback action-clic();
+    in property <Statut> statut;
+    in property <string> nom;
+    in property <string> circuit;
+    in property <color> circuit-couleur: transparent;
+    in property <string> temps;
+    in property <bool> temps-barre: false;
+    in property <string> precision;
+    in property <bool> precision-probleme: false;
+    in property <string> action;
+    in property <length> marge: Theme.marge-carte;   // same as the card title
+
+    background: action != "" ? Theme.ligne-a-traiter : transparent;
+
+    HorizontalLayout {
+        padding-top: Theme.espace;
+        padding-bottom: Theme.espace;
+        padding-left: root.marge;
+        padding-right: root.marge;
+        spacing: Theme.espace;
+
+        PaveStatut { statut: root.statut; }
+
+        // Who and where
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: Theme.espace-petit;
+            Text {
+                text: root.nom;
+                color: Theme.texte;
+                font-size: Theme.texte-titre-bloc;
+                font-weight: Theme.graisse-titre-bloc;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: Theme.espace-petit;
+                alignment: start;
+                if root.circuit-couleur != transparent: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: Theme.circuit-carre;
+                        height: Theme.circuit-carre;
+                        border-radius: Theme.circuit-carre-rayon;
+                        background: root.circuit-couleur;
+                    }
+                }
+                Text {
+                    text: root.circuit;
+                    color: Theme.texte-secondaire;
+                    font-size: Theme.texte-libelle;
+                    font-weight: Theme.graisse-libelle;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Details. An action takes their place: the row must fit on a phone.
+        if root.action == "": VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: end;
+                Temps {
+                    texte: root.temps;
+                    barre: root.temps-barre;
+                    taille: Theme.texte-titre-ecran;
+                    graisse: Theme.graisse-titre-ecran;
+                    graisse-barre: Theme.graisse-libelle;
+                    epaisseur: Theme.barre-temps-grand;
+                }
+            }
+            if root.precision != "": Text {
+                text: root.precision;
+                color: root.precision-probleme ? Theme.probleme.badge-texte : Theme.texte-secondaire;
+                font-size: Theme.texte-libelle;
+                font-weight: root.precision-probleme ? Theme.graisse-titre-bloc : Theme.graisse-lecture;
+                horizontal-alignment: right;
+            }
+        }
+        if root.action != "": VerticalLayout {
+            alignment: center;
+            BoutonPrincipal {
+                dans-ligne: true;
+                libelle: root.action;
+                clic => { root.action-clic(); }
+            }
+        }
+    }
+}
+
+// Wide form: table with columns (08-direct.png). Same statuses, badge instead of block.
+// Columns are placed as a share of the width: header and rows stay aligned.
+component TexteColonne inherits Text {
+    color: Theme.texte;
+    font-size: Theme.texte-aide;
+    font-weight: Theme.graisse-lecture;
+    vertical-alignment: center;
+}
+
+component EnTeteColonne inherits Text {
+    color: Theme.texte-secondaire;
+    font-size: Theme.texte-aide;
+    font-weight: Theme.graisse-titre-bloc;
+    vertical-alignment: center;
+}
+
+export component EnTeteTableau inherits Rectangle {
+    in property <length> marge: Theme.marge-carte;
+    property <length> utile: self.width - 2 * self.marge;
+
+    height: Theme.hauteur-entete-tableau;
+
+    EnTeteColonne { x: root.marge; text: "État"; }
+    EnTeteColonne { x: root.marge + root.utile * Theme.tableau-x-nom; text: "Nom"; }
+    EnTeteColonne { x: root.marge + root.utile * Theme.tableau-x-categorie; text: "Catégorie"; }
+    EnTeteColonne { x: root.marge + root.utile * Theme.tableau-x-temps; text: "Temps"; }
+    EnTeteColonne { x: root.marge + root.utile * Theme.tableau-x-place; text: "Place"; }
+    EnTeteColonne { x: root.marge + root.utile * Theme.tableau-x-lu; text: "Lu à"; }
+    EnTeteColonne {
+        x: root.marge;
+        width: root.utile;
+        text: "Action";
+        horizontal-alignment: right;
+    }
+}
+
+export component LigneTableau inherits Rectangle {
+    callback action-clic();
+    in property <Statut> statut;
+    in property <string> nom;
+    in property <string> categorie;
+    in property <color> categorie-couleur: transparent;
+    in property <string> temps;
+    in property <bool> temps-barre: false;
+    in property <string> place;
+    in property <string> lu;
+    in property <string> action;
+    in property <length> marge: Theme.marge-carte;
+    property <length> utile: self.width - 2 * self.marge;
+
+    height: Theme.hauteur-ligne-tableau;
+    background: action != "" ? Theme.ligne-a-traiter : transparent;
+
+    HorizontalLayout {
+        x: root.marge;
+        height: parent.height;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            PastilleStatut { statut: root.statut; }
+        }
+    }
+    TexteColonne {
+        x: root.marge + root.utile * Theme.tableau-x-nom;
+        text: root.nom;
+        font-weight: Theme.graisse-titre-bloc;
+    }
+    HorizontalLayout {
+        x: root.marge + root.utile * Theme.tableau-x-categorie;
+        height: parent.height;
+        spacing: Theme.espace-petit;
+        alignment: start;
+        if root.categorie-couleur != transparent: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.circuit-carre;
+                height: Theme.circuit-carre;
+                border-radius: Theme.circuit-carre-rayon;
+                background: root.categorie-couleur;
+            }
+        }
+        TexteColonne { text: root.categorie; }
+    }
+    HorizontalLayout {
+        x: root.marge + root.utile * Theme.tableau-x-temps;
+        height: parent.height;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Temps {
+                texte: root.temps;
+                barre: root.temps-barre;
+                taille: Theme.texte-aide;
+                graisse: Theme.graisse-titre-bloc;
+                graisse-barre: Theme.graisse-lecture;
+                epaisseur: Theme.barre-temps;
+            }
+        }
+    }
+    TexteColonne { x: root.marge + root.utile * Theme.tableau-x-place; text: root.place; }
+    TexteColonne {
+        x: root.marge + root.utile * Theme.tableau-x-lu;
+        text: root.lu;
+        color: Theme.texte-secondaire;
+    }
+    HorizontalLayout {
+        x: root.width - root.marge - self.width;
+        width: Theme.largeur-colonne-action;
+        height: parent.height;
+        alignment: end;
+        if root.action != "": VerticalLayout {
+            alignment: center;
+            BoutonPrincipal {
+                dans-ligne: true;
+                libelle: root.action;
+                clic => { root.action-clic(); }
+            }
+        }
+        if root.action == "": VerticalLayout {
+            alignment: center;
+            BoutonPlus { }
+        }
+    }
+}

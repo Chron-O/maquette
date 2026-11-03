@@ -1,0 +1,149 @@
+import { Theme } from "../theme.slint";
+
+// Orange main button, pill shaped, 18 bold text.
+// `dans-ligne`: a row action, drawn smaller, 16 bold text.
+// The click area keeps the charter height (36 or 48): only the drawing changes.
+export component BoutonPrincipal {
+    callback clic();
+    in property <string> libelle;
+    in property <bool> dans-ligne: false;
+
+    min-height: Theme.hauteur-bouton-principal;
+
+    Rectangle {
+        height: root.dans-ligne ? Theme.hauteur-action-ligne : root.height;
+        y: (root.height - self.height) / 2;
+        border-radius: self.height / 2;
+        background: zone.pressed ? Theme.bouton-principal-appui
+            : zone.has-hover ? Theme.bouton-principal-survol
+            : Theme.bouton-principal;
+        animate background { duration: Theme.duree-teinte; }
+    }
+    HorizontalLayout {
+        padding-left: root.dans-ligne ? Theme.marge-bouton : Theme.marge-bouton-principal;
+        padding-right: root.dans-ligne ? Theme.marge-bouton : Theme.marge-bouton-principal;
+        Text {
+            text: root.libelle;
+            color: Theme.bouton-principal-texte;
+            font-size: root.dans-ligne ? Theme.texte-courant : Theme.texte-bouton-principal;
+            font-weight: Theme.graisse-titre-ecran;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clic(); }
+    }
+}
+
+// Secondary button: white, thin outline, radius 10. Optional icon on the left.
+export component BoutonSecondaire {
+    callback clic();
+    in property <string> libelle;
+    in property <image> icone;
+    in property <bool> avec-icone: false;
+
+    min-height: Theme.zone;
+
+    Rectangle {
+        height: Theme.hauteur-bouton-secondaire;
+        y: (root.height - self.height) / 2;
+        border-radius: Theme.rayon-bouton-secondaire;
+        border-width: Theme.contour-fin-epaisseur;
+        border-color: Theme.contour-fin;
+        background: zone.pressed ? Theme.bouton-secondaire-appui
+            : zone.has-hover ? Theme.bouton-secondaire-survol
+            : Theme.bouton-secondaire;
+        animate background { duration: Theme.duree-teinte; }
+    }
+    HorizontalLayout {
+        padding-left: Theme.marge-bouton;
+        padding-right: Theme.marge-bouton;
+        spacing: Theme.espace-icone-bouton;
+        if root.avec-icone: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icone;
+                colorize: Theme.texte;
+                width: Theme.icone-bouton;
+                height: Theme.icone-bouton;
+            }
+        }
+        Text {
+            text: root.libelle;
+            color: Theme.texte;
+            font-size: Theme.texte-aide;
+            font-weight: Theme.graisse-titre-bloc;
+            vertical-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clic(); }
+    }
+}
+
+// Quiet button: underlined text, darker on hover. Slint cannot underline:
+// the line is drawn under the text, at its width.
+export component BoutonDiscret {
+    callback clic();
+    in property <string> libelle;
+
+    min-height: Theme.zone;
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: start;
+            VerticalLayout {
+                Text {
+                    text: root.libelle;
+                    color: zone.has-hover ? Theme.texte : Theme.texte-secondaire;
+                    animate color { duration: Theme.duree-teinte; }
+                    font-size: Theme.texte-libelle;
+                    font-weight: Theme.graisse-libelle;
+                }
+                Rectangle {
+                    height: Theme.soulignement;
+                    background: zone.has-hover ? Theme.texte : Theme.texte-secondaire;
+                    animate background { duration: Theme.duree-teinte; }
+                }
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clic(); }
+    }
+}
+
+// Small "···" button on table rows (08-direct.png).
+export component BoutonPlus {
+    callback clic();
+
+    min-height: Theme.zone;
+    min-width: Theme.largeur-bouton-petit;
+
+    Rectangle {
+        width: Theme.largeur-bouton-petit;
+        height: Theme.hauteur-bouton-petit;
+        border-radius: self.height / 2;
+        border-width: Theme.contour-fin-epaisseur;
+        border-color: Theme.contour-fin;
+        background: zone.pressed ? Theme.bouton-secondaire-appui
+            : zone.has-hover ? Theme.bouton-secondaire-survol
+            : Theme.bouton-secondaire;
+        animate background { duration: Theme.duree-teinte; }
+    }
+    Text {
+        text: "···";
+        color: Theme.texte;
+        font-size: Theme.texte-libelle;
+        font-weight: Theme.graisse-titre-ecran;
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clic(); }
+    }
+}

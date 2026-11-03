@@ -1,0 +1,8 @@
+/target
+/pkg
+/site
+/ios/*.xcodeproj
+/ios/build
+/ios/Local.xcconfig
+.DS_Store
+/ios/Info.plist

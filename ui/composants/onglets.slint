@@ -1,0 +1,240 @@
+import { Theme } from "../theme.slint";
+
+export struct OngletIcone {
+    libelle: string,
+    icone: image,
+}
+
+component Onglet {
+    callback clic();
+    callback position(length, length);   // tells the bar where to place the pill
+    in property <string> libelle;
+    in property <bool> actif;
+
+    // Width reserved for the bold text: tabs do not move when the selection changes.
+    min-height: Theme.zone;
+    min-width: reference.preferred-width + 2 * Theme.marge-onglet;
+
+    function signaler() {
+        if root.actif {
+            root.position(root.x, root.width);
+        }
+    }
+    init => { root.signaler(); }
+    changed actif => { root.signaler(); }
+    changed x => { root.signaler(); }
+    changed width => { root.signaler(); }
+
+    reference := Text {
+        text: root.libelle;
+        font-size: Theme.texte-libelle;
+        font-weight: Theme.graisse-titre-bloc;
+        opacity: 0;
+    }
+    Rectangle {
+        height: Theme.hauteur-onglet;
+        border-radius: self.height / 2;
+        background: !root.actif && zone.has-hover ? Theme.onglet-survol : transparent;
+        animate background { duration: Theme.duree-teinte; }
+    }
+    Text {
+        text: root.libelle;
+        color: root.actif ? Theme.onglet-actif-texte : Theme.onglet-texte;
+        animate color { duration: Theme.duree-onglet; }
+        font-size: Theme.texte-libelle;
+        font-weight: root.actif ? Theme.graisse-titre-bloc : Theme.graisse-libelle;
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clic(); }
+    }
+}
+
+// Pill tab bar with words: a single dark pill slides to the active tab.
+export component Onglets inherits Rectangle {
+    callback clic(int);
+    in property <[OngletIcone]> onglets;
+    in property <int> actif: -1;
+
+    property <length> pastille-x;
+    property <length> pastille-largeur;
+    property <bool> pret: false;   // no animation while everything settles at launch
+
+    height: Theme.hauteur-barre-onglets;
+    border-radius: self.height / 2;
+    background: Theme.onglets-fond;
+
+    Timer {
+        interval: Theme.duree-onglet + Theme.duree-teinte;
+        running: !root.pret;
+        triggered => { root.pret = true; }
+    }
+    Rectangle {
+        x: root.pastille-x;
+        y: (root.height - self.height) / 2;
+        width: root.pastille-largeur;
+        height: Theme.hauteur-onglet;
+        border-radius: self.height / 2;
+        background: Theme.onglet-actif-fond;
+        opacity: root.actif >= 0 ? 1 : 0;
+        animate x, width {
+            duration: root.pret ? Theme.duree-onglet : 0ms;
+            easing: ease-out;
+        }
+        animate opacity { duration: Theme.duree-onglet; }
+    }
+    HorizontalLayout {
+        padding-left: Theme.espace-petit;
+        padding-right: Theme.espace-petit;
+        for onglet[i] in root.onglets: Onglet {
+            libelle: onglet.libelle;
+            actif: i == root.actif;
+            clic => { root.clic(i); }
+            position(x, largeur) => {
+                root.pastille-x = x;
+                root.pastille-largeur = largeur;
+            }
+        }
+    }
+}
+
+component OngletIconeSeule {
+    callback clic();
+    in property <OngletIcone> onglet;
+    in property <bool> actif;
+    in property <length> largeur-mot;
+
+    property <color> teinte: actif ? Theme.onglet-actif-texte : Theme.onglet-texte;
+    animate teinte { duration: Theme.duree-onglet; }
+
+    HorizontalLayout {
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.onglet.icone;
+                colorize: root.teinte;
+                width: Theme.icone-onglet;
+                height: Theme.icone-onglet;
+            }
+        }
+        // The word opens next to the icon.
+        Rectangle {
+            clip: true;
+            width: root.actif ? root.largeur-mot : 0px;
+            animate width {
+                duration: Theme.duree-onglet;
+                easing: ease-out;
+            }
+            Text {
+                x: Theme.espace-petit;
+                text: root.onglet.libelle;
+                color: root.teinte;
+                opacity: root.actif ? 1 : 0;
+                animate opacity { duration: Theme.duree-onglet; }
+                font-size: Theme.texte-libelle;
+                font-weight: Theme.graisse-titre-bloc;
+                vertical-alignment: center;
+            }
+        }
+    }
+    TouchArea {
+        clicked => { root.clic(); }
+    }
+}
+
+// Narrow tab bar (09-telephone-boitiers.png): icons, with the word on the active tab only.
+// The bar computes each tab's place itself: everything slides together, pill included.
+export component OngletsIcones inherits Rectangle {
+    callback clic(int);
+    in property <[OngletIcone]> onglets;
+    in property <int> actif: -1;
+
+    property <length> marge: Theme.espace-petit / 2;
+    property <length> en-plus: root.actif >= 0 ? mesure.preferred-width + Theme.espace-petit : 0px;
+    property <length> base: (root.width - 2 * root.marge - root.en-plus) / root.onglets.length;
+    property <bool> pret: false;   // no animation while everything settles at launch
+
+    height: Theme.hauteur-barre-onglets;
+    border-radius: self.height / 2;
+    background: Theme.onglets-fond;
+
+    Timer {
+        interval: Theme.duree-onglet + Theme.duree-teinte;
+        running: !root.pret;
+        triggered => { root.pret = true; }
+    }
+    // Only used to measure the active tab's word.
+    mesure := Text {
+        text: root.actif >= 0 ? root.onglets[root.actif].libelle : "";
+        font-size: Theme.texte-libelle;
+        font-weight: Theme.graisse-titre-bloc;
+        opacity: 0;
+    }
+    Rectangle {
+        x: root.marge + max(root.actif, 0) * root.base;
+        y: root.marge;
+        width: root.base + root.en-plus;
+        height: root.height - 2 * root.marge;
+        border-radius: self.height / 2;
+        background: Theme.onglet-actif-fond;
+        opacity: root.actif >= 0 ? 1 : 0;
+        animate x, width {
+            duration: root.pret ? Theme.duree-onglet : 0ms;
+            easing: ease-out;
+        }
+        animate opacity { duration: Theme.duree-onglet; }
+    }
+    for onglet[i] in root.onglets: OngletIconeSeule {
+        x: root.marge + i * root.base + (root.actif >= 0 && i > root.actif ? root.en-plus : 0px);
+        y: root.marge;
+        width: root.base + (i == root.actif ? root.en-plus : 0px);
+        height: root.height - 2 * root.marge;
+        animate x, width {
+            duration: root.pret ? Theme.duree-onglet : 0ms;
+            easing: ease-out;
+        }
+        onglet: onglet;
+        actif: i == root.actif;
+        largeur-mot: root.en-plus;
+        clic => { root.clic(i); }
+    }
+}
+
+// Narrow bar for entries without a charter icon: words on two rows of three.
+export component OngletsGrille inherits Rectangle {
+    callback clic(int);
+    in property <[OngletIcone]> onglets;
+    in property <int> actif: -1;
+
+    property <int> par-rangee: 3;
+    property <int> rangees: ceil(root.onglets.length / root.par-rangee);
+    property <length> marge: Theme.espace-petit / 2;
+    property <length> case-largeur: (root.width - 2 * root.marge) / root.par-rangee;
+    property <length> case-hauteur: Theme.hauteur-barre-onglets - 2 * root.marge;
+
+    height: root.rangees * root.case-hauteur + 2 * root.marge;
+    border-radius: Theme.hauteur-barre-onglets / 2;
+    background: Theme.onglets-fond;
+
+    for onglet[i] in root.onglets: Rectangle {
+        x: root.marge + mod(i, root.par-rangee) * root.case-largeur;
+        y: root.marge + floor(i / root.par-rangee) * root.case-hauteur;
+        width: root.case-largeur;
+        height: root.case-hauteur;
+        border-radius: self.height / 2;
+        background: i == root.actif ? Theme.onglet-actif-fond : transparent;
+        animate background { duration: Theme.duree-onglet; }
+        Text {
+            text: onglet.libelle;
+            color: i == root.actif ? Theme.onglet-actif-texte : Theme.onglet-texte;
+            animate color { duration: Theme.duree-onglet; }
+            font-size: Theme.texte-libelle;
+            font-weight: i == root.actif ? Theme.graisse-titre-bloc : Theme.graisse-libelle;
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clic(i); }
+        }
+    }
+}

@@ -1,0 +1,65 @@
+import { Theme } from "../theme.slint";
+
+export component TexteAide inherits Text {
+    color: Theme.texte-secondaire;
+    font-size: Theme.texte-aide;
+    font-weight: Theme.graisse-lecture;
+    wrap: word-wrap;
+}
+
+// Card: radius 16; light shadow in light mode, thin outline all around in dark mode.
+export component Carte inherits Rectangle {
+    in property <string> titre;
+    in property <length> marge: Theme.marge-carte;
+
+    background: Theme.carte;
+    border-radius: Theme.rayon-carte;
+    border-width: Theme.carte-contour-epaisseur;
+    border-color: Theme.carte-contour;
+    drop-shadow-blur: Theme.ombre-flou;
+    drop-shadow-color: Theme.carte-ombre;
+
+    VerticalLayout {
+        padding: root.marge;
+        spacing: Theme.espace-moyen;
+        Text {
+            text: root.titre;
+            color: Theme.texte;
+            font-size: Theme.texte-titre-bloc;
+            font-weight: Theme.graisse-titre-bloc;
+            wrap: word-wrap;
+        }
+        @children
+    }
+}
+
+// List card: the title keeps its margin, rows run from edge to edge.
+export component CarteListe inherits Rectangle {
+    in property <string> titre;
+    in property <length> marge: Theme.marge-carte;
+
+    background: Theme.carte;
+    border-radius: Theme.rayon-carte;
+    border-width: Theme.carte-contour-epaisseur;
+    border-color: Theme.carte-contour;
+    drop-shadow-blur: Theme.ombre-flou;
+    drop-shadow-color: Theme.carte-ombre;
+    clip: true;   // the last row follows the card radius
+
+    VerticalLayout {
+        padding-top: root.marge;
+        spacing: Theme.espace-moyen;
+        HorizontalLayout {
+            padding-left: root.marge;
+            padding-right: root.marge;
+            Text {
+                text: root.titre;
+                color: Theme.texte;
+                font-size: Theme.texte-titre-bloc;
+                font-weight: Theme.graisse-titre-bloc;
+                wrap: word-wrap;
+            }
+        }
+        @children
+    }
+}

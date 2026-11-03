@@ -1,0 +1,4 @@
+// The Apple team stays out of this public repository.
+// To run on a real iPhone, create ios/Local.xcconfig (ignored by git) with:
+//   DEVELOPMENT_TEAM = YOUR_TEAM_ID
+#include? "Local.xcconfig"

@@ -1,0 +1,278 @@
+// The shell: header, navigation bar, page. Rust owns the state; this file shows it
+// and sends the clicks back.
+
+import { Theme, ModeTheme } from "theme.slint";
+import { Carte } from "composants/carte.slint";
+import { BoutonEntete } from "composants/bouton-entete.slint";
+import { BoutonPrincipal, BoutonSecondaire } from "composants/boutons.slint";
+import { Onglets, OngletsIcones, OngletsGrille, OngletIcone } from "composants/onglets.slint";
+import { Icones } from "composants/icones.slint";
+export { Theme, ModeTheme, Icones, OngletIcone }
+
+export struct EvenementAffiche {
+    nom: string,
+    detail: string,
+}
+
+// What Rust gives to the screen, and the clicks it gets back.
+export global Navigation {
+    in property <[OngletIcone]> rubriques;
+    in property <[OngletIcone]> onglets;
+    in property <int> rubrique-active;
+    in property <int> onglet-actif;
+    in property <bool> dans-evenement;
+    in property <string> nom-evenement;
+    in property <string> retour;
+    in property <string> titre;
+    in property <[EvenementAffiche]> evenements;
+    callback choisir-rubrique(int);
+    callback choisir-onglet(int);
+    callback ouvrir-evenement(int);
+    callback revenir();
+}
+
+// The demo setting: only touch or mouse can be forced.
+export global Demo {
+    in property <[OngletIcone]> appareils;
+    in property <int> appareil-actif;
+    callback choisir-appareil(int);
+}
+
+enum Disposition { etroite, moyenne, large }
+
+component Entete inherits Rectangle {
+    in property <length> marge-gauche;
+    in property <length> marge-droite;
+    in property <length> marge-haut;
+
+    background: Theme.entete;
+    HorizontalLayout {
+        padding-top: root.marge-haut + Theme.espace;
+        padding-bottom: Theme.espace;
+        padding-left: root.marge-gauche;
+        padding-right: root.marge-droite;
+        spacing: Theme.espace-moyen;
+        if Navigation.dans-evenement: VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            BoutonEntete {
+                libelle: Navigation.retour;
+                clic => { Navigation.revenir(); }
+            }
+        }
+        Text {
+            horizontal-stretch: 1;
+            min-height: Theme.zone;
+            text: Navigation.dans-evenement ? Navigation.nom-evenement : "Chron'O";
+            color: Theme.entete-texte;
+            font-size: Theme.texte-titre-ecran;
+            font-weight: Theme.graisse-titre-ecran;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component BarreNavigation {
+    in property <Disposition> disposition;
+
+    if Navigation.dans-evenement && root.disposition == Disposition.etroite: OngletsIcones {
+        y: 0;
+        width: 100%;
+        onglets: Navigation.onglets;
+        actif: Navigation.onglet-actif;
+        clic(i) => { Navigation.choisir-onglet(i); }
+    }
+    if !Navigation.dans-evenement && root.disposition == Disposition.etroite: OngletsGrille {
+        y: 0;
+        width: 100%;
+        onglets: Navigation.rubriques;
+        actif: Navigation.rubrique-active;
+        clic(i) => { Navigation.choisir-rubrique(i); }
+    }
+    if root.disposition != Disposition.etroite: HorizontalLayout {
+        alignment: start;
+        if Navigation.dans-evenement: Onglets {
+            onglets: Navigation.onglets;
+            actif: Navigation.onglet-actif;
+            clic(i) => { Navigation.choisir-onglet(i); }
+        }
+        if !Navigation.dans-evenement: Onglets {
+            onglets: Navigation.rubriques;
+            actif: Navigation.rubrique-active;
+            clic(i) => { Navigation.choisir-rubrique(i); }
+        }
+    }
+}
+
+component Page {
+    in property <length> marge-gauche;
+    in property <length> marge-droite;
+    in property <length> marge-bas;
+
+    defilement := Flickable {
+        contenu := VerticalLayout {
+            width: defilement.width;
+            alignment: start;
+            padding-top: Theme.espace-moyen;
+            padding-left: root.marge-gauche;
+            padding-right: root.marge-droite;
+            padding-bottom: root.marge-bas + Theme.espace-moyen;
+            spacing: Theme.espace-moyen;
+            Text {
+                text: Navigation.titre;
+                color: Theme.texte;
+                font-size: Theme.texte-titre-ecran;
+                font-weight: Theme.graisse-titre-ecran;
+                wrap: word-wrap;
+            }
+            for evenement[i] in Navigation.evenements: Carte {
+                titre: evenement.nom;
+                marge: root.marge-gauche;
+                Text {
+                    text: evenement.detail;
+                    color: Theme.texte-secondaire;
+                    font-size: Theme.texte-courant;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    BoutonPrincipal {
+                        libelle: "Ouvrir";
+                        clic => { Navigation.ouvrir-evenement(i); }
+                    }
+                }
+            }
+        }
+        content-height: max(self.height, contenu.preferred-height);
+    }
+}
+
+component LigneDemo {
+    in property <string> libelle;
+    in property <string> valeur;
+
+    HorizontalLayout {
+        spacing: Theme.espace;
+        Text {
+            text: root.libelle;
+            color: Theme.texte-secondaire;
+            font-size: Theme.texte-libelle;
+            font-weight: Theme.graisse-lecture;
+        }
+        Text {
+            horizontal-stretch: 1;
+            horizontal-alignment: right;
+            text: root.valeur;
+            color: Theme.texte;
+            font-size: Theme.texte-libelle;
+            font-weight: Theme.graisse-libelle;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component PanneauDemo {
+    in property <string> disposition;
+    in property <length> largeur-fenetre;
+
+    Carte {
+        titre: "Démo";
+        marge: Theme.espace-moyen;
+        drop-shadow-blur: Theme.ombre-demo;
+        Onglets {
+            onglets: Demo.appareils;
+            actif: Demo.appareil-actif;
+            clic(i) => { Demo.choisir-appareil(i); }
+        }
+        LigneDemo {
+            libelle: "Tailles";
+            valeur: (Theme.tactile ? "Tactile, " : "Souris, ") + Theme.zone / 1px + " px";
+        }
+        LigneDemo {
+            libelle: "Disposition";
+            valeur: root.disposition + ", " + floor(root.largeur-fenetre / 1px) + " px";
+        }
+        LigneDemo {
+            libelle: "Thème";
+            valeur: Theme.sombre ? "Sombre" : "Clair";
+        }
+    }
+}
+
+export component App inherits Window {
+    title: "Chron'O — maquette";
+    preferred-width: Theme.fenetre-largeur;
+    preferred-height: Theme.fenetre-hauteur;
+    min-width: Theme.fenetre-largeur-min;
+    min-height: Theme.fenetre-hauteur-min;
+    background: Theme.fond-page;
+    default-font-family: Theme.police;
+
+    in-out property <bool> demo-ouverte: false;
+
+    property <Disposition> disposition: root.width < Theme.seuil-moyen ? Disposition.etroite
+        : root.width <= Theme.seuil-large ? Disposition.moyenne
+        : Disposition.large;
+    property <length> marge: root.disposition == Disposition.etroite ? Theme.marge-etroite : Theme.marge;
+    property <length> marge-gauche: root.marge + root.safe-area-insets.left;
+    property <length> marge-droite: root.marge + root.safe-area-insets.right;
+
+    // Explicit size: the layout's own minimum must not feed back into the window width,
+    // which picks the disposition. The window minimum above stays the only limit.
+    VerticalLayout {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        Entete {
+            vertical-stretch: 0;
+            marge-gauche: root.marge-gauche;
+            marge-droite: root.marge-droite;
+            marge-haut: root.safe-area-insets.top;
+        }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-top: Theme.espace-moyen;
+            padding-left: root.disposition == Disposition.etroite ? Theme.espace + root.safe-area-insets.left : root.marge-gauche;
+            padding-right: root.disposition == Disposition.etroite ? Theme.espace + root.safe-area-insets.right : root.marge-droite;
+            BarreNavigation {
+                disposition: root.disposition;
+                height: root.disposition == Disposition.etroite && !Navigation.dans-evenement
+                    ? 2 * Theme.hauteur-barre-onglets - Theme.espace-petit
+                    : Theme.hauteur-barre-onglets;
+            }
+        }
+        Page {
+            vertical-stretch: 1;
+            marge-gauche: root.marge-gauche;
+            marge-droite: root.marge-droite;
+            // Keeps the end of the page clear of the Démo button.
+            marge-bas: Theme.zone + root.safe-area-insets.bottom + Theme.espace-moyen;
+        }
+    }
+
+    // Closes the panel when clicking anywhere else.
+    if root.demo-ouverte: TouchArea {
+        clicked => { root.demo-ouverte = false; }
+    }
+
+    if root.demo-ouverte: PanneauDemo {
+        x: root.marge-gauche;
+        y: bouton-demo.y - self.preferred-height - Theme.espace;
+        width: min(Theme.largeur-demo, root.width - root.marge-gauche - root.marge-droite);
+        height: self.preferred-height;
+        disposition: root.disposition == Disposition.etroite ? "Étroite"
+            : root.disposition == Disposition.moyenne ? "Moyenne"
+            : "Large";
+        largeur-fenetre: root.width;
+    }
+
+    bouton-demo := BoutonSecondaire {
+        x: root.marge-gauche;
+        y: root.height - self.height - root.safe-area-insets.bottom - Theme.espace;
+        height: Theme.zone;
+        libelle: "Démo";
+        clic => { root.demo-ouverte = !root.demo-ouverte; }
+    }
+}

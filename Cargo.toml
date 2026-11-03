@@ -1,0 +1,28 @@
+[package]
+name = "maquette"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+# The web version is built from the library, the desktop and iPhone apps from the binary.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+slint = "1.18.1"
+
+# Only used to save captures as PNG (see src/capture.rs).
+[target.'cfg(not(any(target_os = "ios", target_arch = "wasm32")))'.dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# On iPhone, Slint goes through the Skia renderer.
+[target.'cfg(target_os = "ios")'.dependencies]
+slint = { version = "1.18.1", features = ["renderer-skia"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["MediaQueryList", "Window"] }
+
+[build-dependencies]
+slint-build = "1.18.1"

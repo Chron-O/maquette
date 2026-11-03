@@ -1,0 +1,31 @@
+import { Theme } from "../theme.slint";
+
+// Pill button on the header.
+export component BoutonEntete inherits Rectangle {
+    callback clic();
+    in property <string> libelle;
+
+    min-height: Theme.zone;
+    border-radius: self.height / 2;
+    background: zone.pressed ? Theme.entete-bouton-appui
+        : zone.has-hover ? Theme.entete-bouton-survol
+        : Theme.entete-bouton;
+    animate background { duration: Theme.duree-teinte; }
+
+    HorizontalLayout {
+        padding-left: Theme.espace-moyen;
+        padding-right: Theme.espace-moyen;
+        Text {
+            text: root.libelle;
+            color: Theme.entete-texte;
+            font-size: Theme.texte-libelle;
+            font-weight: Theme.graisse-libelle;
+            vertical-alignment: center;
+        }
+    }
+
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clic(); }
+    }
+}
