@@ -5,7 +5,7 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { Icons } from "../components/icons.slint";
 import { InputField } from "../components/field.slint";
-import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 
 export struct CourseItem {
@@ -61,11 +61,54 @@ export struct DetailCourse {
     after: string,
 }
 
+export struct CourseStop {
+    code: string,
+    selected: bool,
+    others: [int],      // the other courses going through it, when they are shown
+}
+
+export struct ReserveItem {
+    code: string,
+    in-course: bool,
+    selected: bool,
+}
+
+export struct CourseMarker {
+    code: string,
+    x: float,
+    y: float,
+    in-course: bool,
+    selected: bool,
+}
+
+export struct LegendItem {
+    kind: int,          // 0 start, 1 finish, 2 control, 3 control outside the course, 4 other course
+    label: string,
+}
+
 export global Courses {
     in property <bool> empty;
     in property <bool> course-selected;     // one course chosen: the rest of this page is about it
     in property <bool> list-only;           // on a phone: nothing chosen yet
-    in property <string> course-title;
+    in property <string> zone-title;
+    in property <string> course-name;
+    in property <[string]> course-chips;
+    in property <string> course-categories;
+    in property <[TabItem]> course-views;
+    in property <[TabItem]> course-views-narrow;
+    in property <int> active-course-view;
+    in property <bool> show-others;
+    in property <[CourseStop]> stops;
+    in property <[ReserveItem]> reserve;
+    in property <[CourseMarker]> course-markers;
+    in property <string> course-trace;
+    in property <[string]> other-traces;
+    in property <[LegendItem]> legend;
+    in property <string> stop-code;
+    in property <string> stop-subtitle;
+    in property <string> stop-before;
+    in property <string> stop-after;
+    in property <string> stop-section;
     in property <string> code-search-text;
     in property <string> course-search-text;
     in property <[CourseItem]> items;
@@ -105,7 +148,7 @@ export global Courses {
     in property <[DetailCourse]> detail-courses;
     in property <string> detail-entrants;
 
-    // The open bubble is only a display matter: 0 none, 1 settings, 2 alert.
+    // The open bubble is only a display matter: 0 none, 1 settings, 2 alert, 4 settings of the course.
     in-out property <int> open-bubble;
     in-out property <length> bubble-left;
     in-out property <length> bubble-right;
@@ -119,6 +162,11 @@ export global Courses {
     callback close-detail();
     callback code-search(string);
     callback course-search(string);
+    callback select-course-view(int);
+    callback toggle-others();
+    callback select-stop(int);
+    callback select-reserve(string);
+    callback show-in-all-controls(string);
 
     public pure function tone-color(tone: int) -> color {
         if tone == 0 { return Theme.course-blue; }
@@ -440,6 +488,10 @@ component AlertPill inherits Rectangle {
 // The settings of the page, summed up. They open in a bubble. `compact`: the title alone.
 component SummaryZone inherits Rectangle {
     in property <bool> compact;
+    in property <string> title: Courses.zone-title;
+    in property <[string]> chips: Courses.chips;
+    in property <int> bubble: 1;
+    in property <int> tone: -1;
 
     height: Theme.zone;
     border-radius: Theme.field-radius;
@@ -461,9 +513,13 @@ component SummaryZone inherits Rectangle {
                 height: Theme.button-icon;
             }
         }
+        if root.tone >= 0: VerticalLayout {
+            alignment: center;
+            CourseChip { tone: root.tone; }
+        }
         Text {
             horizontal-stretch: root.compact ? 1 : 0;
-            text: "Tous les postes";
+            text: root.title;
             color: Theme.text;
             font-size: Theme.text-block-title;
             font-weight: Theme.weight-block-title;
@@ -471,7 +527,7 @@ component SummaryZone inherits Rectangle {
         }
         if !root.compact: HorizontalLayout {
             spacing: Theme.space;
-            for chip in Courses.chips: SmallText {
+            for chip in root.chips: SmallText {
                 text: chip;
                 wrap: no-wrap;
                 vertical-alignment: center;
@@ -483,7 +539,7 @@ component SummaryZone inherits Rectangle {
         clicked => {
             Courses.bubble-left = root.absolute-position.x;
             Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
-            Courses.open-bubble = 1;
+            Courses.open-bubble = root.bubble;
         }
     }
 }
@@ -862,25 +918,8 @@ component MapMarkerView {
     }
 }
 
-component ControlsMap inherits Rectangle {
-    clip: true;
-    height: self.width * 0.6;
-
-    Image {
-        source: @image-url("../map/course-map.svg");
-        width: 100%;
-        height: 100%;
-        image-fit: fill;
-    }
-    for trace in Courses.traces: Path {
-        width: 100%;
-        height: 100%;
-        viewbox-width: 600;
-        viewbox-height: 360;
-        commands: trace;
-        stroke: Theme.purple;
-        stroke-width: Theme.map-trace;
-    }
+// Start and finish, drawn at their place on a map of this size.
+component MapEnds {
     Path {
         x: Courses.start-x * root.width - self.width / 2;
         y: Courses.start-y * root.height - self.height / 2;
@@ -908,10 +947,48 @@ component ControlsMap inherits Rectangle {
             border-color: Theme.purple;
         }
     }
+}
+
+component ControlsMap inherits Rectangle {
+    clip: true;
+    height: self.width * 0.6;
+
+    Image {
+        source: @image-url("../map/course-map.svg");
+        width: 100%;
+        height: 100%;
+        image-fit: fill;
+    }
+    for trace in Courses.traces: Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 600;
+        viewbox-height: 360;
+        commands: trace;
+        stroke: Theme.purple;
+        stroke-width: Theme.map-trace;
+    }
+    MapEnds { width: 100%; height: 100%; }
     for marker in Courses.markers: MapMarkerView {
         x: marker.x * root.width;
         y: marker.y * root.height;
         marker: marker;
+    }
+}
+
+component Switch inherits Rectangle {
+    in property <bool> on;
+
+    width: Theme.toggle-width;
+    height: Theme.toggle-height;
+    border-radius: self.height / 2;
+    background: root.on ? Theme.active-tab-background : Theme.toggle-off;
+    Rectangle {
+        x: root.on ? parent.width - self.width - (parent.height - self.height) / 2 : (parent.height - self.height) / 2;
+        width: Theme.toggle-knob-size;
+        height: Theme.toggle-knob-size;
+        border-radius: self.width / 2;
+        background: Theme.toggle-knob;
     }
 }
 
@@ -991,19 +1068,7 @@ export component ControlDetail inherits Rectangle {
             spacing: Theme.space;
             VerticalLayout {
                 alignment: center;
-                Rectangle {
-                    width: Theme.toggle-width;
-                    height: Theme.toggle-height;
-                    border-radius: self.height / 2;
-                    background: Theme.toggle-off;
-                    Rectangle {
-                        x: (parent.height - self.height) / 2;
-                        width: Theme.toggle-knob-size;
-                        height: Theme.toggle-knob-size;
-                        border-radius: self.width / 2;
-                        background: Theme.toggle-knob;
-                    }
-                }
+                Switch { }
             }
             VerticalLayout {
                 horizontal-stretch: 1;
@@ -1024,11 +1089,29 @@ export component ControlDetail inherits Rectangle {
 
 // The settings on the left, the alert on the right: always one row of the same height.
 component TopRow {
+    in property <bool> compact;
+
     HorizontalLayout {
         spacing: Theme.button-margin;
-        SummaryZone { }
+        SummaryZone { compact: root.compact; }
         Rectangle { horizontal-stretch: 1; }
         if Courses.alert-title != "": AlertPill { }
+    }
+}
+
+// On a phone, the same row with the way back to the list.
+component NarrowTop {
+    HorizontalLayout {
+        spacing: Theme.space;
+        SecondaryButton {
+            label: "‹";
+            clicked => { Courses.select-course(-2); }
+        }
+        SummaryZone {
+            horizontal-stretch: 1;
+            compact: true;
+        }
+        if Courses.alert-title != "": AlertPill { compact: true; }
     }
 }
 
@@ -1162,18 +1245,7 @@ component AllControls {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
-        if root.narrow: HorizontalLayout {
-            spacing: Theme.space;
-            SecondaryButton {
-                label: "‹";
-                clicked => { Courses.select-course(-2); }
-            }
-            SummaryZone {
-                horizontal-stretch: 1;
-                compact: true;
-            }
-            if Courses.alert-title != "": AlertPill { compact: true; }
-        }
+        if root.narrow: NarrowTop { }
         HorizontalLayout {
             vertical-stretch: 0;
             // In line with the buttons of the column, which sit inside its card.
@@ -1219,30 +1291,568 @@ component AllControls {
     }
 }
 
-component OneCourse {
-    in property <LayoutMode> layout-mode;
+// A control of the course: its code in a purple circle.
+component StationDot {
+    callback clicked();
+    in property <string> code;
+    in property <bool> in-course: true;
+    in property <bool> filled;      // in the reserve: pale when in the course
+    in property <bool> selected;
+    in property <length> size: Theme.station-size;
 
+    width: root.size;
+    height: root.size;
+    Rectangle {
+        border-radius: self.width / 2;
+        border-width: root.in-course ? Theme.tag-outline : Theme.thin-outline-width;
+        border-color: root.in-course ? Theme.purple : Theme.tag-unused;
+        background: root.selected ? Theme.purple : root.filled ? Theme.tag-selected-background : Theme.tag-background;
+        Text {
+            text: root.code;
+            color: root.selected ? Theme.tag-background : root.in-course ? Theme.purple : Theme.tag-unused;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-screen-title;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component OtherMarks {
+    in property <[int]> tones;
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space-small;
+        opacity: Theme.others-opacity;
+        for tone in root.tones: CourseChip { tone: tone; }
+    }
+}
+
+component EndIcon inherits Image {
+    width: Theme.station-size;
+    height: Theme.station-size;
+    colorize: Theme.purple;
+}
+
+component StopsListEnd {
+    in property <image> icon;
+    in property <string> label;
+
+    min-height: Theme.zone;
+    HorizontalLayout {
+        padding-left: Theme.space;
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            EndIcon { source: root.icon; }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component StopsList {
     VerticalLayout {
-        alignment: start;
-        spacing: Theme.button-margin;
-        HorizontalLayout {
-            spacing: Theme.space;
-            if root.layout-mode == LayoutMode.narrow: VerticalLayout {
-                alignment: start;
-                SecondaryButton {
-                    label: "‹";
-                    clicked => { Courses.select-course(-2); }
+        StopsListEnd { icon: Icons.co-start; label: "Départ"; }
+        for stop[i] in Courses.stops: VerticalLayout {
+            RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: stop.selected ? Theme.control-selected : transparent;
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Courses.select-stop(i); }
+                }
+                HorizontalLayout {
+                    padding-left: Theme.space;
+                    padding-right: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        alignment: center;
+                        StationDot {
+                            code: stop.code;
+                            selected: stop.selected;
+                            clicked => { Courses.select-stop(i); }
+                        }
+                    }
+                    Text {
+                        text: i + 1 == 1 ? "1er" : (i + 1) + "e";
+                        color: Theme.text-secondary;
+                        font-size: Theme.text-help;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        OtherMarks { tones: stop.others; }
+                    }
                 }
             }
+        }
+        RowLine { }
+        StopsListEnd { icon: Icons.co-finish; label: "Arrivée"; }
+    }
+}
+
+// A line in the colour of the course, turning back at the end of each row.
+component MetroLine {
+    in property <int> tone;
+
+    property <length> step: Theme.station-size + Theme.metro-link;
+    property <length> rank-height: Theme.text-help + Theme.space;
+    property <length> marks-height: Courses.show-others ? Theme.course-chip + Theme.space-small : 0px;
+    property <length> cell-height: root.rank-height + Theme.station-size + root.marks-height + Theme.space-medium;
+    property <int> per-row: min(Theme.metro-per-row, max(1, floor((root.width + Theme.metro-link) / root.step)));
+    property <int> count: Courses.stops.length + 2;
+
+    pure function column(k: int) -> int {
+        return mod(floor(k / root.per-row), 2) == 1 ? root.per-row - 1 - mod(k, root.per-row) : mod(k, root.per-row);
+    }
+    pure function cell-x(k: int) -> length {
+        return column(k) * root.step;
+    }
+    pure function cell-y(k: int) -> length {
+        return floor(k / root.per-row) * root.cell-height;
+    }
+    pure function same-row(k: int) -> bool {
+        return mod(k + 1, root.per-row) != 0;
+    }
+    pure function link-x(k: int) -> length {
+        return same-row(k) ? min(cell-x(k), cell-x(k + 1)) + Theme.station-size : cell-x(k) + (Theme.station-size - Theme.metro-trace) / 2;
+    }
+    pure function link-y(k: int) -> length {
+        return cell-y(k) + root.rank-height + (same-row(k) ? (Theme.station-size - Theme.metro-trace) / 2 : Theme.station-size);
+    }
+
+    height: ceil(root.count / root.per-row) * root.cell-height - Theme.space-medium;
+
+    // The links first: the ranks and the stations are drawn over them.
+    for stop[i] in Courses.stops: Rectangle {
+        x: root.link-x(i);
+        y: root.link-y(i);
+        width: root.same-row(i) ? Theme.metro-link : Theme.metro-trace;
+        height: root.same-row(i) ? Theme.metro-trace : root.cell-height - Theme.station-size;
+        background: Courses.tone-color(root.tone);
+    }
+    Rectangle {
+        x: root.link-x(root.count - 2);
+        y: root.link-y(root.count - 2);
+        width: root.same-row(root.count - 2) ? Theme.metro-link : Theme.metro-trace;
+        height: root.same-row(root.count - 2) ? Theme.metro-trace : root.cell-height - Theme.station-size;
+        background: Courses.tone-color(root.tone);
+    }
+    EndIcon {
+        x: root.cell-x(0);
+        y: root.cell-y(0) + root.rank-height;
+        source: Icons.co-start;
+    }
+    for stop[i] in Courses.stops: VerticalLayout {
+        x: root.cell-x(i + 1);
+        y: root.cell-y(i + 1);
+        width: Theme.station-size;
+        Rectangle {
+            height: root.rank-height;
+            background: Theme.card;
             Text {
-                horizontal-stretch: 1;
-                text: Courses.course-title;
-                color: Theme.text;
-                font-size: Theme.text-screen-title;
-                font-weight: Theme.weight-screen-title;
-                vertical-alignment: center;
-                wrap: word-wrap;
+                text: i + 1;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
             }
+        }
+        StationDot {
+            code: stop.code;
+            selected: stop.selected;
+            clicked => { Courses.select-stop(i); }
+        }
+        if Courses.show-others: VerticalLayout {
+            padding-top: Theme.space-small;
+            OtherMarks { tones: stop.others; }
+        }
+    }
+    EndIcon {
+        x: root.cell-x(root.count - 1);
+        y: root.cell-y(root.count - 1) + root.rank-height;
+        source: Icons.co-finish;
+    }
+}
+
+component CourseMap inherits Rectangle {
+    clip: true;
+    height: self.width * 0.6;
+    border-radius: Theme.field-radius;
+
+    Image {
+        source: @image-url("../map/course-map.svg");
+        width: 100%;
+        height: 100%;
+        image-fit: fill;
+    }
+    for trace in Courses.other-traces: Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 600;
+        viewbox-height: 360;
+        commands: trace;
+        stroke: Theme.purple;
+        stroke-width: Theme.map-trace;
+        opacity: Theme.others-opacity;
+    }
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 600;
+        viewbox-height: 360;
+        commands: Courses.course-trace;
+        stroke: Theme.purple;
+        stroke-width: Theme.map-trace;
+    }
+    MapEnds { width: 100%; height: 100%; }
+    for marker[i] in Courses.course-markers: StationDot {
+        x: marker.x * root.width - self.width / 2;
+        y: marker.y * root.height - self.height / 2;
+        size: Theme.map-marker;
+        code: marker.code;
+        in-course: marker.in-course;
+        selected: marker.selected;
+        clicked => { Courses.select-reserve(marker.code); }
+    }
+}
+
+component LegendMark {
+    in property <int> kind;
+
+    width: Theme.legend-mark;
+    height: Theme.legend-mark;
+    if root.kind == 0: Image { source: Icons.co-start; colorize: Theme.purple; width: 100%; height: 100%; }
+    if root.kind == 1: Image { source: Icons.co-finish; colorize: Theme.purple; width: 100%; height: 100%; }
+    if root.kind == 2 || root.kind == 3: Rectangle {
+        border-radius: self.width / 2;
+        border-width: root.kind == 2 ? Theme.tag-outline : Theme.thin-outline-width;
+        border-color: root.kind == 2 ? Theme.purple : Theme.tag-unused;
+    }
+    if root.kind == 4: Rectangle {
+        width: Theme.course-chip;
+        height: Theme.course-chip;
+        border-radius: Theme.course-chip-radius;
+        background: Courses.tone-color(0);
+        opacity: Theme.others-opacity;
+    }
+}
+
+component Legend {
+    in-out property <bool> open: true;
+
+    property <length> step: Theme.legend-item-width + Theme.space;
+    property <int> per-row: max(1, floor((root.width + Theme.space) / root.step));
+
+    VerticalLayout {
+        spacing: Theme.space-small;
+        Rectangle {
+            height: Theme.zone;
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.open = !root.open; }
+            }
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space;
+                VerticalLayout {
+                    alignment: center;
+                    SortMark { ascending: root.open; }
+                }
+                Text {
+                    text: "Légende";
+                    color: Theme.text-secondary;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-block-title;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        if root.open: Rectangle {
+            height: ceil(Courses.legend.length / root.per-row) * Theme.legend-row-height;
+            for item[i] in Courses.legend: HorizontalLayout {
+                x: mod(i, root.per-row) * root.step;
+                y: floor(i / root.per-row) * Theme.legend-row-height;
+                width: Theme.legend-item-width;
+                height: Theme.legend-row-height;
+                spacing: Theme.space;
+                VerticalLayout {
+                    alignment: center;
+                    LegendMark { kind: item.kind; }
+                }
+                SmallText {
+                    horizontal-stretch: 1;
+                    text: item.label;
+                    wrap: no-wrap;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+// All the controls of the event, in the course or not.
+component Reserve {
+    property <length> step: Theme.station-size + Theme.space;
+    property <int> per-row: max(1, floor((root.width + Theme.space) / root.step));
+
+    VerticalLayout {
+        spacing: Theme.space;
+        Text {
+            text: "Postes de la course";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+        }
+        Rectangle {
+            height: ceil(Courses.reserve.length / root.per-row) * root.step - Theme.space;
+            for item[i] in Courses.reserve: StationDot {
+                x: mod(i, root.per-row) * root.step;
+                y: floor(i / root.per-row) * root.step;
+                code: item.code;
+                in-course: item.in-course;
+                filled: item.in-course;
+                selected: item.selected;
+                clicked => { Courses.select-reserve(item.code); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                InputField {
+                    horizontal-stretch: 1;
+                    max-width: Theme.code-search-width;
+                    placeholder: "Ou un nouveau numéro";
+                    input-kind: InputType.number;
+                }
+            }
+            SecondaryButton { label: "Ajouter"; }
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
+}
+
+component CourseBody {
+    in property <int> tone;
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space-medium;
+        alignment: start;
+        if Courses.active-course-view == 0: Rectangle {
+            border-radius: Theme.field-radius;
+            border-width: Theme.thin-outline-width;
+            border-color: Theme.separator;
+            clip: true;
+            VerticalLayout {
+                StopsList { }
+            }
+        }
+        if Courses.active-course-view == 1: MetroLine { tone: root.tone; }
+        if Courses.active-course-view == 2: CourseMap { }
+        Legend { }
+        if Courses.active-course-view != 2: Reserve { }
+    }
+}
+
+component OthersSwitch {
+    horizontal-stretch: 0;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            Switch { on: Courses.show-others; }
+        }
+        Text {
+            text: "Montrer les autres circuits";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Courses.toggle-others(); }
+    }
+}
+
+component OneCourse {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> switch-below: root.narrow
+        || root.available-width < 3 * Theme.space + Theme.course-views-width + Theme.others-switch-width;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        if root.narrow: NarrowTop { }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-top: root.narrow ? 0 : Theme.space;
+            SecondaryButton {
+                label: "Poste";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    HorizontalLayout {
+                        SummaryZone {
+                            title: Courses.course-name;
+                            chips: Courses.course-chips;
+                            bubble: 4;
+                            tone: Courses.active-course;
+                            compact: root.narrow;
+                            horizontal-stretch: root.narrow ? 1 : 0;
+                        }
+                        if !root.narrow: Rectangle { horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        Tabs {
+                            tabs: root.narrow ? Courses.course-views-narrow : Courses.course-views;
+                            active: Courses.active-course-view;
+                            clicked(i) => { Courses.select-course-view(i); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        if !root.switch-below: OthersSwitch { }
+                    }
+                    if root.switch-below: HorizontalLayout {
+                        alignment: start;
+                        min-height: Theme.zone;
+                        OthersSwitch { }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: CourseBody { tone: Courses.active-course; }
+                if !root.narrow: Flickable {
+                    vertical-stretch: 1;
+                    content-height: body.preferred-height;
+                    body := CourseBody {
+                        width: parent.width;
+                        tone: Courses.active-course;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The control as it stands in the chosen course.
+export component StopDetail inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.tag-outline;
+    border-color: Theme.purple;
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                StationDot { code: Courses.stop-code; selected: true; }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: "Poste " + Courses.stop-code;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                }
+                SmallText { text: Courses.stop-subtitle; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Courses.close-detail(); }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            StationDot { code: Courses.stop-before; }
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: Theme.metro-link;
+                    height: Theme.metro-trace;
+                    background: Courses.tone-color(Courses.active-course);
+                }
+            }
+            StationDot { code: Courses.stop-code; selected: true; }
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: Theme.metro-link;
+                    height: Theme.metro-trace;
+                    background: Courses.tone-color(Courses.active-course);
+                }
+            }
+            StationDot { code: Courses.stop-after; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                Switch { }
+            }
+            SmallText {
+                horizontal-stretch: 1;
+                text: Courses.stop-section;
+                vertical-alignment: center;
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            SecondaryButton { label: "Remplacer par…"; }
+        }
+        HorizontalLayout {
+            alignment: start;
+            SecondaryButton { label: "Retirer du circuit"; danger: true; }
+        }
+        QuietButton {
+            label: "Voir dans Tous les postes ›";
+            clicked => { Courses.show-in-all-controls(Courses.stop-code); }
         }
     }
 }
@@ -1272,9 +1882,15 @@ export component CoursesPage {
                 layout-mode: root.layout-mode;
                 available-width: root.available-width;
             }
-            if !Courses.list-only && !Courses.empty && Courses.course-selected: OneCourse { layout-mode: root.layout-mode; }
+            if !Courses.list-only && !Courses.empty && Courses.course-selected: OneCourse {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
         }
-        if root.layout-mode != LayoutMode.narrow && !Courses.empty && !Courses.course-selected: TopRow { vertical-stretch: 0; }
+        if root.layout-mode != LayoutMode.narrow && !Courses.empty: TopRow {
+            vertical-stretch: 0;
+            compact: root.layout-mode == LayoutMode.medium && Courses.course-selected;
+        }
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
             vertical-stretch: 1;
             spacing: Theme.button-margin;
@@ -1287,11 +1903,13 @@ export component CoursesPage {
             if !Courses.empty && Courses.course-selected: OneCourse {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
+                available-width: root.content-width;
             }
             if root.detail-beside: VerticalLayout {
                 alignment: start;
                 width: Theme.control-detail-width;
-                ControlDetail { }
+                if !Courses.course-selected: ControlDetail { }
+                if Courses.course-selected: StopDetail { }
             }
             if Courses.empty: Rectangle { horizontal-stretch: 1; }
         }
@@ -1339,7 +1957,14 @@ export component DetailOverlay {
     }
     Rectangle {
         background: Theme.overlay-veil;
-        panel := ControlDetail {
+        if !Courses.course-selected: ControlDetail {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
+            height: self.preferred-height;
+            TouchArea { }
+        }
+        if Courses.course-selected: StopDetail {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
@@ -1382,6 +2007,75 @@ component SettingsBubble {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: Courses.chips[1]; }
             SecondaryButton { label: "Importer"; }
+        }
+    }
+}
+
+component AllCoursesBubble {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Circuit reconnu à la lecture"; }
+            VerticalLayout {
+                alignment: center;
+                Switch { }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Ordre des postes"; }
+            Tabs {
+                tabs: [{ label: "Imposé" }, { label: "Libre" }];
+                active: 0;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Numéros des balises"; }
+            BubbleLabel { text: "dès 31"; wrap: no-wrap; }
+        }
+    }
+}
+
+component CourseBubble {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Couleur"; }
+            VerticalLayout {
+                alignment: center;
+                CourseChip { tone: Courses.active-course; }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Type"; }
+            Tabs {
+                tabs: [{ label: "Classique" }, { label: "Score" }];
+                active: 0;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Ordre"; }
+            Tabs {
+                tabs: [{ label: "Imposé" }, { label: "Libre" }];
+                active: 0;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Catégories"; }
+            BubbleLabel { text: Courses.course-categories; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Carte"; }
+            SecondaryButton { label: "Changer"; }
         }
     }
 }
@@ -1441,7 +2135,9 @@ export component BubbleOverlay {
         drop-shadow-color: Theme.bubble-shadow;
         TouchArea { }
         content := VerticalLayout {
-            if Courses.open-bubble == 1: SettingsBubble { }
+            if Courses.open-bubble == 1 && !Courses.course-selected: SettingsBubble { }
+            if Courses.open-bubble == 1 && Courses.course-selected: AllCoursesBubble { }
+            if Courses.open-bubble == 4: CourseBubble { }
             if Courses.open-bubble == 2: AlertBubble { }
         }
     }

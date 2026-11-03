@@ -7,7 +7,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 |---|---|---|
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
 | 1 | Accueil | validé par Robin |
-| 2 | Course › Circuits | en cours : « Tous les postes » validé par Robin, vue d'un circuit à faire |
+| 2 | Course › Circuits | en cours : « Tous les postes » et vue d'un circuit en ordre imposé validés par Robin ; Ordre libre et Score à faire |
 | 3 | Course › Participants | à faire |
 | 4 | Course › Départs | à faire |
 | 5 | Course › Boîtiers | à faire |
@@ -47,7 +47,8 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 ## 2 — Circuits
 - « Tous les postes » : liste des circuits, Tableau / Lignes / Carte, tri, recherche, « Mettre en avant », fiche du poste.
 - Tout est en lecture seule pour l'instant : Importer, Nouveau, Ajouter, Neutraliser, Boîtier double, Imprimer et Exporter sont visibles, sans effet.
-- Captures : `02-courses-*` (tirage fixe), en Tableau.
+- Vue d'un circuit, d'après `editeur-parcours.md` de chrono-swift : Liste, Métro, Géographique, réserve, légende, « Montrer les autres circuits », fiche du poste. Deux zones de réglages : « Tous les circuits » en haut, le circuit en tête de sa carte.
+- Captures : `02-courses-*` (tirage fixe, en Tableau) et `02-course-*` (Circuit A, en Métro).
 
 ### Écarts et points ouverts de l'écran 2
 - **Fiche sur téléphone** : par-dessus, comme `CLAUDE.md`. Le prototype l'ouvre dans la ligne.
@@ -63,6 +64,10 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Poste dans aucun circuit** : contour plus clair au lieu de pointillés, que Slint ne dessine pas.
 - **Fiche, avant et après** : « D » et « A » écrits pour Départ et Arrivée, au lieu de leurs symboles.
 - **« 1 tronçon non compté »** : pas dans le résumé, le générateur ne produit pas cette donnée.
+
+- **Vue d'un circuit, écarts avec la spec** : pas de poignée ni de corbeille (rien ne se modifie encore, et ces icônes ne sont pas dans la charte) ; pas de « + » entre les postes ; pas de phrase « Cliquez un poste… » ; pas de fiche vide en pointillés. Bouton « + Poste » au-dessus de la carte, repris du prototype. Sur iPad en portrait, le résumé de « Tous les circuits » reste dans la bulle.
+- **Serpentin du Métro** : 5 stations par rangée comme la spec, moins si la largeur manque, pour ne jamais défiler de côté.
+- **Postes présents deux fois, Ordre libre, Score, Mixte** : pas encore faits ; le générateur ne produit que l'ordre imposé.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

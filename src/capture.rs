@@ -1,6 +1,7 @@
 // Capture mode, used by scripts/captures.sh:
 //   maquette --capture FILE light|dark WIDTH HEIGHT touch|mouse [club|tab] [INDEX]
 // With CAPTURE_TEST_DATA set, the test data comes from a fixed seed, so images stay comparable.
+// CAPTURE_COURSE and CAPTURE_COURSE_VIEW open a course and one of its views.
 // CAPTURE_CLICKS="x,y;x,y" clicks these points first, to test the navigation without a mouse.
 // Without these arguments, the app starts normally.
 
@@ -48,6 +49,12 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
             state_now.courses.select_course(-1);
             if let Ok(view) = std::env::var("CAPTURE_COURSES_VIEW") {
                 state_now.courses.select_view(view.parse().expect("view"));
+            }
+            if let Ok(course) = std::env::var("CAPTURE_COURSE") {
+                state_now.courses.select_course(course.parse().expect("course"));
+            }
+            if let Ok(view) = std::env::var("CAPTURE_COURSE_VIEW") {
+                state_now.courses.select_course_view(view.parse().expect("view"));
             }
         }
         Some("club") => state_now.navigator.open_club_page(index),

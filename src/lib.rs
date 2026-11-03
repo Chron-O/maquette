@@ -140,6 +140,20 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
     courses.on_select_control(on_course_click(window, state, |c, code: slint::SharedString| c.select_control(&code)));
     courses.on_code_search(on_course_click(window, state, |c, text: slint::SharedString| c.set_code_search(&text)));
     courses.on_course_search(on_course_click(window, state, |c, text: slint::SharedString| c.set_course_search(&text)));
+    courses.on_select_course_view(on_course_click(window, state, |c, i: i32| c.select_course_view(i as usize)));
+    courses.on_select_stop(on_course_click(window, state, |c, i: i32| c.select_stop(i as usize)));
+    let (weak, state_for_reserve) = (window.as_weak(), state.clone());
+    courses.on_select_reserve(move |code| {
+        let state = &mut *state_for_reserve.borrow_mut();
+        let event = state.navigator.event().and_then(|e| state.data.as_ref().map(|d| &d.events[e]));
+        state.courses.select_reserve(&code, event);
+        if let Some(window) = weak.upgrade() {
+            state.show(&window);
+        }
+    });
+    courses.on_show_in_all_controls(on_course_click(window, state, |c, code: slint::SharedString| c.show_in_all_controls(&code)));
+    let others = on_course_click(window, state, |c, _: ()| c.toggle_others());
+    courses.on_toggle_others(move || others(()));
     let close = on_course_click(window, state, |c, _: ()| c.close_detail());
     courses.on_close_detail(move || close(()));
 }

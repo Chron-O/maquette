@@ -2,10 +2,16 @@
 // Everything is display only for now: nothing here changes a course.
 
 use crate::test_data::{Control, Course, Event, FINISH, START};
-use crate::{App, ColumnTitle, ControlRow, CourseItem, CourseLine, Courses, DetailCourse, MapMarker, SequenceStop, TabItem, model};
+use crate::{
+    App, ColumnTitle, ControlRow, CourseItem, CourseLine, CourseMarker, CourseStop, Courses, DetailCourse, LegendItem, MapMarker, ReserveItem,
+    SequenceStop, TabItem, model,
+};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 3] = ["Tableau", "Lignes", "Carte"];
+const COURSE_VIEWS: [&str; 3] = ["Liste", "Métro", "Géographique"];
+const COURSE_VIEWS_NARROW: [&str; 3] = ["Liste", "Métro", "Géo"];
+const GEOGRAPHIC_VIEW: usize = 2;
 const MAP_WIDTH: f32 = 600.0;
 const MAP_HEIGHT: f32 = 360.0;
 
@@ -33,6 +39,9 @@ pub struct CoursesState {
     control: Option<u32>,
     code_search: String,
     course_search: String,
+    course_view: usize,
+    show_others: bool,
+    stop: Option<usize>,
 }
 
 impl Default for CoursesState {
@@ -46,6 +55,9 @@ impl Default for CoursesState {
             control: None,
             code_search: String::new(),
             course_search: String::new(),
+            course_view: 0,
+            show_others: false,
+            stop: None,
         }
     }
 }
@@ -92,6 +104,7 @@ impl CoursesState {
             i => Selection::Course(i as usize),
         };
         self.control = None;
+        self.stop = None;
     }
 
     pub fn select_view(&mut self, view: usize) {
@@ -122,8 +135,37 @@ impl CoursesState {
         self.control = if self.control == code { None } else { code };
     }
 
+    pub fn select_course_view(&mut self, view: usize) {
+        self.course_view = view;
+    }
+
+    pub fn toggle_others(&mut self) {
+        self.show_others = !self.show_others;
+    }
+
+    // Selecting the same stop again closes its detail.
+    pub fn select_stop(&mut self, stop: usize) {
+        self.stop = if self.stop == Some(stop) { None } else { Some(stop) };
+    }
+
+    // A control of the course selects its stop. Adding one is for later.
+    pub fn select_reserve(&mut self, code: &str, event: Option<&Event>) {
+        let Selection::Course(index) = self.selection else { return };
+        let course = event.and_then(|e| e.courses.get(index));
+        let code = code.parse::<u32>().ok();
+        if let Some(stop) = course.and_then(|c| c.controls.iter().position(|x| Some(*x) == code)) {
+            self.select_stop(stop);
+        }
+    }
+
+    pub fn show_in_all_controls(&mut self, code: &str) {
+        self.select_course(-1);
+        self.control = code.parse().ok();
+    }
+
     pub fn close_detail(&mut self) {
         self.control = None;
+        self.stop = None;
     }
 
     pub fn set_code_search(&mut self, text: &str) {
@@ -201,15 +243,14 @@ impl CoursesState {
         };
         courses.set_active_course(active);
         courses.set_course_selected(selected_course.is_some());
-        courses.set_course_title(
-            selected_course.map_or(SharedString::new(), |c| format!("{} · {} · {}", c.name, c.categories, c.distance).into()),
-        );
-
+        courses.set_zone_title(if selected_course.is_some() { "Tous les circuits" } else { "Tous les postes" }.into());
         let count = event.controls.len();
-        courses.set_chips(model(vec![
-            "Analyse : rien".into(),
-            format!("Positions : {count} / {count}").into(),
-        ]));
+        let categories: usize = event.courses.iter().map(|c| c.categories.split(", ").count()).sum();
+        courses.set_chips(model(if selected_course.is_some() {
+            vec!["Circuit reconnu à la lecture : non".into(), "Ordre imposé".into(), format!("Catégories : {categories}").into()]
+        } else {
+            vec!["Analyse : rien".into(), format!("Positions : {count} / {count}").into()]
+        }));
         courses.set_alert_count(unused.len().to_string().into());
         if unused.is_empty() {
             courses.set_alert_title("".into());
@@ -220,7 +261,12 @@ impl CoursesState {
             );
         }
         courses.set_summary(
-            format!("{} · {} · {} dans aucun circuit", plural(count, "poste"), plural(shared, "partagé"), unused.len()).into(),
+            if selected_course.is_some() {
+                format!("{} · {} · {}", plural(event.courses.len(), "circuit"), plural(count, "poste"), plural(categories, "catégorie"))
+            } else {
+                format!("{} · {} · {} dans aucun circuit", plural(count, "poste"), plural(shared, "partagé"), unused.len())
+            }
+            .into(),
         );
         courses.set_all_courses_usage(plural(event.courses.len(), "circuit").into());
 
@@ -321,9 +367,14 @@ impl CoursesState {
         courses.set_finish_x(FINISH.0 / MAP_WIDTH);
         courses.set_finish_y(FINISH.1 / MAP_HEIGHT);
 
+        if let Some(course) = selected_course {
+            self.show_course(&courses, event, course, active as usize);
+        }
+
         // Detail
         let detail = self.control.filter(|code| event.controls.iter().any(|c| c.code == *code));
-        courses.set_detail_open(detail.is_some());
+        let stop = selected_course.and_then(|c| self.stop.filter(|s| *s < c.controls.len()));
+        courses.set_detail_open(detail.is_some() || stop.is_some());
         if let Some(code) = detail {
             let using: Vec<(usize, &Course)> =
                 event.courses.iter().enumerate().filter(|(_, c)| c.controls.contains(&code)).collect();
@@ -348,6 +399,96 @@ impl CoursesState {
             ));
             let entrants: u32 = using.iter().map(|(_, c)| c.entrants).sum();
             courses.set_detail_entrants(format!("{entrants} inscrits passent par ce poste").into());
+        }
+    }
+
+    fn show_course(&self, courses: &Courses<'_>, event: &Event, course: &Course, index: usize) {
+        courses.set_course_name(course.name.as_str().into());
+        courses.set_course_categories(course.categories.into());
+        courses.set_course_chips(model(vec![course.categories.into(), course.distance.as_str().into(), "Ordre imposé".into()]));
+        courses.set_course_views(model(COURSE_VIEWS.iter().map(|v| word(v)).collect()));
+        courses.set_course_views_narrow(model(COURSE_VIEWS_NARROW.iter().map(|v| word(v)).collect()));
+        courses.set_active_course_view(self.course_view as i32);
+        courses.set_show_others(self.show_others);
+
+        let selected = self.stop.and_then(|s| course.controls.get(s).copied());
+        courses.set_stops(model(
+            course
+                .controls
+                .iter()
+                .enumerate()
+                .map(|(n, code)| CourseStop {
+                    code: code.to_string().into(),
+                    selected: self.stop == Some(n),
+                    others: model(
+                        event
+                            .courses
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, c)| self.show_others && *i != index && c.controls.contains(code))
+                            .map(|(i, _)| i as i32)
+                            .collect(),
+                    ),
+                })
+                .collect(),
+        ));
+
+        let mut codes: Vec<u32> = event.controls.iter().map(|c| c.code).collect();
+        codes.sort_unstable();
+        courses.set_reserve(model(
+            codes
+                .iter()
+                .map(|code| ReserveItem {
+                    code: code.to_string().into(),
+                    in_course: course.controls.contains(code),
+                    selected: selected == Some(*code),
+                })
+                .collect(),
+        ));
+
+        courses.set_course_trace(trace(event, course).into());
+        courses.set_other_traces(model(
+            event
+                .courses
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| self.show_others && *i != index)
+                .map(|(_, c)| SharedString::from(trace(event, c)))
+                .collect(),
+        ));
+        courses.set_course_markers(model(
+            event
+                .controls
+                .iter()
+                .map(|c| CourseMarker {
+                    code: c.code.to_string().into(),
+                    x: c.x / MAP_WIDTH,
+                    y: c.y / MAP_HEIGHT,
+                    in_course: course.controls.contains(&c.code),
+                    selected: selected == Some(c.code),
+                })
+                .collect(),
+        ));
+        courses.set_start_x(START.0 / MAP_WIDTH);
+        courses.set_start_y(START.1 / MAP_HEIGHT);
+        courses.set_finish_x(FINISH.0 / MAP_WIDTH);
+        courses.set_finish_y(FINISH.1 / MAP_HEIGHT);
+
+        let mut legend = vec![(0, "Départ"), (1, "Arrivée"), (2, "Poste du circuit"), (3, "Poste hors circuit")];
+        if self.show_others {
+            legend.push((4, if self.course_view == GEOGRAPHIC_VIEW { "Tracé d'un autre circuit" } else { "Dans un autre circuit" }));
+        }
+        courses.set_legend(model(legend.into_iter().map(|(kind, label)| LegendItem { kind, label: label.into() }).collect()));
+
+        if let (Some(n), Some(code)) = (self.stop, selected) {
+            let before = if n == 0 { "D".to_string() } else { course.controls[n - 1].to_string() };
+            let after = course.controls.get(n + 1).map_or("A".to_string(), u32::to_string);
+            let rank = format!("{}{}", n + 1, if n == 0 { "er" } else { "e" });
+            courses.set_stop_code(code.to_string().into());
+            courses.set_stop_subtitle(format!("{} · {rank} sur {}", course.name, course.controls.len()).into());
+            courses.set_stop_before(before.into());
+            courses.set_stop_after(after.as_str().into());
+            courses.set_stop_section(format!("Tronçon {code} → {after} non compté pour ce circuit").into());
         }
     }
 }
