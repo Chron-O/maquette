@@ -239,9 +239,13 @@ export global Theme {
     out property <length> rank-size: 24px;
     out property <length> no-rank-dot: 5px;
     out property <length> sequence-link: 12px;
-    out property <length> course-list-width: 250px;
-    out property <length> code-search-width: 165px;
-    out property <length> narrow-tools-min-width: 340px;   // below: the phone's tools take two rows
+    out property <length> course-list-width: touch ? 270px : 260px;
+    out property <length> code-search-width: 200px;
+    out property <length> highlight-chip-width: 92px;
+    out property <length> highlight-chip-height: 28px;
+    out property <length> view-tabs-width: 230px;
+    out property <length> bubble-width: 420px;
+    out property <color> bubble-shadow: overlay-veil;
     out property <length> control-detail-width: 290px;
     out property <length> mini-map-width: 54px;
     out property <length> mini-map-height: 36px;

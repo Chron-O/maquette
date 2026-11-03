@@ -7,7 +7,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 |---|---|---|
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
 | 1 | Accueil | validé par Robin |
-| 2 | Course › Circuits | en cours : « Tous les postes » à voir par Robin, vue d'un circuit à faire |
+| 2 | Course › Circuits | en cours : « Tous les postes » validé par Robin, vue d'un circuit à faire |
 | 3 | Course › Participants | à faire |
 | 4 | Course › Départs | à faire |
 | 5 | Course › Boîtiers | à faire |
@@ -53,7 +53,11 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Fiche sur téléphone** : par-dessus, comme `CLAUDE.md`. Le prototype l'ouvre dans la ligne.
 - **Fiche en large** : absente tant qu'aucun poste n'est choisi. Le prototype affiche une phrase d'aide, retirée comme les autres consignes.
 - **Icônes absentes de la charte, donc retirées** : importer, imprimer, exporter, et les petites flèches ▾.
-- **Loupe, ajoutée à la demande de Robin** : absente de la charte, dessin repris du prototype, sans mot à côté. Dans la colonne des circuits à toutes les tailles et dans le contenu sur téléphone ; elle déplie le champ. Sur iPad et ordinateur, le contenu garde un champ de largeur limitée.
+- **Loupe, ajoutée à la demande de Robin** : absente de la charte, dessin repris du prototype, sans mot à côté. Dans la colonne des circuits à toutes les tailles et dans la carte du contenu sur téléphone ; elle déplie le champ. Sur iPad et ordinateur, la carte du contenu garde un champ de largeur limitée.
+- **Alerte en pastille, idée de Robin** : ni le prototype ni les specs ne la décrivent. Même hauteur que les réglages ; son détail s'ouvre dans une bulle, une ligne par poste, chacune avec son « Le voir ».
+- **Réglages en bulle** : comme le prototype. Sans effet pour l'instant, et « Tronçons non comptés » sans valeur, le générateur ne produit pas cette donnée.
+- **Colonne des circuits** : 260 px (270 en tactile) au lieu des 250 du prototype, pour que ses boutons et la loupe tiennent.
+- **Colonne de droite** : les specs du 16 octobre la retirent ; Robin garde la fiche du poste à droite en large, par-dessus sinon. Elle reste plus légère que l'ancienne colonne.
 - **Lignes** : les postes passent à la ligne au lieu de défiler de côté, à toutes les tailles.
 - **Tri** : petit triangle dessiné, ▲ n'étant pas dans la police.
 - **Poste dans aucun circuit** : contour plus clair au lieu de pointillés, que Slint ne dessine pas.

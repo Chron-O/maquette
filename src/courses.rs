@@ -210,20 +210,14 @@ impl CoursesState {
             "Analyse : rien".into(),
             format!("Positions : {count} / {count}").into(),
         ]));
-        if let Some(code) = unused.first() {
-            courses.set_alert_title(format!("{} dans aucun circuit", plural(unused.len(), "poste")).into());
-            let codes = unused.iter().map(u32::to_string).collect::<Vec<_>>().join(", ");
-            courses.set_alert_detail(
-                if unused.len() > 1 {
-                    format!("Postes {codes} : posés mais empruntés par aucun circuit")
-                } else {
-                    format!("Poste {codes} : posé mais emprunté par aucun circuit")
-                }
-                .into(),
-            );
-            courses.set_alert_code(code.to_string().into());
-        } else {
+        courses.set_alert_count(unused.len().to_string().into());
+        if unused.is_empty() {
             courses.set_alert_title("".into());
+        } else {
+            courses.set_alert_title(format!("{} dans aucun circuit", plural(unused.len(), "poste")).into());
+            courses.set_alert_detail(
+                if unused.len() > 1 { "Posés mais empruntés par aucun circuit" } else { "Posé mais emprunté par aucun circuit" }.into(),
+            );
         }
         courses.set_summary(
             format!("{} · {} · {} dans aucun circuit", plural(count, "poste"), plural(shared, "partagé"), unused.len()).into(),

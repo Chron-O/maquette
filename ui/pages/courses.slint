@@ -74,8 +74,8 @@ export global Courses {
 
     in property <[string]> chips;
     in property <string> alert-title;
+    in property <string> alert-count;
     in property <string> alert-detail;
-    in property <string> alert-code;
     in property <string> summary;
 
     in property <[TabItem]> views;
@@ -104,6 +104,12 @@ export global Courses {
     in property <string> detail-subtitle;
     in property <[DetailCourse]> detail-courses;
     in property <string> detail-entrants;
+
+    // The open bubble is only a display matter: 0 none, 1 settings, 2 alert.
+    in-out property <int> open-bubble;
+    in-out property <length> bubble-left;
+    in-out property <length> bubble-right;
+    in-out property <length> bubble-top;
 
     callback select-course(int);            // -1 all controls, -2 back to the list
     callback select-view(int);
@@ -306,13 +312,43 @@ component SearchToggle inherits Rectangle {
     }
 }
 
-export component CourseList {
+component CourseRows {
+    in property <bool> narrow;
+
+    VerticalLayout {
+        alignment: start;
+        CourseListItem {
+            name: "Tous les postes";
+            summary: Courses.all-summary;
+            trace: Courses.all-trace;
+            active: Courses.active-course < 0 && !(root.narrow && Courses.list-only);
+            clicked => { Courses.select-course(-1); }
+        }
+        for item in Courses.items: CourseListItem {
+            name: item.name;
+            summary: item.summary;
+            trace: item.trace;
+            tone: item.index;
+            active: Courses.active-course == item.index;
+            clicked => { Courses.select-course(item.index); }
+        }
+    }
+}
+
+// `narrow`: the list is the page, which scrolls. Otherwise the column is a card of fixed
+// height, whose list scrolls on its own.
+export component CourseList inherits Rectangle {
     in property <bool> narrow;
 
     property <bool> search-open: Courses.course-search-text != "";
 
+    background: root.narrow ? transparent : Theme.card;
+    border-radius: root.narrow ? 0 : Theme.card-radius;
+    border-width: root.narrow ? 0 : Theme.card-outline-width;
+    border-color: Theme.card-outline;
+
     VerticalLayout {
-        alignment: start;
+        padding: root.narrow ? 0 : Theme.space;
         spacing: Theme.space;
         HorizontalLayout {
             spacing: Theme.space;
@@ -339,106 +375,115 @@ export component CourseList {
             init => { self.take-focus(); }
             edited(text) => { Courses.course-search(text); }
         }
-        if !Courses.empty: Rectangle {
+        if Courses.empty: SmallText { text: "Aucun circuit"; }
+        if !Courses.empty && root.narrow: Rectangle {
             background: Theme.card;
             border-radius: Theme.card-radius;
             border-width: Theme.card-outline-width;
             border-color: Theme.card-outline;
             VerticalLayout {
                 padding: Theme.space-small;
-                CourseListItem {
-                    name: "Tous les postes";
-                    summary: Courses.all-summary;
-                    trace: Courses.all-trace;
-                    active: Courses.active-course < 0 && !(root.narrow && Courses.list-only);
-                    clicked => { Courses.select-course(-1); }
-                }
-                for item in Courses.items: CourseListItem {
-                    name: item.name;
-                    summary: item.summary;
-                    trace: item.trace;
-                    tone: item.index;
-                    active: Courses.active-course == item.index;
-                    clicked => { Courses.select-course(item.index); }
-                }
+                CourseRows { narrow: true; }
             }
         }
-        if Courses.empty: SmallText { text: "Aucun circuit"; }
+        if !Courses.empty && !root.narrow: Flickable {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height;
+            rows := CourseRows { width: parent.width; }
+        }
+        if Courses.empty || root.narrow: Rectangle { vertical-stretch: 1; }
     }
 }
 
-component AlertBox inherits Rectangle {
-    border-radius: Theme.field-radius;
+// The alert, always the height of the settings next to it. Its detail opens in a bubble.
+component AlertPill inherits Rectangle {
+    in property <bool> compact;
+
+    height: Theme.zone;
+    border-radius: self.height / 2;
     border-width: Theme.attention-outline;
     border-color: Theme.to-handle-outline;
-    background: Theme.card;
+    background: zone.has-hover ? Theme.tab-hover : Theme.card;
+    accessible-role: button;
+    accessible-label: Courses.alert-title;
     HorizontalLayout {
-        padding: Theme.button-margin;
-        spacing: Theme.button-margin;
+        padding-left: Theme.button-margin;
+        padding-right: Theme.button-margin;
+        spacing: Theme.space;
         VerticalLayout {
-            horizontal-stretch: 1;
             alignment: center;
-            Text {
-                text: Courses.alert-title;
-                color: Theme.text;
-                font-size: Theme.text-label;
-                font-weight: Theme.weight-screen-title;
-                wrap: word-wrap;
+            Image {
+                source: Icons.triangle-alert;
+                colorize: Theme.problem.badge-text;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
             }
-            SmallText { text: Courses.alert-detail; }
         }
-        VerticalLayout {
-            alignment: center;
-            PrimaryButton {
-                label: "Le voir";
-                clicked => { Courses.select-control(Courses.alert-code); }
-            }
+        Text {
+            text: root.compact ? Courses.alert-count : Courses.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            Courses.bubble-right = root.absolute-position.x + root.width;
+            Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
+            Courses.open-bubble = 2;
         }
     }
 }
 
-// `in-line`: the chips sit next to the title, otherwise under it.
+// The settings of the page, summed up. They open in a bubble. `compact`: the title alone.
 component SummaryZone inherits Rectangle {
-    in property <bool> in-line;
+    in property <bool> compact;
 
+    height: Theme.zone;
     border-radius: Theme.field-radius;
     border-width: Theme.thin-outline-width;
     border-color: Theme.thin-outline;
-    VerticalLayout {
-        padding: Theme.space;
-        spacing: Theme.space-small;
-        HorizontalLayout {
-            spacing: Theme.space;
-            VerticalLayout {
-                alignment: center;
-                Image {
-                    source: Icons.settings;
-                    colorize: Theme.text;
-                    width: Theme.button-icon;
-                    height: Theme.button-icon;
-                }
-            }
-            Text {
-                horizontal-stretch: root.in-line ? 0 : 1;
-                text: "Tous les postes";
-                color: Theme.text;
-                font-size: Theme.text-block-title;
-                font-weight: Theme.weight-block-title;
-                vertical-alignment: center;
-                wrap: root.in-line ? no-wrap : word-wrap;
-            }
-            if root.in-line: HorizontalLayout {
-                spacing: Theme.space;
-                for chip in Courses.chips: SmallText {
-                    text: chip;
-                    wrap: no-wrap;
-                    vertical-alignment: center;
-                }
+    background: zone.has-hover ? Theme.tab-hover : transparent;
+    accessible-role: button;
+    accessible-label: "Réglages";
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-right: Theme.space;
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.settings;
+                colorize: Theme.text;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
             }
         }
-        if !root.in-line: VerticalLayout {
-            spacing: Theme.space-small;
-            for chip in Courses.chips: SmallText { text: chip; }
+        Text {
+            horizontal-stretch: root.compact ? 1 : 0;
+            text: "Tous les postes";
+            color: Theme.text;
+            font-size: Theme.text-block-title;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        if !root.compact: HorizontalLayout {
+            spacing: Theme.space;
+            for chip in Courses.chips: SmallText {
+                text: chip;
+                wrap: no-wrap;
+                vertical-alignment: center;
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            Courses.bubble-left = root.absolute-position.x;
+            Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
+            Courses.open-bubble = 1;
         }
     }
 }
@@ -537,16 +582,11 @@ component RowLine inherits Rectangle {
     background: Theme.separator;
 }
 
-component ControlsTable inherits Rectangle {
+// The titles stay at the top: only the rows scroll. It scrolls sideways when it does not fit.
+component ControlsTable {
     property <length> total: Theme.table-code-width + Courses.columns.length * Theme.table-course-width + Theme.table-usage-width;
     property <length> extra: max(0px, (root.width - root.total) / (Courses.columns.length + 2));
-
-    background: Theme.card;
-    border-radius: Theme.card-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
-    clip: true;
-    height: lines.preferred-height;
+    property <length> table-width: max(root.width, root.total);
 
     // Explicit size: the columns follow the width of the table, not the other way around.
     Flickable {
@@ -554,11 +594,13 @@ component ControlsTable inherits Rectangle {
         y: 0;
         width: root.width;
         height: root.height;
-        content-width: max(root.width, root.total);
+        content-width: root.table-width;
         content-height: root.height;
-        lines := VerticalLayout {
-            width: max(root.width, root.total);
+        VerticalLayout {
+            width: root.table-width;
+            height: root.height;
             HorizontalLayout {
+                vertical-stretch: 0;
                 height: Theme.table-header-height + Theme.space;
                 TableTitle {
                     width: Theme.table-code-width + root.extra;
@@ -582,73 +624,75 @@ component ControlsTable inherits Rectangle {
                     clicked => { Courses.sort-by(-2); }
                 }
             }
-            RowLine { }
-            FixedRow {
-                label: "Départ";
-                extra: root.extra;
-                usage: Courses.all-courses-usage;
-            }
-            for entry in Courses.rows: VerticalLayout {
-                RowLine { }
-                Rectangle {
-                    min-height: Theme.zone;
-                    background: entry.selected ? Theme.control-selected : transparent;
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { Courses.select-control(entry.code); }
+            RowLine { vertical-stretch: 0; }
+            Flickable {
+                vertical-stretch: 1;
+                content-height: lines.preferred-height;
+                lines := VerticalLayout {
+                    width: root.table-width;
+                    FixedRow {
+                        label: "Départ";
+                        extra: root.extra;
+                        usage: Courses.all-courses-usage;
                     }
-                    HorizontalLayout {
-                        VerticalLayout {
-                            width: Theme.table-code-width + root.extra;
-                            alignment: center;
+                    for entry in Courses.rows: VerticalLayout {
+                        RowLine { }
+                        Rectangle {
+                            min-height: Theme.zone;
+                            background: entry.selected ? Theme.control-selected : transparent;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { Courses.select-control(entry.code); }
+                            }
                             HorizontalLayout {
-                                padding-left: Theme.space;
-                                alignment: start;
-                                ControlTag {
-                                    code: entry.code;
-                                    unused: entry.unused;
-                                    selected: entry.selected;
-                                    clicked => { Courses.select-control(entry.code); }
+                                VerticalLayout {
+                                    width: Theme.table-code-width + root.extra;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        padding-left: Theme.space;
+                                        alignment: start;
+                                        ControlTag {
+                                            code: entry.code;
+                                            unused: entry.unused;
+                                            selected: entry.selected;
+                                            clicked => { Courses.select-control(entry.code); }
+                                        }
+                                    }
+                                }
+                                for rank[i] in entry.ranks: Rectangle {
+                                    width: Theme.table-course-width + root.extra;
+                                    opacity: Courses.is-dimmed(i) ? Theme.dimmed-opacity : 1;
+                                    RankDot {
+                                        rank: rank;
+                                        tone: Courses.columns[i].tone;
+                                    }
+                                }
+                                Text {
+                                    width: Theme.table-usage-width + root.extra;
+                                    text: entry.usage;
+                                    color: entry.unused ? Theme.to-check.badge-text : entry.shared ? Theme.purple : Theme.text-secondary;
+                                    font-size: Theme.text-help;
+                                    font-weight: entry.shared ? Theme.weight-block-title : Theme.weight-regular;
+                                    vertical-alignment: center;
+                                    wrap: word-wrap;
                                 }
                             }
                         }
-                        for rank[i] in entry.ranks: Rectangle {
-                            width: Theme.table-course-width + root.extra;
-                            opacity: Courses.is-dimmed(i) ? Theme.dimmed-opacity : 1;
-                            RankDot {
-                                rank: rank;
-                                tone: Courses.columns[i].tone;
-                            }
-                        }
-                        Text {
-                            width: Theme.table-usage-width + root.extra;
-                            text: entry.usage;
-                            color: entry.unused ? Theme.to-check.badge-text : entry.shared ? Theme.purple : Theme.text-secondary;
-                            font-size: Theme.text-help;
-                            font-weight: entry.shared ? Theme.weight-block-title : Theme.weight-regular;
-                            vertical-alignment: center;
-                            wrap: word-wrap;
-                        }
+                    }
+                    RowLine { }
+                    FixedRow {
+                        label: "Arrivée";
+                        extra: root.extra;
+                        usage: Courses.all-courses-usage;
                     }
                 }
-            }
-            RowLine { }
-            FixedRow {
-                label: "Arrivée";
-                extra: root.extra;
-                usage: Courses.all-courses-usage;
             }
         }
     }
 }
 
 // On a phone: tag, ranks, number of courses.
-component ControlsList inherits Rectangle {
-    background: Theme.card;
-    border-radius: Theme.card-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
-    clip: true;
+component ControlsList {
     VerticalLayout {
         for entry[n] in Courses.rows: VerticalLayout {
             if n > 0: RowLine { }
@@ -751,12 +795,7 @@ component UnusedFlow {
     }
 }
 
-component ControlsLines inherits Rectangle {
-    background: Theme.card;
-    border-radius: Theme.card-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
-    clip: true;
+component ControlsLines {
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.space-medium;
@@ -824,10 +863,6 @@ component MapMarkerView {
 }
 
 component ControlsMap inherits Rectangle {
-    background: Theme.card;
-    border-radius: Theme.card-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
     clip: true;
     height: self.width * 0.6;
 
@@ -987,53 +1022,98 @@ export component ControlDetail inherits Rectangle {
     }
 }
 
-// The settings and the alert, above the list and the content.
+// The settings on the left, the alert on the right: always one row of the same height.
 component TopRow {
     HorizontalLayout {
         spacing: Theme.button-margin;
-        VerticalLayout {
-            alignment: center;
-            SummaryZone { in-line: true; }
-        }
+        SummaryZone { }
         Rectangle { horizontal-stretch: 1; }
-        if Courses.alert-title != "": AlertBox { }
+        if Courses.alert-title != "": AlertPill { }
     }
 }
 
-// The content next to the list: all controls, or one course (next step).
-component AllControls {
-    in property <LayoutMode> layout-mode;
+component HighlightChip inherits Rectangle {
+    callback clicked();
+    in property <string> label;
+    in property <int> tone;
+    in property <bool> active;
+
+    width: Theme.highlight-chip-width;
+    height: Theme.zone;
+    accessible-role: button;
+    accessible-label: root.label;
+    Rectangle {
+        height: Theme.highlight-chip-height;
+        border-radius: self.height / 2;
+        background: root.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : Theme.surface;
+        HorizontalLayout {
+            alignment: center;
+            spacing: Theme.space-small;
+            if root.tone >= 0: VerticalLayout {
+                alignment: center;
+                CourseChip { tone: root.tone; }
+            }
+            Text {
+                text: root.label;
+                color: root.active ? Theme.active-tab-text : Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The filter of the view: small chips, going to the next row when they do not fit.
+component HighlightFlow {
+    property <length> step: Theme.highlight-chip-width + Theme.space-small;
+    property <int> per-row: max(1, floor((root.width + Theme.space-small) / root.step));
+
+    height: ceil(Courses.highlights.length / root.per-row) * Theme.zone;
+    for item[i] in Courses.highlights: HighlightChip {
+        x: mod(i, root.per-row) * root.step;
+        y: floor(i / root.per-row) * Theme.zone;
+        label: item.label;
+        tone: i - 1;
+        active: Courses.active-highlight == i;
+        clicked => { Courses.select-highlight(i); }
+    }
+}
+
+// What the card shows and how, and only that: the view and the search, then the filter.
+component ViewRow {
+    in property <bool> narrow;
     in property <length> available-width;
 
-    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: Courses.code-search-text != "";
-    property <bool> tools-on-two-rows: root.narrow && root.available-width < Theme.narrow-tools-min-width;
-
-    function toggle-search() {
-        if root.search-open {
-            Courses.code-search("");
-        }
-        root.search-open = !root.search-open;
-    }
+    property <bool> search-below: !root.narrow
+        && root.available-width < 3 * Theme.space + Theme.view-tabs-width + Theme.code-search-width;
 
     VerticalLayout {
-        alignment: start;
-        spacing: Theme.button-margin;
-        if root.narrow: HorizontalLayout {
-            spacing: Theme.space;
-            VerticalLayout {
-                alignment: start;
-                SecondaryButton {
-                    label: "‹";
-                    clicked => { Courses.select-course(-2); }
-                }
-            }
-            SummaryZone { horizontal-stretch: 1; }
-        }
-        if root.narrow && Courses.alert-title != "": AlertBox { }
+        padding: Theme.space;
+        spacing: Theme.space;
         HorizontalLayout {
             spacing: Theme.space;
-            if !root.narrow: VerticalLayout {
+            Tabs {
+                tabs: root.narrow ? Courses.views-narrow : Courses.views;
+                active: Courses.active-view;
+                clicked(i) => { Courses.select-view(i); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.narrow: SearchToggle {
+                open: root.search-open;
+                clicked => {
+                    if root.search-open {
+                        Courses.code-search("");
+                    }
+                    root.search-open = !root.search-open;
+                }
+            }
+            if !root.narrow && !root.search-below: VerticalLayout {
                 alignment: center;
                 InputField {
                     width: Theme.code-search-width;
@@ -1043,34 +1123,12 @@ component AllControls {
                     edited(text) => { Courses.code-search(text); }
                 }
             }
-            Tabs {
-                tabs: root.narrow ? Courses.views-narrow : Courses.views;
-                active: Courses.active-view;
-                clicked(i) => { Courses.select-view(i); }
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if !root.tools-on-two-rows: SecondaryButton {
-                label: root.layout-mode == LayoutMode.wide ? "Ajouter des postes" : "Ajouter";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-            if root.narrow && !root.tools-on-two-rows: SearchToggle {
-                open: root.search-open;
-                clicked => { root.toggle-search(); }
-            }
         }
-        if root.tools-on-two-rows: HorizontalLayout {
-            spacing: Theme.space;
-            alignment: end;
-            SecondaryButton {
-                label: "Ajouter";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-            SearchToggle {
-                open: root.search-open;
-                clicked => { root.toggle-search(); }
-            }
+        if root.search-below: InputField {
+            placeholder: "Chercher un code…";
+            input-kind: InputType.number;
+            text: Courses.code-search-text;
+            edited(text) => { Courses.code-search(text); }
         }
         if root.narrow && root.search-open: InputField {
             placeholder: "Chercher un code…";
@@ -1080,23 +1138,84 @@ component AllControls {
             edited(text) => { Courses.code-search(text); }
         }
         if !root.narrow: HorizontalLayout {
-            alignment: start;
             spacing: Theme.space;
             VerticalLayout {
-                alignment: center;
-                SmallText { text: "Mettre en avant"; wrap: no-wrap; }
+                alignment: start;
+                SmallText {
+                    height: Theme.zone;
+                    text: "Mettre en avant";
+                    wrap: no-wrap;
+                    vertical-alignment: center;
+                }
             }
-            Tabs {
-                tabs: Courses.highlights;
-                active: Courses.active-highlight;
-                clicked(i) => { Courses.select-highlight(i); }
+            HighlightFlow { horizontal-stretch: 1; }
+        }
+    }
+}
+
+// The content next to the list: all controls, or one course (next step).
+component AllControls {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        if root.narrow: HorizontalLayout {
+            spacing: Theme.space;
+            SecondaryButton {
+                label: "‹";
+                clicked => { Courses.select-course(-2); }
+            }
+            SummaryZone {
+                horizontal-stretch: 1;
+                compact: true;
+            }
+            if Courses.alert-title != "": AlertPill { compact: true; }
+        }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            // In line with the buttons of the column, which sit inside its card.
+            padding-top: root.narrow ? 0 : Theme.space;
+            spacing: Theme.space;
+            SecondaryButton {
+                label: root.layout-mode == LayoutMode.wide ? "Ajouter des postes" : "Ajouter";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        // On a phone the page scrolls. Otherwise the card fills the height and its content scrolls.
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                ViewRow {
+                    vertical-stretch: 0;
+                    narrow: root.narrow;
+                    available-width: root.available-width;
+                }
+                RowLine { vertical-stretch: 0; }
+                if Courses.active-view == 0 && !root.narrow: ControlsTable { vertical-stretch: 1; }
+                if Courses.active-view != 1 && root.narrow: ControlsList { }
+                if Courses.active-view == 1 && root.narrow: ControlsLines { }
+                if Courses.active-view == 1 && !root.narrow: Flickable {
+                    vertical-stretch: 1;
+                    content-height: lines.preferred-height;
+                    lines := ControlsLines { width: parent.width; }
+                }
+                if Courses.active-view == 2 && !root.narrow: Flickable {
+                    vertical-stretch: 1;
+                    content-height: map.height;
+                    map := ControlsMap { width: parent.width; }
+                }
             }
         }
-        if Courses.active-view == 0 && !root.narrow: ControlsTable { }
-        if Courses.active-view == 0 && root.narrow: ControlsList { }
-        if Courses.active-view == 1: ControlsLines { }
-        if Courses.active-view == 2 && !root.narrow: ControlsMap { }
-        if Courses.active-view == 2 && root.narrow: ControlsList { }
     }
 }
 
@@ -1141,6 +1260,10 @@ export component CoursesPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
+    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Courses.detail-open;
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
+        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+
     VerticalLayout {
         spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
@@ -1151,21 +1274,21 @@ export component CoursesPage {
             }
             if !Courses.list-only && !Courses.empty && Courses.course-selected: OneCourse { layout-mode: root.layout-mode; }
         }
-        if root.layout-mode != LayoutMode.narrow && !Courses.empty && !Courses.course-selected: TopRow { }
+        if root.layout-mode != LayoutMode.narrow && !Courses.empty && !Courses.course-selected: TopRow { vertical-stretch: 0; }
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 1;
             spacing: Theme.button-margin;
-            CourseList {
-                width: Theme.course-list-width;
-            }
+            CourseList { width: Theme.course-list-width; }
             if !Courses.empty && !Courses.course-selected: AllControls {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
+                available-width: root.content-width;
             }
             if !Courses.empty && Courses.course-selected: OneCourse {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
-            if root.layout-mode == LayoutMode.wide && Courses.detail-open: VerticalLayout {
+            if root.detail-beside: VerticalLayout {
                 alignment: start;
                 width: Theme.control-detail-width;
                 ControlDetail { }
@@ -1222,6 +1345,104 @@ export component DetailOverlay {
             width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
             height: self.preferred-height;
             TouchArea { }
+        }
+    }
+}
+
+component BubbleLabel inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    vertical-alignment: center;
+    wrap: word-wrap;
+}
+
+component SettingsBubble {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Analyse"; }
+            Tabs {
+                tabs: [{ label: "Rien" }, { label: "Coureurs inscrits" }];
+                active: 0;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Tronçons non comptés"; }
+            SecondaryButton {
+                label: "Tronçon";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: Courses.chips[1]; }
+            SecondaryButton { label: "Importer"; }
+        }
+    }
+}
+
+// One line per problem, each with its button.
+component AlertBubble {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Courses.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        SmallText { text: Courses.alert-detail; }
+        for code in Courses.unused-codes: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                ControlTag { code: code; unused: true; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            PrimaryButton {
+                label: "Le voir";
+                in-row: true;
+                clicked => {
+                    Courses.open-bubble = 0;
+                    Courses.select-control(code);
+                }
+            }
+        }
+    }
+}
+
+// A bubble opens under what was clicked, and closes when clicking anywhere else.
+export component BubbleOverlay {
+    in property <length> margin;
+
+    property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
+    property <length> wanted-x: Courses.open-bubble == 2 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+
+    TouchArea {
+        clicked => { Courses.open-bubble = 0; }
+    }
+    Rectangle {
+        x: clamp(root.wanted-x, root.margin, root.width - root.bubble-width - root.margin);
+        y: Courses.bubble-top;
+        width: root.bubble-width;
+        height: content.preferred-height;
+        background: Theme.card;
+        border-radius: Theme.card-radius;
+        border-width: Theme.thin-outline-width;
+        border-color: Theme.thin-outline;
+        drop-shadow-blur: Theme.demo-shadow;
+        drop-shadow-color: Theme.bubble-shadow;
+        TouchArea { }
+        content := VerticalLayout {
+            if Courses.open-bubble == 1: SettingsBubble { }
+            if Courses.open-bubble == 2: AlertBubble { }
         }
     }
 }
