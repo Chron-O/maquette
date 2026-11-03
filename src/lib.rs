@@ -4,6 +4,7 @@ slint::include_modules!();
 
 #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
 mod capture;
+mod courses;
 mod device;
 mod home;
 mod navigation;
@@ -31,6 +32,7 @@ fn word(label: &str) -> TabItem {
 #[derive(Default)]
 pub struct AppState {
     navigator: Navigator,
+    courses: courses::CoursesState,
     data: Option<Generated>,
 }
 
@@ -38,6 +40,8 @@ impl AppState {
     fn show(&self, window: &App) {
         self.navigator.show(window, self.data.as_ref());
         home::show(window, self.data.as_ref());
+        let event = self.navigator.event().and_then(|e| self.data.as_ref().map(|d| &d.events[e]));
+        self.courses.show(window, event);
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -95,13 +99,49 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
             }
         }
     }
-    navigation.on_open_event(on_click(window, state, Navigator::open_event));
+    // Opening an event starts its Circuits tab from the beginning.
+    let open_event = {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |i: i32| {
+            let mut state = state.borrow_mut();
+            state.navigator.open_event(i as usize);
+            state.courses = courses::CoursesState::default();
+            if let Some(window) = weak.upgrade() {
+                state.show(&window);
+            }
+        }
+    };
+    navigation.on_open_event(open_event);
     navigation.on_open_club_page(on_click(window, state, Navigator::open_club_page));
     navigation.on_select_tab(on_click(window, state, Navigator::select_tab));
     let open_direct = on_click(window, state, |n, _| n.open_direct(CURRENT_EVENT));
     navigation.on_open_direct(move || open_direct(0));
     let go_back = on_click(window, state, |n, _| n.go_home());
     navigation.on_go_back(move || go_back(0));
+
+    fn on_course_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut courses::CoursesState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().courses, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let courses = window.global::<Courses>();
+    courses.on_select_course(on_course_click(window, state, |c, i: i32| c.select_course(i)));
+    courses.on_select_view(on_course_click(window, state, |c, i: i32| c.select_view(i as usize)));
+    courses.on_select_highlight(on_course_click(window, state, |c, i: i32| c.select_highlight(i as usize)));
+    courses.on_sort_by(on_course_click(window, state, |c, i: i32| c.sort_by(i)));
+    courses.on_select_control(on_course_click(window, state, |c, code: slint::SharedString| c.select_control(&code)));
+    courses.on_code_search(on_course_click(window, state, |c, text: slint::SharedString| c.set_code_search(&text)));
+    courses.on_course_search(on_course_click(window, state, |c, text: slint::SharedString| c.set_course_search(&text)));
+    let close = on_course_click(window, state, |c, _: ()| c.close_detail());
+    courses.on_close_detail(move || close(()));
 }
 
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {

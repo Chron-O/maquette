@@ -7,7 +7,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 |---|---|---|
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
 | 1 | Accueil | validé par Robin |
-| 2 | Course › Circuits | à faire |
+| 2 | Course › Circuits | en cours : « Tous les postes » à voir par Robin, vue d'un circuit à faire |
 | 3 | Course › Participants | à faire |
 | 4 | Course › Départs | à faire |
 | 5 | Course › Boîtiers | à faire |
@@ -43,6 +43,20 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Téléphone** : Direct sous la carte blanche, sans le chevauchement du prototype.
 - **« 2 à traiter ›** ouvre l'onglet Direct ; le prototype ouvre un tiroir, qui n'existe pas ici (voir écran 6).
 - **Sans effet pour l'instant** : Rejoindre, Nouvel événement, Voir tous, indicateurs.
+
+## 2 — Circuits
+- « Tous les postes » : liste des circuits, Tableau / Lignes / Carte, tri, recherche, « Mettre en avant », fiche du poste.
+- Tout est en lecture seule pour l'instant : Importer, Nouveau, Ajouter, Neutraliser, Boîtier double, Imprimer et Exporter sont visibles, sans effet.
+- Captures : `02-courses-*` (tirage fixe), en Tableau.
+
+### Écarts et points ouverts de l'écran 2
+- **Fiche sur téléphone** : par-dessus, comme `CLAUDE.md`. Le prototype l'ouvre dans la ligne.
+- **Fiche en large** : absente tant qu'aucun poste n'est choisi. Le prototype affiche une phrase d'aide, retirée comme les autres consignes.
+- **Icônes absentes de la charte, donc retirées** : loupe, importer, imprimer, exporter, et les petites flèches ▾.
+- **Tri** : petit triangle dessiné, ▲ n'étant pas dans la police.
+- **Poste dans aucun circuit** : contour plus clair au lieu de pointillés, que Slint ne dessine pas.
+- **Fiche, avant et après** : « D » et « A » écrits pour Départ et Arrivée, au lieu de leurs symboles.
+- **« 1 tronçon non compté »** : pas dans le résumé, le générateur ne produit pas cette donnée.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

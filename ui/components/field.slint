@@ -5,6 +5,7 @@ import { Icons } from "icons.slint";
 // `show-editing` shows the editing state without focus.
 export component InputField {
     callback focus-received();
+    callback edited(string);
     // Gives focus back: on a phone, this closes the keyboard.
     public function release() { input.clear-focus(); }
     in property <string> label;
@@ -55,6 +56,7 @@ export component InputField {
                         vertical-alignment: center;
                         single-line: true;
                         input-type: root.input-kind;
+                        edited => { root.edited(self.text); }
                         accepted => { self.clear-focus(); }   // Return key
                         changed has-focus => {
                             if self.has-focus {

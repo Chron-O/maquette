@@ -1,11 +1,13 @@
 // Capture mode, used by scripts/captures.sh:
 //   maquette --capture FILE light|dark WIDTH HEIGHT touch|mouse [club|tab] [INDEX]
 // With CAPTURE_TEST_DATA set, the test data comes from a fixed seed, so images stay comparable.
+// CAPTURE_CLICKS="x,y;x,y" clicks these points first, to test the navigation without a mouse.
 // Without these arguments, the app starts normally.
 
 use crate::device::{self, Device};
 use crate::{App, AppState, Theme, ThemeMode};
-use slint::ComponentHandle;
+use slint::platform::{PointerEventButton, WindowEvent};
+use slint::{ComponentHandle, LogicalPosition};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
@@ -43,16 +45,41 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
         Some("tab") => {
             state_now.navigator.open_event(0);
             state_now.navigator.select_tab(index);
+            state_now.courses.select_course(-1);
+            if let Ok(view) = std::env::var("CAPTURE_COURSES_VIEW") {
+                state_now.courses.select_view(view.parse().expect("view"));
+            }
         }
         Some("club") => state_now.navigator.open_club_page(index),
         _ => {}
     }
     state_now.show(window);
 
+    // Clicks one point after the other, then leaves time for the screen to update.
+    let clicks: Vec<LogicalPosition> = std::env::var("CAPTURE_CLICKS").map_or(Vec::new(), |list| {
+        list.split(';')
+            .map(|point| {
+                let (x, y) = point.split_once(',').expect("x,y");
+                LogicalPosition::new(x.parse().expect("x"), y.parse().expect("y"))
+            })
+            .collect()
+    });
+    let click_time = WAIT * (clicks.len() as u32 + 1);
+    for (i, position) in clicks.into_iter().enumerate() {
+        let weak = window.as_weak();
+        slint::Timer::single_shot(WAIT * (i as u32 + 1), move || {
+            let window = weak.unwrap();
+            let button = PointerEventButton::Left;
+            window.window().dispatch_event(WindowEvent::PointerMoved { position });
+            window.window().dispatch_event(WindowEvent::PointerPressed { position, button });
+            window.window().dispatch_event(WindowEvent::PointerReleased { position, button });
+        });
+    }
+
     // Waits for the window to be drawn, saves the image, then closes.
     let path = args[2].clone();
     let weak = window.as_weak();
-    slint::Timer::single_shot(WAIT, move || {
+    slint::Timer::single_shot(click_time, move || {
         let window = weak.unwrap();
         let image = window.window().take_snapshot().expect("snapshot failed");
         image::save_buffer(

@@ -8,7 +8,9 @@ import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
 import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
+import { Courses, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse } from "pages/courses.slint";
 import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem } from "pages/home.slint";
+export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem }
 
 component Header inherits Rectangle {
@@ -55,12 +57,12 @@ component Header inherits Rectangle {
                 vertical-alignment: center;
                 wrap: word-wrap;
             }
-            if Navigation.home && root.layout-mode != LayoutMode.narrow: HomeIndicators {
+            if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.narrow: HomeIndicators {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
         }
-        if Navigation.home && root.layout-mode == LayoutMode.narrow: HomeIndicators {
+        if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.narrow: HomeIndicators {
             layout-mode: root.layout-mode;
         }
     }
@@ -79,16 +81,24 @@ component Page {
     in property <length> right-margin;
     in property <length> bottom-margin;
 
+    property <bool> on-courses: Navigation.in-event && Navigation.active-tab == 0;
+
     scroller := Flickable {
         content := VerticalLayout {
             width: scroller.width;
             alignment: start;
             padding-bottom: root.bottom-margin + Theme.space-medium;
-            if !Navigation.home: VerticalLayout {
+            if !Navigation.home && !root.on-courses: VerticalLayout {
                 padding-top: Theme.space-medium;
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
                 SectionTitle { text: Navigation.page-title; }
+            }
+            if root.on-courses: VerticalLayout {
+                padding-top: Theme.space-medium;
+                padding-left: root.left-margin;
+                padding-right: root.right-margin;
+                CoursesPage { layout-mode: root.layout-mode; }
             }
             if Navigation.home: HomePage {
                 layout-mode: root.layout-mode;
@@ -248,5 +258,10 @@ export component App inherits Window {
         height: Theme.zone;
         label: "Démo";
         clicked => { root.demo-open = !root.demo-open; }
+    }
+
+    if Navigation.in-event && Navigation.active-tab == 0 && Courses.detail-open && root.layout-mode != LayoutMode.wide: DetailOverlay {
+        width: 100%;
+        height: 100%;
     }
 }

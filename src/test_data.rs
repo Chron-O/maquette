@@ -26,6 +26,22 @@ impl Label {
     }
 }
 
+pub struct Course {
+    pub name: String,
+    pub categories: &'static str,
+    pub distance: String,
+    pub entrants: u32,
+    pub controls: Vec<u32>,
+}
+
+// A control on the map, in a 600 × 360 drawing.
+#[derive(Clone, Copy)]
+pub struct Control {
+    pub code: u32,
+    pub x: f32,
+    pub y: f32,
+}
+
 pub struct Event {
     pub name: String,
     pub weekday: &'static str,
@@ -34,7 +50,8 @@ pub struct Event {
     pub month_short: &'static str,
     pub place: &'static str,
     pub participants: String,
-    pub courses: u32,
+    pub courses: Vec<Course>,
+    pub controls: Vec<Control>,
     pub label: Label,
 }
 
@@ -77,6 +94,10 @@ pub struct Generated {
     clock_seconds: u32,
     random: Random,
 }
+
+// Where courses start and finish, on the same 600 × 360 map as the controls.
+pub const START: (f32, f32) = (40.0, 330.0);
+pub const FINISH: (f32, f32) = (565.0, 335.0);
 
 // The current event is always the first of the list.
 pub const CURRENT_EVENT: usize = 0;
@@ -148,16 +169,66 @@ fn format_clock(seconds: u32) -> String {
     format!("{}:{:02}", seconds / 3600, seconds / 60 % 60)
 }
 
+const COURSE_NAMES: [&str; 5] = ["Circuit A", "Circuit B", "Circuit C", "Circuit D", "Jaune"];
+const CATEGORIES: [&str; 5] = ["H21E, H20", "D21E, H35", "H16, D16, D40", "H18, D18", "Open jaune"];
+const MAP_COLUMNS: u32 = 5;
+const MAP_ROWS: u32 = 3;
+
+// Controls sit on a grid, moved a little, so that they and their tags do not overlap.
+fn new_controls(random: &mut Random) -> Vec<Control> {
+    let mut cells: Vec<u32> = (0..MAP_COLUMNS * MAP_ROWS).collect();
+    let wanted = random.between(9, 13) as usize;
+    let mut codes: Vec<u32> = (31..=99).collect();
+    let mut controls = Vec::new();
+    for _ in 0..wanted {
+        let cell = cells.remove(random.below(cells.len() as u32) as usize);
+        let code = codes.remove(random.below(codes.len() as u32) as usize);
+        controls.push(Control {
+            code,
+            x: 70.0 + (cell % MAP_COLUMNS * 105) as f32 + random.below(30) as f32,
+            y: 45.0 + (cell / MAP_COLUMNS * 90) as f32 + random.below(25) as f32,
+        });
+    }
+    controls.sort_by_key(|c| c.code);
+    controls
+}
+
+fn new_courses(random: &mut Random, count: u32, controls: &[Control]) -> Vec<Course> {
+    (0..count as usize)
+        .map(|i| {
+            let length = random.between(3, 7) as usize;
+            let mut pool: Vec<u32> = controls.iter().map(|c| c.code).collect();
+            // The last control of the list is sometimes used by no course, as in real life.
+            pool.pop();
+            let mut chosen = Vec::new();
+            while chosen.len() < length && !pool.is_empty() {
+                chosen.push(pool.remove(random.below(pool.len() as u32) as usize));
+            }
+            let kilometers = random.between(20, 75);
+            Course {
+                name: COURSE_NAMES[i].into(),
+                categories: CATEGORIES[i],
+                distance: format!("{},{} km · {} m D+", kilometers / 10, kilometers % 10, random.between(4, 22) * 10),
+                entrants: random.between(10, 80),
+                controls: chosen,
+            }
+        })
+        .collect()
+}
+
 fn new_event(random: &mut Random, name: &str, days: u32, past: bool) -> Event {
     let (weekday, day, month, month_short) = date(days);
-    let courses = random.below(7);
+    // An upcoming event sometimes has no course yet.
+    let course_count = if !past && random.below(4) == 0 { 0 } else { random.between(3, 5) };
+    let controls = if course_count == 0 { Vec::new() } else { new_controls(random) };
+    let courses = new_courses(random, course_count, &controls);
     let entered = random.between(30, 320);
     let label = if past {
         Label::new("Résultats publiés", Kind::Inactive)
-    } else if courses == 0 {
+    } else if course_count == 0 {
         Label::new("À préparer", Kind::ToCheck)
     } else {
-        Label::new(format!("{courses} circuits prêts"), Kind::Valid)
+        Label::new(format!("{course_count} circuits prêts"), Kind::Valid)
     };
     Event {
         name: name.into(),
@@ -168,6 +239,7 @@ fn new_event(random: &mut Random, name: &str, days: u32, past: bool) -> Event {
         place: random.pick(&PLACES),
         participants: format!("{entered} {}", if past { "participants" } else { "inscrits" }),
         courses,
+        controls,
         label,
     }
 }
@@ -180,7 +252,12 @@ impl Generated {
         let today = 40 + random.below(30);
 
         let mut events = vec![new_event(&mut random, name(0), today, false)];
-        events[CURRENT_EVENT].courses = random.between(3, 6);
+        if events[CURRENT_EVENT].courses.is_empty() {
+            events[CURRENT_EVENT].controls = new_controls(&mut random);
+            let controls = events[CURRENT_EVENT].controls.clone();
+            events[CURRENT_EVENT].courses = new_courses(&mut random, 4, &controls);
+        }
+        events[CURRENT_EVENT].label = Label::default();
         let (mut upcoming, mut past) = (Vec::new(), Vec::new());
         let mut days = today;
         for i in 1..=3 {

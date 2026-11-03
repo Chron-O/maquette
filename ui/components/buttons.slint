@@ -43,6 +43,7 @@ export component SecondaryButton {
     in property <string> label;
     in property <image> icon;
     in property <bool> has-icon: false;
+    in property <bool> danger: false;
 
     min-height: Theme.zone;
 
@@ -72,7 +73,7 @@ export component SecondaryButton {
         }
         Text {
             text: root.label;
-            color: Theme.text;
+            color: root.danger ? Theme.problem.badge-text : Theme.text;
             font-size: Theme.text-help;
             font-weight: Theme.weight-block-title;
             vertical-alignment: center;

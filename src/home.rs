@@ -41,7 +41,7 @@ fn event_row(data: &Generated, id: usize) -> EventRow {
         name: event.name.clone().into(),
         place: format!("{} · {}", event.weekday, event.place).into(),
         participants: event.participants.clone().into(),
-        courses: if event.courses == 0 { "aucun circuit".into() } else { plural(event.courses, "circuit").into() },
+        courses: if event.courses.is_empty() { "aucun circuit".into() } else { plural(event.courses.len() as u32, "circuit").into() },
         badge: badge(&event.label),
     }
 }
@@ -140,7 +140,7 @@ pub fn show(window: &App, data: Option<&Generated>) {
         stats: model(vec![
             stat(data.racing, "en course"),
             stat(data.finished, "arrivés"),
-            stat(current.courses, "circuits"),
+            stat(current.courses.len() as u32, "circuits"),
         ]),
     });
     home.set_readers(model(data.readers.iter().map(|r| SharedString::from(r.as_str())).collect()));

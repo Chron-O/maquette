@@ -55,6 +55,13 @@ impl Navigator {
         }
     }
 
+    pub fn event(&self) -> Option<usize> {
+        match self.view {
+            View::Event { event, .. } => Some(event),
+            _ => None,
+        }
+    }
+
     pub fn show(&self, window: &App, data: Option<&Generated>) {
         let navigation = window.global::<Navigation>();
         navigation.set_home(matches!(self.view, View::Home));

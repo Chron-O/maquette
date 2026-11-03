@@ -48,6 +48,8 @@ Saves a screen's 8 captures (4 formats, light and dark) in `captures/`, on macOS
 CAPTURE_TEST_DATA=1 scripts/captures.sh 01-home-test-data
 ```
 
+`CAPTURE_CLICKS="x,y;x,y"` clicks these points before the capture, to test the navigation without a mouse.
+
 ## Layout of the code
 
 - `src/`: state (Rust). The test data generator is `src/test_data.rs`.
