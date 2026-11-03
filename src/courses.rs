@@ -83,7 +83,11 @@ fn trace(event: &Event, course: &Course) -> String {
 impl CoursesState {
     pub fn select_course(&mut self, index: i32) {
         self.selection = match index {
-            -2 => Selection::Nothing,
+            -2 => {
+                self.code_search.clear();
+                self.course_search.clear();
+                Selection::Nothing
+            }
             -1 => Selection::AllControls,
             i => Selection::Course(i as usize),
         };
@@ -162,6 +166,8 @@ impl CoursesState {
         courses.set_views(model(VIEWS.iter().map(|v| word(v)).collect()));
         courses.set_views_narrow(model(VIEWS[..2].iter().map(|v| word(v)).collect()));
         courses.set_active_view(self.view as i32);
+        courses.set_code_search_text(self.code_search.as_str().into());
+        courses.set_course_search_text(self.course_search.as_str().into());
 
         let mut highlights = vec![word("Tous")];
         highlights.extend(event.courses.iter().map(|c| word(&c.name)));

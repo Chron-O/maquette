@@ -43,3 +43,13 @@ targets:
         basedOnDependencyAnalysis: false   # always run cargo: it knows whether the code changed
         outputFiles:
           - $TARGET_BUILD_DIR/$EXECUTABLE_PATH
+schemes:
+  Maquette:
+    build:
+      targets:
+        Maquette: all
+    # Xcode crashes in its GPU gauge while debugging (IDEDebugGaugeTrayCell), so GPU capture stays off.
+    run:
+      config: Debug
+      enableGPUFrameCaptureMode: disabled
+      enableGPUValidationMode: disabled

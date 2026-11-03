@@ -8,6 +8,7 @@ export component InputField {
     callback edited(string);
     // Gives focus back: on a phone, this closes the keyboard.
     public function release() { input.clear-focus(); }
+    public function take-focus() { input.focus(); }
     in property <string> label;
     in property <string> placeholder;   // gray text while the field is empty
     in-out property <string> text <=> input.text;

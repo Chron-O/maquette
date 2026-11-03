@@ -52,7 +52,9 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 ### Écarts et points ouverts de l'écran 2
 - **Fiche sur téléphone** : par-dessus, comme `CLAUDE.md`. Le prototype l'ouvre dans la ligne.
 - **Fiche en large** : absente tant qu'aucun poste n'est choisi. Le prototype affiche une phrase d'aide, retirée comme les autres consignes.
-- **Icônes absentes de la charte, donc retirées** : loupe, importer, imprimer, exporter, et les petites flèches ▾.
+- **Icônes absentes de la charte, donc retirées** : importer, imprimer, exporter, et les petites flèches ▾.
+- **Loupe, ajoutée à la demande de Robin** : absente de la charte, dessin repris du prototype, sans mot à côté. Dans la colonne des circuits à toutes les tailles et dans le contenu sur téléphone ; elle déplie le champ. Sur iPad et ordinateur, le contenu garde un champ de largeur limitée.
+- **Lignes** : les postes passent à la ligne au lieu de défiler de côté, à toutes les tailles.
 - **Tri** : petit triangle dessiné, ▲ n'étant pas dans la police.
 - **Poste dans aucun circuit** : contour plus clair au lieu de pointillés, que Slint ne dessine pas.
 - **Fiche, avant et après** : « D » et « A » écrits pour Départ et Arrivée, au lieu de leurs symboles.

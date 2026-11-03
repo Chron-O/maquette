@@ -8,7 +8,7 @@ import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
 import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
-import { Courses, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse } from "pages/courses.slint";
+import { Courses, CoursesBand, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse } from "pages/courses.slint";
 import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem } from "pages/home.slint";
 export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem }
@@ -98,7 +98,10 @@ component Page {
                 padding-top: Theme.space-medium;
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
-                CoursesPage { layout-mode: root.layout-mode; }
+                CoursesPage {
+                    layout-mode: root.layout-mode;
+                    available-width: scroller.width - root.left-margin - root.right-margin;
+                }
             }
             if Navigation.home: HomePage {
                 layout-mode: root.layout-mode;
@@ -234,6 +237,17 @@ export component App inherits Window {
             // Keeps the end of the page clear of the Démo button.
             bottom-margin: Theme.zone + root.safe-area-insets.bottom + Theme.space-medium;
         }
+        // Empty without the band, so the Démo button can sit just above it.
+        band-zone := VerticalLayout {
+            vertical-stretch: 0;
+            if Navigation.in-event && Navigation.active-tab == 0 && !Courses.empty
+                && (root.layout-mode != LayoutMode.narrow || !Courses.list-only): CoursesBand {
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
+        }
     }
 
     // Closes the panel when clicking anywhere else.
@@ -254,7 +268,7 @@ export component App inherits Window {
 
     demo-button := SecondaryButton {
         x: root.left-margin;
-        y: root.height - self.height - root.safe-area-insets.bottom - Theme.space;
+        y: root.height - self.height - max(band-zone.height, root.safe-area-insets.bottom) - Theme.space;
         height: Theme.zone;
         label: "Démo";
         clicked => { root.demo-open = !root.demo-open; }

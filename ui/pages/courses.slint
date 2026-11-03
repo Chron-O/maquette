@@ -66,6 +66,8 @@ export global Courses {
     in property <bool> course-selected;     // one course chosen: the rest of this page is about it
     in property <bool> list-only;           // on a phone: nothing chosen yet
     in property <string> course-title;
+    in property <string> code-search-text;
+    in property <string> course-search-text;
     in property <[CourseItem]> items;
     in property <string> all-summary;
     in property <string> all-trace;
@@ -271,25 +273,71 @@ component CourseListItem inherits Rectangle {
     }
 }
 
+// A magnifier that unfolds a search field below it, and closes it again.
+component SearchToggle inherits Rectangle {
+    callback clicked();
+    in property <bool> open;
+
+    width: Theme.zone;
+    height: Theme.zone;
+    accessible-role: button;
+    accessible-label: root.open ? "Fermer la recherche" : "Chercher";
+    accessible-action-default => { root.clicked(); }
+    Rectangle {
+        width: Theme.secondary-button-height;
+        height: Theme.secondary-button-height;
+        border-radius: Theme.secondary-button-radius;
+        border-width: Theme.thin-outline-width;
+        border-color: Theme.thin-outline;
+        background: zone.pressed ? Theme.secondary-button-pressed
+            : zone.has-hover ? Theme.secondary-button-hover
+            : Theme.secondary-button;
+        animate background { duration: Theme.tint-duration; }
+        Image {
+            source: root.open ? Icons.x : Icons.search;
+            colorize: Theme.text;
+            width: Theme.button-icon;
+            height: Theme.button-icon;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component CourseList {
     in property <bool> narrow;
+
+    property <bool> search-open: Courses.course-search-text != "";
 
     VerticalLayout {
         alignment: start;
         spacing: Theme.space;
-        InputField {
-            placeholder: "Chercher…";
-            edited(text) => { Courses.course-search(text); }
-        }
         HorizontalLayout {
             spacing: Theme.space;
-            alignment: start;
             SecondaryButton { label: "Importer"; }
             SecondaryButton {
                 label: "Nouveau";
                 icon: Icons.plus;
                 has-icon: true;
             }
+            Rectangle { horizontal-stretch: 1; }
+            SearchToggle {
+                open: root.search-open;
+                clicked => {
+                    if root.search-open {
+                        Courses.course-search("");
+                    }
+                    root.search-open = !root.search-open;
+                }
+            }
+        }
+        if root.search-open: InputField {
+            placeholder: "Chercher…";
+            text: Courses.course-search-text;
+            init => { self.take-focus(); }
+            edited(text) => { Courses.course-search(text); }
         }
         if !Courses.empty: Rectangle {
             background: Theme.card;
@@ -349,7 +397,10 @@ component AlertBox inherits Rectangle {
     }
 }
 
+// `in-line`: the chips sit next to the title, otherwise under it.
 component SummaryZone inherits Rectangle {
+    in property <bool> in-line;
+
     border-radius: Theme.field-radius;
     border-width: Theme.thin-outline-width;
     border-color: Theme.thin-outline;
@@ -368,16 +419,27 @@ component SummaryZone inherits Rectangle {
                 }
             }
             Text {
-                horizontal-stretch: 1;
+                horizontal-stretch: root.in-line ? 0 : 1;
                 text: "Tous les postes";
                 color: Theme.text;
                 font-size: Theme.text-block-title;
                 font-weight: Theme.weight-block-title;
                 vertical-alignment: center;
-                wrap: word-wrap;
+                wrap: root.in-line ? no-wrap : word-wrap;
+            }
+            if root.in-line: HorizontalLayout {
+                spacing: Theme.space;
+                for chip in Courses.chips: SmallText {
+                    text: chip;
+                    wrap: no-wrap;
+                    vertical-alignment: center;
+                }
             }
         }
-        for chip in Courses.chips: SmallText { text: chip; }
+        if !root.in-line: VerticalLayout {
+            spacing: Theme.space-small;
+            for chip in Courses.chips: SmallText { text: chip; }
+        }
     }
 }
 
@@ -633,6 +695,62 @@ component ControlsList inherits Rectangle {
     }
 }
 
+// The stops of a course, going to the next row instead of scrolling sideways.
+component StopsFlow {
+    in property <[SequenceStop]> stops;
+    in property <int> tone;
+
+    property <length> step: Theme.tag-min-width + Theme.sequence-link;
+    property <length> row-height: Theme.rank-size + Theme.space-small + Theme.tag-height + Theme.space;
+    property <int> per-row: max(1, floor((root.width + Theme.sequence-link) / root.step));
+
+    height: ceil(root.stops.length / root.per-row) * root.row-height - Theme.space;
+    for stop[i] in root.stops: Rectangle {
+        x: mod(i, root.per-row) * root.step;
+        y: floor(i / root.per-row) * root.row-height;
+        width: Theme.tag-min-width;
+        height: root.row-height - Theme.space;
+        if mod(i, root.per-row) > 0: Rectangle {
+            x: -Theme.sequence-link;
+            y: (Theme.rank-size - Theme.map-trace) / 2;
+            width: Theme.sequence-link;
+            height: Theme.map-trace;
+            background: Theme.purple;
+        }
+        RankDot {
+            x: (parent.width - self.width) / 2;
+            y: 0;
+            rank: stop.rank;
+            tone: root.tone;
+        }
+        ControlTag {
+            x: 0;
+            y: Theme.rank-size + Theme.space-small;
+            width: parent.width;
+            code: stop.code;
+            selected: stop.selected;
+            clicked => { Courses.select-control(stop.code); }
+        }
+    }
+}
+
+// Controls in no course, going to the next row as well.
+component UnusedFlow {
+    property <length> step: Theme.tag-min-width + Theme.space;
+    property <length> row-height: Theme.tag-height + Theme.space;
+    property <int> per-row: max(1, floor((root.width + Theme.space) / root.step));
+
+    height: ceil(Courses.unused-codes.length / root.per-row) * root.row-height - Theme.space;
+    for code[i] in Courses.unused-codes: ControlTag {
+        x: mod(i, root.per-row) * root.step;
+        y: floor(i / root.per-row) * root.row-height;
+        width: Theme.tag-min-width;
+        code: code;
+        unused: true;
+        clicked => { Courses.select-control(code); }
+    }
+}
+
 component ControlsLines inherits Rectangle {
     background: Theme.card;
     border-radius: Theme.card-radius;
@@ -660,50 +778,15 @@ component ControlsLines inherits Rectangle {
                 }
                 SmallText { text: line.count; wrap: no-wrap; }
             }
-            Flickable {
-                height: stops.preferred-height;
-                content-width: max(self.width, stops.preferred-width);
-                content-height: self.height;
-                stops := HorizontalLayout {
-                    alignment: start;
-                    for stop[i] in line.stops: HorizontalLayout {
-                        if i > 0: VerticalLayout {
-                            alignment: start;
-                            padding-top: (Theme.rank-size - Theme.map-trace) / 2;
-                            Rectangle {
-                                width: Theme.sequence-link;
-                                height: Theme.map-trace;
-                                background: Theme.purple;
-                            }
-                        }
-                        VerticalLayout {
-                            spacing: Theme.space-small;
-                            HorizontalLayout {
-                                alignment: center;
-                                RankDot { rank: stop.rank; tone: line.tone; }
-                            }
-                            ControlTag {
-                                code: stop.code;
-                                selected: stop.selected;
-                                clicked => { Courses.select-control(stop.code); }
-                            }
-                        }
-                    }
-                }
+            StopsFlow {
+                stops: line.stops;
+                tone: line.tone;
             }
         }
-        if Courses.unused-codes.length > 0: HorizontalLayout {
-            alignment: start;
+        if Courses.unused-codes.length > 0: VerticalLayout {
             spacing: Theme.space;
-            VerticalLayout {
-                alignment: center;
-                SmallText { text: "Dans aucun circuit"; wrap: no-wrap; }
-            }
-            for code in Courses.unused-codes: ControlTag {
-                code: code;
-                unused: true;
-                clicked => { Courses.select-control(code); }
-            }
+            SmallText { text: "Dans aucun circuit"; }
+            UnusedFlow { }
         }
     }
 }
@@ -853,6 +936,7 @@ export component ControlDetail inherits Rectangle {
                 font-size: Theme.text-help;
                 font-weight: Theme.weight-block-title;
                 vertical-alignment: center;
+                wrap: word-wrap;
             }
             SmallText { text: course.rank; wrap: no-wrap; vertical-alignment: center; }
             HorizontalLayout {
@@ -903,18 +987,41 @@ export component ControlDetail inherits Rectangle {
     }
 }
 
+// The settings and the alert, above the list and the content.
+component TopRow {
+    HorizontalLayout {
+        spacing: Theme.button-margin;
+        VerticalLayout {
+            alignment: center;
+            SummaryZone { in-line: true; }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if Courses.alert-title != "": AlertBox { }
+    }
+}
+
 // The content next to the list: all controls, or one course (next step).
 component AllControls {
     in property <LayoutMode> layout-mode;
+    in property <length> available-width;
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Courses.code-search-text != "";
+    property <bool> tools-on-two-rows: root.narrow && root.available-width < Theme.narrow-tools-min-width;
+
+    function toggle-search() {
+        if root.search-open {
+            Courses.code-search("");
+        }
+        root.search-open = !root.search-open;
+    }
 
     VerticalLayout {
         alignment: start;
         spacing: Theme.button-margin;
-        HorizontalLayout {
+        if root.narrow: HorizontalLayout {
             spacing: Theme.space;
-            if root.narrow: VerticalLayout {
+            VerticalLayout {
                 alignment: start;
                 SecondaryButton {
                     label: "‹";
@@ -923,25 +1030,54 @@ component AllControls {
             }
             SummaryZone { horizontal-stretch: 1; }
         }
-        if Courses.alert-title != "": AlertBox { }
-        InputField {
-            placeholder: "Chercher un code…";
-            input-kind: InputType.number;
-            edited(text) => { Courses.code-search(text); }
-        }
+        if root.narrow && Courses.alert-title != "": AlertBox { }
         HorizontalLayout {
             spacing: Theme.space;
-            alignment: space-between;
+            if !root.narrow: VerticalLayout {
+                alignment: center;
+                InputField {
+                    width: Theme.code-search-width;
+                    placeholder: "Chercher un code…";
+                    input-kind: InputType.number;
+                    text: Courses.code-search-text;
+                    edited(text) => { Courses.code-search(text); }
+                }
+            }
             Tabs {
                 tabs: root.narrow ? Courses.views-narrow : Courses.views;
                 active: Courses.active-view;
                 clicked(i) => { Courses.select-view(i); }
             }
-            SecondaryButton {
-                label: root.narrow ? "Ajouter" : "Ajouter des postes";
+            Rectangle { horizontal-stretch: 1; }
+            if !root.tools-on-two-rows: SecondaryButton {
+                label: root.layout-mode == LayoutMode.wide ? "Ajouter des postes" : "Ajouter";
                 icon: Icons.plus;
                 has-icon: true;
             }
+            if root.narrow && !root.tools-on-two-rows: SearchToggle {
+                open: root.search-open;
+                clicked => { root.toggle-search(); }
+            }
+        }
+        if root.tools-on-two-rows: HorizontalLayout {
+            spacing: Theme.space;
+            alignment: end;
+            SecondaryButton {
+                label: "Ajouter";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            SearchToggle {
+                open: root.search-open;
+                clicked => { root.toggle-search(); }
+            }
+        }
+        if root.narrow && root.search-open: InputField {
+            placeholder: "Chercher un code…";
+            input-kind: InputType.number;
+            text: Courses.code-search-text;
+            init => { self.take-focus(); }
+            edited(text) => { Courses.code-search(text); }
         }
         if !root.narrow: HorizontalLayout {
             alignment: start;
@@ -972,32 +1108,50 @@ component OneCourse {
         spacing: Theme.button-margin;
         HorizontalLayout {
             spacing: Theme.space;
-            alignment: start;
-            if root.layout-mode == LayoutMode.narrow: SecondaryButton {
-                label: "‹";
-                clicked => { Courses.select-course(-2); }
+            if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+                alignment: start;
+                SecondaryButton {
+                    label: "‹";
+                    clicked => { Courses.select-course(-2); }
+                }
             }
             Text {
+                horizontal-stretch: 1;
                 text: Courses.course-title;
                 color: Theme.text;
                 font-size: Theme.text-screen-title;
                 font-weight: Theme.weight-screen-title;
                 vertical-alignment: center;
+                wrap: word-wrap;
             }
         }
     }
 }
 
+component BandSummary inherits Text {
+    text: Courses.summary;
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    vertical-alignment: center;
+    wrap: word-wrap;
+}
+
 export component CoursesPage {
     in property <LayoutMode> layout-mode;
+    in property <length> available-width;
 
     VerticalLayout {
         spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             if Courses.list-only || Courses.empty: CourseList { narrow: true; }
-            if !Courses.list-only && !Courses.empty && !Courses.course-selected: AllControls { layout-mode: root.layout-mode; }
+            if !Courses.list-only && !Courses.empty && !Courses.course-selected: AllControls {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
             if !Courses.list-only && !Courses.empty && Courses.course-selected: OneCourse { layout-mode: root.layout-mode; }
         }
+        if root.layout-mode != LayoutMode.narrow && !Courses.empty && !Courses.course-selected: TopRow { }
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
             spacing: Theme.button-margin;
             CourseList {
@@ -1018,17 +1172,37 @@ export component CoursesPage {
             }
             if Courses.empty: Rectangle { horizontal-stretch: 1; }
         }
-        if !Courses.empty && (root.layout-mode != LayoutMode.narrow || !Courses.list-only): HorizontalLayout {
-            spacing: Theme.space;
-            Text {
-                horizontal-stretch: 1;
-                text: Courses.summary;
-                color: Theme.text;
-                font-size: Theme.text-help;
-                font-weight: Theme.weight-block-title;
-                vertical-alignment: center;
-                wrap: word-wrap;
+    }
+}
+
+// Stays at the bottom of the window, whatever the page scrolls to.
+export component CoursesBand {
+    in property <LayoutMode> layout-mode;
+    in property <length> left-margin;
+    in property <length> right-margin;
+    in property <length> bottom-margin;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+
+    VerticalLayout {
+        padding-left: root.left-margin;
+        padding-right: root.right-margin;
+        padding-bottom: root.bottom-margin + Theme.space-small;
+        RowLine { }
+        if root.narrow: VerticalLayout {
+            padding-top: Theme.space;
+            BandSummary { }
+            HorizontalLayout {
+                spacing: Theme.space;
+                alignment: end;
+                SecondaryButton { label: "Imprimer"; }
+                SecondaryButton { label: "Exporter"; }
             }
+        }
+        if !root.narrow: HorizontalLayout {
+            padding-top: Theme.space-small;
+            spacing: Theme.space;
+            BandSummary { horizontal-stretch: 1; }
             SecondaryButton { label: "Imprimer"; }
             SecondaryButton { label: "Exporter"; }
         }
