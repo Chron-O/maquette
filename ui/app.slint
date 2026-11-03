@@ -58,7 +58,7 @@ component Header inherits Rectangle {
             horizontal-stretch: 0;
             HeaderButton {
                 label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
-                label-size: root.layout-mode == LayoutMode.narrow ? Theme.text-screen-title : Theme.text-label;
+                arrow-only: root.layout-mode == LayoutMode.narrow;
                 clicked => { Navigation.go-back(); }
             }
         }

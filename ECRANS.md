@@ -27,7 +27,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Réussi si** : la coquille tourne sur Mac, sur iPhone et dans le navigateur ; la navigation est identique partout ; aucune valeur de design en dur.
 
 ### Validations de Robin
-- Vrai iPhone et Mac : validés à l'œil le 03/11, **avant** la correction de l'Accueil. À revoir sur cette version.
+- Vrai iPhone et Mac : Robin confirme le 03/11 que tout fonctionne partout sur la version corrigée, sauf la flèche de retour sur téléphone (trop petite, pas centrée). Flèche corrigée ensuite, à revoir par Robin.
 - iPhone en portrait seulement : accepté.
 - Noms du code en anglais : décidé.
 

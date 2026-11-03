@@ -4,7 +4,7 @@ import { Theme } from "../theme.slint";
 export component HeaderButton inherits Rectangle {
     callback clicked();
     in property <string> label;
-    in property <length> label-size: Theme.text-label;
+    in property <bool> arrow-only: false;
 
     min-height: Theme.zone;
     min-width: Theme.zone;
@@ -14,16 +14,28 @@ export component HeaderButton inherits Rectangle {
         : Theme.header-button;
     animate background { duration: Theme.tint-duration; }
 
-    HorizontalLayout {
+    if !root.arrow-only: HorizontalLayout {
         padding-left: Theme.space-medium;
         padding-right: Theme.space-medium;
         Text {
             text: root.label;
             color: Theme.header-text;
-            font-size: root.label-size;
+            font-size: Theme.text-label;
             font-weight: Theme.weight-label;
             vertical-alignment: center;
         }
+    }
+    // The arrow is a font character: it sits low in its line, so it is lifted to look centered.
+    if root.arrow-only: Text {
+        width: 100%;
+        height: 100%;
+        y: -Theme.back-arrow-lift;
+        text: root.label;
+        color: Theme.header-text;
+        font-size: Theme.back-arrow-size;
+        font-weight: Theme.weight-label;
+        horizontal-alignment: center;
+        vertical-alignment: center;
     }
 
     zone := TouchArea {
