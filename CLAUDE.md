@@ -9,7 +9,7 @@ Le code pourra servir de point de départ à l'app (à confirmer avec Severin) :
 - Travail sur une **branche**, puis pull request. **Rien n'est poussé sur GitHub sans l'accord explicite de Robin.**
 - Ne jamais modifier `../chrono` ni `../essais-slint` (lecture seule).
 - Aucune copie de code depuis chrono-swift, pyMeOS (AGPL) ou MeOS.
-- Logo officiel uniquement : celui de `docs/identite/` de chrono-swift (`ui/logo/`). Ne pas en dessiner d'autre.
+- Logo officiel uniquement : celui de `docs/identite/` de chrono-swift, texte en tracés Instrument Sans Bold (`ui/logo/`). Ne pas en dessiner d'autre.
 - Robin découvre Rust : expliquer en français simple et court. **Avant d'écrire du code, reformuler et attendre l'accord.**
 - Commits, code (noms compris) et README en anglais ; textes affichés à l'écran et échanges avec Robin en français.
 

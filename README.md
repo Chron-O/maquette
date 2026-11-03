@@ -56,4 +56,4 @@ CAPTURE_TEST_DATA=1 scripts/captures.sh 01-home-test-data
 
 ## License
 
-GPLv3. IBM Plex Sans: OFL (`ui/fonts/`). Lucide icons: ISC (`ui/icons/`).
+GPLv3. IBM Plex Sans: OFL (`ui/fonts/`). Logo lettering outlined from Instrument Sans: OFL. Lucide icons: ISC (`ui/icons/`).

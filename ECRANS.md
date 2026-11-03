@@ -6,7 +6,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | # | Écran | Statut |
 |---|---|---|
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
-| 1 | Accueil | à valider par Robin |
+| 1 | Accueil | validé par Robin |
 | 2 | Course › Circuits | à faire |
 | 3 | Course › Participants | à faire |
 | 4 | Course › Départs | à faire |
@@ -33,7 +33,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - Captures : `01-home-*` (vide) et `01-home-test-data-*` (tirage fixe).
 
 ### Écarts et points ouverts de l'écran 1
-- **Logo** : `ui/logo/logo.png` vient du PNG validé de chrono-swift, fond rendu transparent. Instrument Sans n'étant pas installée, ce PNG a été rendu avec une police de secours, pas celle prévue. À trancher par Robin.
+- **Logo** : `ui/logo/logo.svg` reprend le dessin de chrono-swift, avec le texte en tracés depuis Instrument Sans Bold (décision de Robin) : aucune police à installer. Les PNG de `docs/identite` de chrono-swift ont été rendus avec une police de secours et n'ont pas changé : les lettres diffèrent un peu.
 - **Bouton orange** : un seul (« Ouvrir l'événement »), comme la charte. Le prototype en a deux.
 - **Pastilles** : icône ajoutée (`check`, `triangle-alert`), absente du prototype. Les grises restent sans icône : aucune ne convient dans la charte.
 - **Tailles hors échelle de la charte** : 34 (nom d'événement, chiffres du club), 28 (compteurs), 24 (date), reprises de `01-accueil.png`.
@@ -45,6 +45,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Sans effet pour l'instant** : Rejoindre, Nouvel événement, Voir tous, indicateurs.
 
 ### Validations de Robin
+- Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.
 - Vrai iPhone et Mac : Robin confirme le 03/11 que tout fonctionne partout sur la version corrigée, sauf la flèche de retour sur téléphone (trop petite, pas centrée). Flèche corrigée ensuite. Étape 0 validée par Robin le 03/11.
 - iPhone en portrait seulement : accepté.
 - Noms du code en anglais : décidé.
