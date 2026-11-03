@@ -2595,6 +2595,7 @@ name = "maquette"
 version = "0.1.0"
 dependencies = [
  "image",
+ "js-sys",
  "slint",
  "slint-build",
  "wasm-bindgen",

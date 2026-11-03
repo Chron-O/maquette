@@ -2,21 +2,21 @@
 
 ## Ce que c'est
 Maquette d'interface de Chron'O (logiciel de GEC SportIdent), dépôt public `Chron-O/maquette` (GPLv3).
-Elle remplace le prototype HTML (gelé dans `html/`). Données **factices** uniquement.
+Elle remplace le prototype HTML (gelé dans `html/`). **Aucune fausse donnée** : l'app est vide tant que le générateur de test n'est pas lancé.
 Le code pourra servir de point de départ à l'app (à confirmer avec Severin) : il doit donc rester propre.
 
 ## Règles strictes
 - Travail sur une **branche**, puis pull request. **Rien n'est poussé sur GitHub sans l'accord explicite de Robin.**
 - Ne jamais modifier `../chrono` ni `../essais-slint` (lecture seule).
 - Aucune copie de code depuis chrono-swift, pyMeOS (AGPL) ou MeOS.
-- Pas de logo Chron'O tant que Robin ne l'a pas fourni.
+- Logo officiel uniquement : celui de `docs/identite/` de chrono-swift (`ui/logo/`). Ne pas en dessiner d'autre.
 - Robin découvre Rust : expliquer en français simple et court. **Avant d'écrire du code, reformuler et attendre l'accord.**
 - Commits, code (noms compris) et README en anglais ; textes affichés à l'écran et échanges avec Robin en français.
 
 ## Architecture
 - Un projet Cargo, un seul binaire `maquette`. Version web (WebAssembly) publiée sur GitHub Pages à chaque fusion sur `main`.
 - **Rust donne les données, Slint affiche.** Aucune règle de course dans les `.slint` : ils affichent ce qu'on leur donne et renvoient les clics.
-- Données factices dans `src/data/` (noms, clubs, puces inventés).
+- Données de test : seulement via le générateur de `src/test_data.rs`, lancé depuis le panneau Démo (noms, clubs, puces inventés). Il remplace les appareils et événements réels pour tester l'interface. À l'arrêt, tout s'efface : si rien ne tourne, rien ne s'affiche.
 - Point de départ : `ui/theme.slint`, `ui/components/`, `ui/icons/`, `ui/fonts/` repris de `../essais-slint` (déjà validés, puis renommés en anglais), et les leçons de `../essais-slint/LECONS-SLINT.md`.
 
 ## Navigation (cadrage validé)
@@ -34,7 +34,7 @@ La **largeur** décide de la disposition :
 
 L'**appareil** décide des tailles, indépendamment : tactile (iOS, Android, web sur téléphone) 48 px, souris 36 px.
 La largeur suit la taille réelle de la fenêtre, le clair/sombre suit le réglage du système.
-Un réglage de démo permet seulement de forcer tactile/souris pour comparer.
+Le panneau Démo permet seulement de forcer tactile/souris pour comparer, et de lancer le générateur.
 
 ## Design
 - Système visuel : `references/charte.md` (copie de `../essais-slint/references/charte.md`). **Ne jamais la modifier** : signaler l'écart à Robin.

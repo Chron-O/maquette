@@ -4,34 +4,65 @@ slint::include_modules!();
 
 #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
 mod capture;
-mod data;
 mod device;
+mod home;
 mod navigation;
+mod test_data;
 
 use device::Device;
 use navigation::Navigator;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::time::Duration;
+use test_data::{CURRENT_EVENT, Generated};
+
+const SECONDS_BETWEEN_READINGS: u64 = 3;
 
 fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(rows))
 }
 
-fn connect_navigation(window: &App) -> Rc<RefCell<Navigator>> {
-    let navigator = Rc::new(RefCell::new(Navigator::default()));
-    let navigation = window.global::<Navigation>();
+fn word(label: &str) -> TabItem {
+    TabItem { label: label.into(), icon: Default::default() }
+}
 
+// All the app's state: where we are, and the test data if the generator is on.
+#[derive(Default)]
+pub struct AppState {
+    navigator: Navigator,
+    data: Option<Generated>,
+}
+
+impl AppState {
+    fn show(&self, window: &App) {
+        self.navigator.show(window, self.data.as_ref());
+        home::show(window, self.data.as_ref());
+    }
+
+    fn start_test_data(&mut self, seed: u64) {
+        self.data = Some(Generated::new(seed));
+    }
+
+    fn stop_test_data(&mut self) {
+        self.data = None;
+        self.navigator.leave_event();
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn random_seed() -> u64 {
+    js_sys::Date::now() as u64
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn random_seed() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_secs())
+}
+
+fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
+    let navigation = window.global::<Navigation>();
     navigation.set_back_label(navigation::HOME.into());
-    navigation.set_events(model(
-        data::EVENTS
-            .iter()
-            .map(|e| EventItem { name: e.name.into(), detail: e.detail.into() })
-            .collect(),
-    ));
-    navigation.set_club_pages(model(
-        navigation::CLUB_PAGES.iter().map(|page| SharedString::from(*page)).collect(),
-    ));
 
     let icons = window.global::<Icons>();
     let images = [
@@ -53,36 +84,30 @@ fn connect_navigation(window: &App) -> Rc<RefCell<Navigator>> {
     // Every click changes the state in Rust, then the screen is refreshed from it.
     fn on_click(
         window: &App,
-        navigator: &Rc<RefCell<Navigator>>,
+        state: &Rc<RefCell<AppState>>,
         action: impl Fn(&mut Navigator, usize) + 'static,
     ) -> impl Fn(i32) + 'static {
-        let (weak, navigator) = (window.as_weak(), navigator.clone());
+        let (weak, state) = (window.as_weak(), state.clone());
         move |i| {
-            action(&mut navigator.borrow_mut(), i as usize);
+            action(&mut state.borrow_mut().navigator, i as usize);
             if let Some(window) = weak.upgrade() {
-                navigator.borrow().show(&window);
+                state.borrow().show(&window);
             }
         }
     }
-    navigation.on_open_event(on_click(window, &navigator, Navigator::open_event));
-    navigation.on_open_club_page(on_click(window, &navigator, Navigator::open_club_page));
-    navigation.on_select_tab(on_click(window, &navigator, Navigator::select_tab));
-    let go_back = on_click(window, &navigator, |n, _| n.go_home());
+    navigation.on_open_event(on_click(window, state, Navigator::open_event));
+    navigation.on_open_club_page(on_click(window, state, Navigator::open_club_page));
+    navigation.on_select_tab(on_click(window, state, Navigator::select_tab));
+    let open_direct = on_click(window, state, |n, _| n.open_direct(CURRENT_EVENT));
+    navigation.on_open_direct(move || open_direct(0));
+    let go_back = on_click(window, state, |n, _| n.go_home());
     navigation.on_go_back(move || go_back(0));
-
-    navigator.borrow().show(window);
-    navigator
 }
 
-fn connect_demo(window: &App) -> Rc<Cell<Device>> {
+fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
-    demo.set_devices(model(
-        Device::ALL
-            .iter()
-            .map(|d| TabItem { label: d.label().into(), icon: Default::default() })
-            .collect(),
-    ));
+    demo.set_devices(model(Device::ALL.iter().map(|d| word(d.label())).collect()));
 
     let (weak, clicked_choice) = (window.as_weak(), choice.clone());
     demo.on_select_device(move |i| {
@@ -92,13 +117,40 @@ fn connect_demo(window: &App) -> Rc<Cell<Device>> {
         }
     });
     device::apply(window, choice.get());
-    choice
+
+    demo.set_test_data_options(model(vec![word("Arrêt"), word("Marche")]));
+    let readings = Rc::new(Timer::default());
+    let (weak, state_for_switch, readings_for_switch) = (window.as_weak(), state.clone(), readings.clone());
+    demo.on_select_test_data(move |i| {
+        let Some(window) = weak.upgrade() else { return };
+        window.global::<Demo>().set_active_test_data(i);
+        if i == 1 {
+            state_for_switch.borrow_mut().start_test_data(random_seed());
+            let (weak, state) = (window.as_weak(), state_for_switch.clone());
+            readings_for_switch.start(TimerMode::Repeated, Duration::from_secs(SECONDS_BETWEEN_READINGS), move || {
+                let mut state = state.borrow_mut();
+                if let Some(data) = state.data.as_mut() {
+                    data.read_a_card();
+                }
+                if let Some(window) = weak.upgrade() {
+                    state.show(&window);
+                }
+            });
+        } else {
+            readings_for_switch.stop();
+            state_for_switch.borrow_mut().stop_test_data();
+        }
+        state_for_switch.borrow().show(&window);
+    });
+    (choice, readings)
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
     let window = App::new()?;
-    let navigator = connect_navigation(&window);
-    let choice = connect_demo(&window);
+    let state = Rc::new(RefCell::new(AppState::default()));
+    connect_navigation(&window, &state);
+    let (choice, _readings) = connect_demo(&window, &state);
+    state.borrow().show(&window);
 
     let weak = window.as_weak();
     let _reduced_motion = device::follow_reduced_motion(move |active| {
@@ -108,9 +160,9 @@ pub fn run() -> Result<(), slint::PlatformError> {
     });
 
     #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
-    capture::prepare(&window, &navigator, &choice);
+    capture::prepare(&window, &state, &choice);
     #[cfg(any(target_os = "ios", target_arch = "wasm32"))]
-    let _ = (&navigator, &choice);
+    let _ = &choice;
 
     window.run()
 }

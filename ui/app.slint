@@ -7,38 +7,9 @@ import { HeaderButton } from "components/header-button.slint";
 import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
 import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
-export { Theme, ThemeMode, Icons, TabItem }
-
-export struct EventItem {
-    name: string,
-    detail: string,
-}
-
-// What Rust gives to the screen, and the clicks it gets back.
-export global Navigation {
-    in property <bool> home;
-    in property <bool> in-event;
-    in property <string> header-title;
-    in property <string> back-label;
-    in property <string> page-title;
-    in property <[EventItem]> events;
-    in property <[string]> club-pages;
-    in property <[TabItem]> tabs;
-    in property <int> active-tab;
-    callback open-event(int);
-    callback open-club-page(int);
-    callback select-tab(int);
-    callback go-back();
-}
-
-// The demo setting: only touch or mouse can be forced.
-export global Demo {
-    in property <[TabItem]> devices;
-    in property <int> active-device;
-    callback select-device(int);
-}
-
-enum LayoutMode { narrow, medium, wide }
+import { Navigation, Demo, LayoutMode } from "navigation.slint";
+import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem } from "pages/home.slint";
+export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem }
 
 component Header inherits Rectangle {
     in property <LayoutMode> layout-mode;
@@ -47,30 +18,50 @@ component Header inherits Rectangle {
     in property <length> top-margin;
 
     background: Theme.header;
-    HorizontalLayout {
+    VerticalLayout {
         padding-top: root.top-margin + Theme.space;
         padding-bottom: Theme.space;
         padding-left: root.left-margin;
         padding-right: root.right-margin;
-        spacing: Theme.space-medium;
-        if !Navigation.home: VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 0;
-            HeaderButton {
-                label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
-                arrow-only: root.layout-mode == LayoutMode.narrow;
-                clicked => { Navigation.go-back(); }
+        spacing: Theme.space;
+        HorizontalLayout {
+            spacing: Theme.space-medium;
+            if !Navigation.home: VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                HeaderButton {
+                    label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
+                    arrow-only: root.layout-mode == LayoutMode.narrow;
+                    clicked => { Navigation.go-back(); }
+                }
+            }
+            if Navigation.home: VerticalLayout {
+                alignment: center;
+                min-height: Theme.zone;
+                Image {
+                    source: @image-url("logo/logo.png");
+                    height: Theme.logo-height;
+                    image-fit: contain;
+                    horizontal-alignment: left;
+                }
+            }
+            if !Navigation.home: Text {
+                horizontal-stretch: 1;
+                min-height: Theme.zone;
+                text: Navigation.header-title;
+                color: Theme.header-text;
+                font-size: Theme.text-screen-title;
+                font-weight: Theme.weight-screen-title;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+            if Navigation.home && root.layout-mode != LayoutMode.narrow: HomeIndicators {
+                horizontal-stretch: 1;
+                layout-mode: root.layout-mode;
             }
         }
-        Text {
-            horizontal-stretch: 1;
-            min-height: Theme.zone;
-            text: Navigation.header-title;
-            color: Theme.header-text;
-            font-size: Theme.text-screen-title;
-            font-weight: Theme.weight-screen-title;
-            vertical-alignment: center;
-            wrap: word-wrap;
+        if Navigation.home && root.layout-mode == LayoutMode.narrow: HomeIndicators {
+            layout-mode: root.layout-mode;
         }
     }
 }
@@ -82,103 +73,28 @@ component SectionTitle inherits Text {
     wrap: word-wrap;
 }
 
-component EventsSection {
-    in property <length> card-margin;
-
-    VerticalLayout {
-        alignment: start;
-        spacing: Theme.space-medium;
-        SectionTitle { text: "Événements"; }
-        for event[i] in Navigation.events: Card {
-            title: event.name;
-            margin: root.card-margin;
-            Text {
-                text: event.detail;
-                color: Theme.text-secondary;
-                font-size: Theme.text-body;
-                wrap: word-wrap;
-            }
-            HorizontalLayout {
-                alignment: start;
-                PrimaryButton {
-                    label: "Ouvrir l'événement";
-                    clicked => { Navigation.open-event(i); }
-                }
-            }
-        }
-    }
-}
-
-component ClubSection {
-    in property <length> card-margin;
-
-    VerticalLayout {
-        alignment: start;
-        spacing: Theme.space-medium;
-        SectionTitle { text: "Le club"; }
-        for page[i] in Navigation.club-pages: Card {
-            title: page;
-            margin: root.card-margin;
-            HorizontalLayout {
-                alignment: start;
-                SecondaryButton {
-                    label: "Ouvrir";
-                    clicked => { Navigation.open-club-page(i); }
-                }
-            }
-        }
-    }
-}
-
-// Two columns when wide, one otherwise (01-accueil.png).
-component HomePage {
-    in property <LayoutMode> layout-mode;
-    in property <length> card-margin;
-
-    // A layout around the two `if`: without it, Slint does not pass the height up
-    // and the page cannot scroll.
-    VerticalLayout {
-        if root.layout-mode == LayoutMode.wide: HorizontalLayout {
-            spacing: Theme.margin;
-            EventsSection {
-                horizontal-stretch: 1;
-                card-margin: root.card-margin;
-            }
-            ClubSection {
-                horizontal-stretch: 0;
-                width: Theme.club-column-width;
-                card-margin: root.card-margin;
-            }
-        }
-        if root.layout-mode != LayoutMode.wide: VerticalLayout {
-            spacing: Theme.margin;
-            EventsSection { card-margin: root.card-margin; }
-            ClubSection { card-margin: root.card-margin; }
-        }
-    }
-}
-
 component Page {
     in property <LayoutMode> layout-mode;
     in property <length> left-margin;
     in property <length> right-margin;
     in property <length> bottom-margin;
 
-    // The home page stays centered on large windows (01-accueil.png).
-    property <length> home-inset: Navigation.home ? max(0px, (root.width - Theme.home-max-width) / 2) : 0px;
-
     scroller := Flickable {
         content := VerticalLayout {
             width: scroller.width;
             alignment: start;
-            padding-top: Theme.space-medium;
-            padding-left: max(root.left-margin, root.home-inset);
-            padding-right: max(root.right-margin, root.home-inset);
             padding-bottom: root.bottom-margin + Theme.space-medium;
-            if !Navigation.home: SectionTitle { text: Navigation.page-title; }
+            if !Navigation.home: VerticalLayout {
+                padding-top: Theme.space-medium;
+                padding-left: root.left-margin;
+                padding-right: root.right-margin;
+                SectionTitle { text: Navigation.page-title; }
+            }
             if Navigation.home: HomePage {
                 layout-mode: root.layout-mode;
-                card-margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.card-margin;
+                available-width: scroller.width;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
             }
         }
         content-height: max(self.height, content.preferred-height);
@@ -209,6 +125,12 @@ component DemoRow {
     }
 }
 
+component DemoLabel inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-label;
+    font-weight: Theme.weight-regular;
+}
+
 component DemoPanel {
     in property <string> layout-name;
     in property <length> window-width;
@@ -217,6 +139,13 @@ component DemoPanel {
         title: "Démo";
         margin: Theme.space-medium;
         drop-shadow-blur: Theme.demo-shadow;
+        DemoLabel { text: "Données de test"; }
+        Tabs {
+            tabs: Demo.test-data-options;
+            active: Demo.active-test-data;
+            clicked(i) => { Demo.select-test-data(i); }
+        }
+        DemoLabel { text: "Appareil"; }
         Tabs {
             tabs: Demo.devices;
             active: Demo.active-device;
@@ -239,6 +168,7 @@ component DemoPanel {
 
 export component App inherits Window {
     title: "Chron'O — maquette";
+    icon: @image-url("logo/app-icon.png");
     preferred-width: Theme.window-width;
     preferred-height: Theme.window-height;
     min-width: Theme.window-min-width;

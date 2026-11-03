@@ -1,7 +1,9 @@
 # Chron'O — interface mockup
 
 Interface mockup of Chron'O (orienteering timing software, SportIdent), in Rust and [Slint](https://slint.dev).
-**Discussion support, not a specification.** All names, clubs and card numbers are invented.
+**Discussion support, not a specification.**
+
+The app shows no made-up data by default: it is empty until you turn on the test data generator (**Démo** button, then *Données de test*). The generator stands in for connected devices and real events; all its names, clubs and card numbers are invented.
 
 - **Web version**: https://chron-o.github.io/maquette/
 - **Frozen HTML prototype** (in `html/`): https://chron-o.github.io/maquette/html/
@@ -16,7 +18,7 @@ Install [Rust](https://rustup.rs), then:
 cargo run
 ```
 
-The layout follows the window width (narrow under 600 px, medium up to 1000 px, wide above) and the theme follows the system. On-screen text is in French. The **Démo** button forces touch or mouse sizes.
+The layout follows the window width (narrow under 600 px, medium up to 1000 px, wide above) and the theme follows the system. On-screen text is in French. The **Démo** button also forces touch or mouse sizes.
 
 ## Other targets
 
@@ -40,16 +42,16 @@ To run on a real device, first create `ios/Local.xcconfig` with `DEVELOPMENT_TEA
 
 ## Captures
 
-Saves a screen's 8 captures (4 formats, light and dark) in `captures/`, on macOS:
+Saves a screen's 8 captures (4 formats, light and dark) in `captures/`, on macOS. With `CAPTURE_TEST_DATA`, the test data comes from a fixed seed:
 
 ```bash
-scripts/captures.sh 00-event tab 1
+CAPTURE_TEST_DATA=1 scripts/captures.sh 01-home-test-data
 ```
 
 ## Layout of the code
 
-- `src/`: state and data (Rust). Made-up data lives in `src/data/`.
-- `ui/`: what is displayed (Slint). Every design value comes from `ui/theme.slint`.
+- `src/`: state (Rust). The test data generator is `src/test_data.rs`.
+- `ui/`: what is displayed (Slint). Every design value comes from `ui/theme.slint`. The logo is in `ui/logo/`, the map illustration in `ui/map/`.
 - `references/`: visual charter and captures of the HTML prototype.
 
 ## License

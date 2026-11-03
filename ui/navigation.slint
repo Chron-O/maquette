@@ -1,0 +1,29 @@
+import { TabItem } from "components/tabs.slint";
+
+// What Rust gives to the shell, and the clicks it gets back.
+export global Navigation {
+    in property <bool> home;
+    in property <bool> in-event;
+    in property <string> header-title;
+    in property <string> back-label;
+    in property <string> page-title;
+    in property <[TabItem]> tabs;
+    in property <int> active-tab;
+    callback open-event(int);
+    callback open-direct();
+    callback open-club-page(int);
+    callback select-tab(int);
+    callback go-back();
+}
+
+// The demo panel: touch or mouse sizes, and the test data generator.
+export global Demo {
+    in property <[TabItem]> devices;
+    in property <int> active-device;
+    in property <[TabItem]> test-data-options;
+    in property <int> active-test-data;
+    callback select-device(int);
+    callback select-test-data(int);
+}
+
+export enum LayoutMode { narrow, medium, wide }

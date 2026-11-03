@@ -37,7 +37,7 @@ export component StatusBadge inherits Rectangle {
                 size: Theme.badge-dot;
                 tone: status.state.badge-text;
             }
-            if !status.dot: Image {
+            if !status.dot && status.icon.width > 0: Image {
                 source: status.icon;
                 colorize: status.state.badge-text;
                 width: Theme.badge-icon;
@@ -74,7 +74,7 @@ export component StatusBlock inherits Rectangle {
                     size: Theme.block-dot;
                     tone: status.state.block-text;
                 }
-                if !status.dot: Image {
+                if !status.dot && status.icon.width > 0: Image {
                     source: status.icon;
                     colorize: status.state.block-text;
                     width: Theme.block-icon;

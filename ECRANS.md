@@ -6,7 +6,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | # | Écran | Statut |
 |---|---|---|
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
-| 1 | Accueil | à faire |
+| 1 | Accueil | à valider par Robin |
 | 2 | Course › Circuits | à faire |
 | 3 | Course › Participants | à faire |
 | 4 | Course › Départs | à faire |
@@ -25,6 +25,24 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - Action GitHub qui construit la version web et la publie sur GitHub Pages.
 - Captures automatiques (8 par écran).
 - **Réussi si** : la coquille tourne sur Mac, sur iPhone et dans le navigateur ; la navigation est identique partout ; aucune valeur de design en dur.
+
+## 1 — Accueil
+- En-tête : logo officiel, sans nom de club ; les 3 indicateurs (version courte sous 1000 px). Pour l'instant sur l'Accueil seulement.
+- Sans générateur : app vide. Pas de grande carte ni de Direct, « Aucun événement », club à 0, indicateurs « aucun ».
+- Générateur (panneau Démo, Données de test : Marche) : événements, chiffres du club, lecteurs, et une lecture toutes les 3 s dans le Direct. Arrêt : tout s'efface.
+- Captures : `01-home-*` (vide) et `01-home-test-data-*` (tirage fixe).
+
+### Écarts et points ouverts de l'écran 1
+- **Logo** : `ui/logo/logo.png` vient du PNG validé de chrono-swift, fond rendu transparent. Instrument Sans n'étant pas installée, ce PNG a été rendu avec une police de secours, pas celle prévue. À trancher par Robin.
+- **Bouton orange** : un seul (« Ouvrir l'événement »), comme la charte. Le prototype en a deux.
+- **Pastilles** : icône ajoutée (`check`, `triangle-alert`), absente du prototype. Les grises restent sans icône : aucune ne convient dans la charte.
+- **Tailles hors échelle de la charte** : 34 (nom d'événement, chiffres du club), 28 (compteurs), 24 (date), reprises de `01-accueil.png`.
+- **Rayon** : 16 comme la charte, sur la carte blanche et le Direct (20 dans le prototype).
+- **Carte en sombre** : gardée claire, comme une carte papier. Ses couleurs sont dans `ui/map/hero-map.svg`, c'est une illustration.
+- **Disposition moyenne** : absente du prototype, proposée ici. Carte blanche et Direct côte à côte dès 760 px.
+- **Téléphone** : Direct sous la carte blanche, sans le chevauchement du prototype.
+- **« 2 à traiter ›** ouvre l'onglet Direct ; le prototype ouvre un tiroir, qui n'existe pas ici (voir écran 6).
+- **Sans effet pour l'instant** : Rejoindre, Nouvel événement, Voir tous, indicateurs.
 
 ### Validations de Robin
 - Vrai iPhone et Mac : Robin confirme le 03/11 que tout fonctionne partout sur la version corrigée, sauf la flèche de retour sur téléphone (trop petite, pas centrée). Flèche corrigée ensuite. Étape 0 validée par Robin le 03/11.

@@ -1,11 +1,12 @@
 import { Theme } from "../theme.slint";
 
-// Header indicator: icon, dot, text, in an outlined pill.
+// Header indicator: icon, dot and text, in an outlined pill. Dot and text are optional.
 // `attention`: yellow outline and dot (08-direct.png).
 export component Indicator inherits Rectangle {
     in property <image> icon;
     in property <string> text;
     in property <bool> attention: false;
+    in property <bool> has-dot: true;
 
     height: Theme.indicator-height;
     border-radius: self.height / 2;
@@ -25,7 +26,7 @@ export component Indicator inherits Rectangle {
                 height: Theme.indicator-icon;
             }
         }
-        VerticalLayout {
+        if root.has-dot: VerticalLayout {
             alignment: center;
             Rectangle {
                 width: Theme.indicator-dot;
@@ -34,7 +35,7 @@ export component Indicator inherits Rectangle {
                 background: root.attention ? Theme.attention : Theme.live;
             }
         }
-        Text {
+        if root.text != "": Text {
             text: root.text;
             color: Theme.header-text;
             font-size: Theme.text-help;

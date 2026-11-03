@@ -3,6 +3,7 @@
 #
 #   scripts/captures.sh NAME [club|tab] [INDEX]
 #   scripts/captures.sh 00-event tab 1
+#   CAPTURE_TEST_DATA=1 scripts/captures.sh 01-home-test-data
 #
 # macOS limits a window to the screen height. With this scale factor, the tallest
 # format (1180 px) still fits on the screen.

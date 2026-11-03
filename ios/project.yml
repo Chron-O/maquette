@@ -33,7 +33,10 @@ targets:
             UIWindowSceneSessionRoleApplication:
               - UISceneConfigurationName: Slint
                 UISceneDelegateClassName: SlintWindowSceneDelegate
-    sources: []
+    sources:
+      - Assets.xcassets
+    settings:
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     postCompileScripts:
       - script: |
           ./build_for_ios_with_cargo.bash maquette
