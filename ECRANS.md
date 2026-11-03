@@ -5,7 +5,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 
 | # | Écran | Statut |
 |---|---|---|
-| 0 | Mise en place (dépôt, projet, publication web) | à valider par Robin |
+| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
 | 1 | Accueil | à faire |
 | 2 | Course › Circuits | à faire |
 | 3 | Course › Participants | à faire |
@@ -27,7 +27,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Réussi si** : la coquille tourne sur Mac, sur iPhone et dans le navigateur ; la navigation est identique partout ; aucune valeur de design en dur.
 
 ### Validations de Robin
-- Vrai iPhone et Mac : Robin confirme le 03/11 que tout fonctionne partout sur la version corrigée, sauf la flèche de retour sur téléphone (trop petite, pas centrée). Flèche corrigée ensuite, à revoir par Robin.
+- Vrai iPhone et Mac : Robin confirme le 03/11 que tout fonctionne partout sur la version corrigée, sauf la flèche de retour sur téléphone (trop petite, pas centrée). Flèche corrigée ensuite. Étape 0 validée par Robin le 03/11.
 - iPhone en portrait seulement : accepté.
 - Noms du code en anglais : décidé.
 
