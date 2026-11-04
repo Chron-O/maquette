@@ -37,6 +37,7 @@ export struct SequenceStop {
 }
 
 export struct CourseLine {
+    ordered: bool,
     name: string,
     tone: int,
     count: string,
@@ -54,6 +55,7 @@ export struct MapMarker {
 }
 
 export struct DetailCourse {
+    ordered: bool,
     name: string,
     tone: int,
     rank: string,
@@ -63,6 +65,9 @@ export struct DetailCourse {
 
 export struct CourseStop {
     code: string,
+    mandatory: bool,
+    points: string,
+    label: string,      // what the list says: its rank, or its points
     selected: bool,
     others: [int],      // the other courses going through it, when they are shown
 }
@@ -75,6 +80,7 @@ export struct ReserveItem {
 
 export struct CourseMarker {
     code: string,
+    mandatory: bool,
     x: float,
     y: float,
     in-course: bool,
@@ -82,7 +88,7 @@ export struct CourseMarker {
 }
 
 export struct LegendItem {
-    kind: int,          // 0 start, 1 finish, 2 control, 3 control outside the course, 4 other course
+    kind: int,          // 0 start, 1 finish, 2 control, 3 control outside the course, 4 other course, 5 mandatory
     label: string,
 }
 
@@ -94,6 +100,11 @@ export global Courses {
     in property <string> course-name;
     in property <[string]> course-chips;
     in property <string> course-categories;
+    in property <bool> course-ordered: true;
+    in property <bool> course-scored;
+    in property <string> free-title;
+    in property <string> stop-points;
+    in property <bool> stop-mandatory;
     in property <[TabItem]> course-views;
     in property <[TabItem]> course-views-narrow;
     in property <int> active-course-view;
@@ -226,19 +237,19 @@ component RankDot {
 
     width: Theme.rank-size;
     height: Theme.rank-size;
-    if root.rank > 0: Rectangle {
+    if root.rank != 0: Rectangle {
         border-radius: self.width / 2;
         border-width: Theme.tag-outline;
         border-color: Courses.tone-color(root.tone);
         background: Theme.tag-background;
         Text {
-            text: root.rank;
+            text: root.rank > 0 ? root.rank : "";
             color: Theme.rank-text;
             font-size: Theme.text-help;
             font-weight: Theme.weight-screen-title;
         }
     }
-    if root.rank <= 0: Rectangle {
+    if root.rank == 0: Rectangle {
         width: Theme.no-rank-dot;
         height: Theme.no-rank-dot;
         border-radius: self.width / 2;
@@ -777,7 +788,7 @@ component ControlsList {
                         spacing: Theme.space-small;
                         for rank[i] in entry.ranks: VerticalLayout {
                             alignment: center;
-                            if rank > 0: RankDot {
+                            if rank != 0: RankDot {
                                 rank: rank;
                                 tone: Courses.columns[i].tone;
                             }
@@ -798,6 +809,7 @@ component ControlsList {
 // The stops of a course, going to the next row instead of scrolling sideways.
 component StopsFlow {
     in property <[SequenceStop]> stops;
+    in property <bool> ordered;
     in property <int> tone;
 
     property <length> step: Theme.tag-min-width + Theme.sequence-link;
@@ -810,7 +822,7 @@ component StopsFlow {
         y: floor(i / root.per-row) * root.row-height;
         width: Theme.tag-min-width;
         height: root.row-height - Theme.space;
-        if mod(i, root.per-row) > 0: Rectangle {
+        if root.ordered && mod(i, root.per-row) > 0: Rectangle {
             x: -Theme.sequence-link;
             y: (Theme.rank-size - Theme.map-trace) / 2;
             width: Theme.sequence-link;
@@ -875,6 +887,7 @@ component ControlsLines {
             }
             StopsFlow {
                 stops: line.stops;
+                ordered: line.ordered;
                 tone: line.tone;
             }
         }
@@ -1051,7 +1064,7 @@ export component ControlDetail inherits Rectangle {
                 wrap: word-wrap;
             }
             SmallText { text: course.rank; wrap: no-wrap; vertical-alignment: center; }
-            HorizontalLayout {
+            if course.ordered: HorizontalLayout {
                 spacing: Theme.space-small;
                 ControlTag { code: course.before; }
                 ControlTag { code: Courses.detail-code; selected: true; }
@@ -1297,19 +1310,22 @@ component StationDot {
     in property <string> code;
     in property <bool> in-course: true;
     in property <bool> filled;      // in the reserve: pale when in the course
+    in property <bool> mandatory;
     in property <bool> selected;
     in property <length> size: Theme.station-size;
+
+    property <color> ink: root.mandatory ? Theme.mandatory-blue : Theme.purple;
 
     width: root.size;
     height: root.size;
     Rectangle {
         border-radius: self.width / 2;
         border-width: root.in-course ? Theme.tag-outline : Theme.thin-outline-width;
-        border-color: root.in-course ? Theme.purple : Theme.tag-unused;
-        background: root.selected ? Theme.purple : root.filled ? Theme.tag-selected-background : Theme.tag-background;
+        border-color: root.in-course ? root.ink : Theme.tag-unused;
+        background: root.selected ? root.ink : root.filled ? Theme.tag-selected-background : Theme.tag-background;
         Text {
             text: root.code;
-            color: root.selected ? Theme.tag-background : root.in-course ? Theme.purple : Theme.tag-unused;
+            color: root.selected ? Theme.tag-background : root.in-course ? root.ink : Theme.tag-unused;
             font-size: Theme.text-help;
             font-weight: Theme.weight-screen-title;
         }
@@ -1380,12 +1396,13 @@ component StopsList {
                         alignment: center;
                         StationDot {
                             code: stop.code;
+                            mandatory: stop.mandatory;
                             selected: stop.selected;
                             clicked => { Courses.select-stop(i); }
                         }
                     }
                     Text {
-                        text: i + 1 == 1 ? "1er" : (i + 1) + "e";
+                        text: stop.label;
                         color: Theme.text-secondary;
                         font-size: Theme.text-help;
                         vertical-alignment: center;
@@ -1485,6 +1502,78 @@ component MetroLine {
     }
 }
 
+component FreeMetroLink {
+    in property <int> tone;
+
+    height: Theme.space-medium;
+    Rectangle {
+        x: (Theme.station-size - self.width) / 2;
+        width: Theme.metro-trace;
+        height: 100%;
+        background: Courses.tone-color(root.tone);
+    }
+}
+
+component FreeStops {
+    property <length> marks-height: Courses.show-others ? Theme.course-chip + Theme.space-small : 0px;
+    property <length> cell-height: Theme.station-size + (Courses.course-scored ? Theme.text-help + Theme.space : 0px) + root.marks-height + Theme.space;
+    property <int> per-row: max(1, floor(root.width / Theme.free-cell-width));
+
+    height: ceil(Courses.stops.length / root.per-row) * root.cell-height;
+    for stop[i] in Courses.stops: VerticalLayout {
+        x: mod(i, root.per-row) * Theme.free-cell-width;
+        y: floor(i / root.per-row) * root.cell-height;
+        width: Theme.free-cell-width;
+        spacing: Theme.space-small;
+        alignment: start;
+        HorizontalLayout {
+            alignment: center;
+            StationDot {
+                code: stop.code;
+                mandatory: stop.mandatory;
+                selected: stop.selected;
+                clicked => { Courses.select-stop(i); }
+            }
+        }
+        if Courses.course-scored: Text {
+            text: stop.points;
+            color: Theme.free-zone-text;
+            font-size: Theme.text-help;
+            horizontal-alignment: center;
+        }
+        if Courses.show-others: OtherMarks { tones: stop.others; }
+    }
+}
+
+// Without an order: the controls in a zone between start and finish, with no line between them.
+component FreeMetro {
+    in property <int> tone;
+
+    VerticalLayout {
+        spacing: 0;
+        HorizontalLayout { alignment: start; EndIcon { source: Icons.co-start; } }
+        FreeMetroLink { tone: root.tone; }
+        Rectangle {
+            background: Theme.tag-selected-background;
+            border-radius: Theme.field-radius;
+            VerticalLayout {
+                padding: Theme.space;
+                spacing: Theme.space;
+                Text {
+                    text: Courses.free-title;
+                    color: Theme.free-zone-text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-block-title;
+                    wrap: word-wrap;
+                }
+                FreeStops { }
+            }
+        }
+        FreeMetroLink { tone: root.tone; }
+        HorizontalLayout { alignment: start; EndIcon { source: Icons.co-finish; } }
+    }
+}
+
 component CourseMap inherits Rectangle {
     clip: true;
     height: self.width * 0.6;
@@ -1506,7 +1595,7 @@ component CourseMap inherits Rectangle {
         stroke-width: Theme.map-trace;
         opacity: Theme.others-opacity;
     }
-    Path {
+    if Courses.course-trace != "": Path {
         width: 100%;
         height: 100%;
         viewbox-width: 600;
@@ -1522,6 +1611,7 @@ component CourseMap inherits Rectangle {
         size: Theme.map-marker;
         code: marker.code;
         in-course: marker.in-course;
+        mandatory: marker.mandatory;
         selected: marker.selected;
         clicked => { Courses.select-reserve(marker.code); }
     }
@@ -1538,6 +1628,12 @@ component LegendMark {
         border-radius: self.width / 2;
         border-width: root.kind == 2 ? Theme.tag-outline : Theme.thin-outline-width;
         border-color: root.kind == 2 ? Theme.purple : Theme.tag-unused;
+    }
+    if root.kind == 5: Rectangle {
+        border-radius: self.width / 2;
+        border-width: Theme.tag-outline;
+        border-color: Theme.mandatory-blue;
+        background: Theme.tag-background;
     }
     if root.kind == 4: Rectangle {
         width: Theme.course-chip;
@@ -1659,7 +1755,8 @@ component CourseBody {
                 StopsList { }
             }
         }
-        if Courses.active-course-view == 1: MetroLine { tone: root.tone; }
+        if Courses.active-course-view == 1 && Courses.course-ordered: MetroLine { tone: root.tone; }
+        if Courses.active-course-view == 1 && !Courses.course-ordered: FreeMetro { tone: root.tone; }
         if Courses.active-course-view == 2: CourseMap { }
         Legend { }
         if Courses.active-course-view != 2: Reserve { }
@@ -1808,7 +1905,7 @@ export component StopDetail inherits Rectangle {
                 }
             }
         }
-        HorizontalLayout {
+        if Courses.course-ordered: HorizontalLayout {
             alignment: start;
             StationDot { code: Courses.stop-before; }
             VerticalLayout {
@@ -1830,7 +1927,7 @@ export component StopDetail inherits Rectangle {
             }
             StationDot { code: Courses.stop-after; }
         }
-        HorizontalLayout {
+        if Courses.course-ordered: HorizontalLayout {
             spacing: Theme.space;
             VerticalLayout {
                 alignment: center;
@@ -1839,6 +1936,35 @@ export component StopDetail inherits Rectangle {
             SmallText {
                 horizontal-stretch: 1;
                 text: Courses.stop-section;
+                vertical-alignment: center;
+            }
+        }
+        if Courses.course-scored: HorizontalLayout {
+            spacing: Theme.space;
+            Text {
+                horizontal-stretch: 1;
+                text: "Valeur";
+                color: Theme.text;
+                font-size: Theme.text-help;
+                vertical-alignment: center;
+            }
+            Text {
+                text: Courses.stop-points;
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+        }
+        if Courses.course-scored: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                Switch { on: Courses.stop-mandatory; }
+            }
+            SmallText {
+                horizontal-stretch: 1;
+                text: "Obligatoire (manquant = PM)";
                 vertical-alignment: center;
             }
         }
@@ -2056,7 +2182,7 @@ component CourseBubble {
             BubbleLabel { horizontal-stretch: 1; text: "Type"; }
             Tabs {
                 tabs: [{ label: "Classique" }, { label: "Score" }];
-                active: 0;
+                active: Courses.course-scored ? 1 : 0;
             }
         }
         HorizontalLayout {
@@ -2064,7 +2190,7 @@ component CourseBubble {
             BubbleLabel { horizontal-stretch: 1; text: "Ordre"; }
             Tabs {
                 tabs: [{ label: "Imposé" }, { label: "Libre" }];
-                active: 0;
+                active: Courses.course-ordered ? 0 : 1;
             }
         }
         HorizontalLayout {

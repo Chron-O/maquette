@@ -1,7 +1,7 @@
 // The Circuits tab: what is chosen, and the rows it shows.
 // Everything is display only for now: nothing here changes a course.
 
-use crate::test_data::{Control, Course, Event, FINISH, START};
+use crate::test_data::{Control, Course, Event, FINISH, Format, START};
 use crate::{
     App, ColumnTitle, ControlRow, CourseItem, CourseLine, CourseMarker, CourseStop, Courses, DetailCourse, LegendItem, MapMarker, ReserveItem,
     SequenceStop, TabItem, model,
@@ -66,12 +66,25 @@ fn plural(count: usize, noun: &str) -> String {
     format!("{count} {noun}{}", if count > 1 { "s" } else { "" })
 }
 
+fn rank_text(n: usize) -> String {
+    format!("{}{}", n + 1, if n == 0 { "er" } else { "e" })
+}
+
 fn word(label: &str) -> TabItem {
     TabItem { label: label.into(), icon: Default::default() }
 }
 
 fn rank_in(course: &Course, code: u32) -> i32 {
     course.controls.iter().position(|c| *c == code).map_or(0, |i| i as i32 + 1)
+}
+
+// What the table shows for a control: its rank, or -1 when the course has no order.
+fn shown_rank(course: &Course, code: u32) -> i32 {
+    match rank_in(course, code) {
+        0 => 0,
+        _ if course.format != Format::Imposed => -1,
+        rank => rank,
+    }
 }
 
 fn usage_count(event: &Event, code: u32) -> usize {
@@ -82,7 +95,11 @@ fn position(event: &Event, code: u32) -> Option<Control> {
     event.controls.iter().find(|c| c.code == code).copied()
 }
 
+// A course without an order has no line between its controls.
 fn trace(event: &Event, course: &Course) -> String {
+    if course.format != Format::Imposed {
+        return String::new();
+    }
     let mut commands = format!("M{} {}", START.0, START.1);
     for code in &course.controls {
         if let Some(control) = position(event, *code) {
@@ -295,7 +312,7 @@ impl CoursesState {
                         unused: uses == 0,
                         shared: uses > 1,
                         selected: self.control == Some(code),
-                        ranks: model(event.courses.iter().map(|c| rank_in(c, code)).collect()),
+                        ranks: model(event.courses.iter().map(|c| shown_rank(c, code)).collect()),
                         usage: if uses == 0 { "Dans aucun circuit".into() } else { plural(uses, "circuit").into() },
                         usage_short: if uses == 0 { "aucun".into() } else { format!("{uses} circ.").into() },
                     }
@@ -316,13 +333,14 @@ impl CoursesState {
                         tone: i as i32,
                         count: plural(c.controls.len(), "poste").into(),
                         dimmed: missing || (self.highlight > 0 && self.highlight - 1 != i),
+                        ordered: c.format == Format::Imposed,
                         stops: model(
                             c.controls
                                 .iter()
                                 .enumerate()
                                 .map(|(n, code)| SequenceStop {
                                     code: code.to_string().into(),
-                                    rank: n as i32 + 1,
+                                    rank: if c.format == Format::Imposed { n as i32 + 1 } else { -1 },
                                     selected: self.control == Some(*code),
                                 })
                                 .collect(),
@@ -347,7 +365,9 @@ impl CoursesState {
             })
             .map(|(_, c)| c)
             .collect();
-        courses.set_traces(model(traced.iter().map(|c| SharedString::from(trace(event, c))).collect()));
+        courses.set_traces(model(
+            traced.iter().map(|c| trace(event, c)).filter(|t| !t.is_empty()).map(SharedString::from).collect(),
+        ));
         courses.set_markers(model(
             event
                 .controls
@@ -387,10 +407,12 @@ impl CoursesState {
                     .iter()
                     .map(|(tone, c)| {
                         let n = c.controls.iter().position(|x| *x == code).unwrap_or(0);
+                        let ordered = c.format == Format::Imposed;
                         DetailCourse {
                             name: c.name.clone().into(),
                             tone: *tone as i32,
-                            rank: format!("{}{}", n + 1, if n == 0 { "er" } else { "e" }).into(),
+                            ordered,
+                            rank: if ordered { rank_text(n).into() } else { "libre".into() },
                             before: if n == 0 { "D".into() } else { c.controls[n - 1].to_string().into() },
                             after: c.controls.get(n + 1).map_or("A".into(), |x| x.to_string().into()),
                         }
@@ -405,7 +427,20 @@ impl CoursesState {
     fn show_course(&self, courses: &Courses<'_>, event: &Event, course: &Course, index: usize) {
         courses.set_course_name(course.name.as_str().into());
         courses.set_course_categories(course.categories.into());
-        courses.set_course_chips(model(vec![course.categories.into(), course.distance.as_str().into(), "Ordre imposé".into()]));
+        let ordered = course.format == Format::Imposed;
+        let scored = course.format == Format::Score;
+        let mandatory = course.mandatory.iter().filter(|m| **m).count();
+        let format_label = match course.format {
+            Format::Imposed => "Ordre imposé".to_string(),
+            Format::Free => "Ordre libre".to_string(),
+            Format::Score => format!("Score · {}", plural(mandatory, "obligatoire")),
+        };
+        courses.set_course_chips(model(vec![course.categories.into(), course.distance.as_str().into(), format_label.as_str().into()]));
+        courses.set_course_ordered(ordered);
+        courses.set_course_scored(scored);
+        courses.set_free_title(
+            if scored { format!("Ordre libre · au score · {}", plural(mandatory, "obligatoire")) } else { "Ordre libre".to_string() }.into(),
+        );
         courses.set_course_views(model(COURSE_VIEWS.iter().map(|v| word(v)).collect()));
         courses.set_course_views_narrow(model(COURSE_VIEWS_NARROW.iter().map(|v| word(v)).collect()));
         courses.set_active_course_view(self.course_view as i32);
@@ -419,6 +454,14 @@ impl CoursesState {
                 .enumerate()
                 .map(|(n, code)| CourseStop {
                     code: code.to_string().into(),
+                    mandatory: course.mandatory[n],
+                    points: if scored { format!("{} pts", course.points[n]).into() } else { SharedString::new() },
+                    label: match course.format {
+                        Format::Imposed => rank_text(n).into(),
+                        Format::Free => SharedString::new(),
+                        Format::Score if course.mandatory[n] => format!("{} pts · obligatoire", course.points[n]).into(),
+                        Format::Score => format!("{} pts", course.points[n]).into(),
+                    },
                     selected: self.stop == Some(n),
                     others: model(
                         event
@@ -465,6 +508,7 @@ impl CoursesState {
                     x: c.x / MAP_WIDTH,
                     y: c.y / MAP_HEIGHT,
                     in_course: course.controls.contains(&c.code),
+                    mandatory: course.controls.iter().position(|x| *x == c.code).is_some_and(|n| course.mandatory[n]),
                     selected: selected == Some(c.code),
                 })
                 .collect(),
@@ -475,17 +519,28 @@ impl CoursesState {
         courses.set_finish_y(FINISH.1 / MAP_HEIGHT);
 
         let mut legend = vec![(0, "Départ"), (1, "Arrivée"), (2, "Poste du circuit"), (3, "Poste hors circuit")];
+        if mandatory > 0 {
+            legend.push((5, "Poste obligatoire"));
+        }
         if self.show_others {
             legend.push((4, if self.course_view == GEOGRAPHIC_VIEW { "Tracé d'un autre circuit" } else { "Dans un autre circuit" }));
         }
         courses.set_legend(model(legend.into_iter().map(|(kind, label)| LegendItem { kind, label: label.into() }).collect()));
 
         if let (Some(n), Some(code)) = (self.stop, selected) {
+            courses.set_stop_points(format!("{} pts", course.points[n]).into());
+            courses.set_stop_mandatory(course.mandatory[n]);
             let before = if n == 0 { "D".to_string() } else { course.controls[n - 1].to_string() };
             let after = course.controls.get(n + 1).map_or("A".to_string(), u32::to_string);
-            let rank = format!("{}{}", n + 1, if n == 0 { "er" } else { "e" });
             courses.set_stop_code(code.to_string().into());
-            courses.set_stop_subtitle(format!("{} · {rank} sur {}", course.name, course.controls.len()).into());
+            courses.set_stop_subtitle(
+                if ordered {
+                    format!("{} · {} sur {}", course.name, rank_text(n), course.controls.len())
+                } else {
+                    format!("{} · ordre libre", course.name)
+                }
+                .into(),
+            );
             courses.set_stop_before(before.into());
             courses.set_stop_after(after.as_str().into());
             courses.set_stop_section(format!("Tronçon {code} → {after} non compté pour ce circuit").into());

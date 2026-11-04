@@ -26,8 +26,18 @@ impl Label {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Format {
+    Imposed,
+    Free,
+    Score,
+}
+
 pub struct Course {
     pub name: String,
+    pub format: Format,
+    pub points: Vec<u32>,       // one per control, for a score course
+    pub mandatory: Vec<bool>,   // one per control, for a score course
     pub categories: &'static str,
     pub distance: String,
     pub entrants: u32,
@@ -204,9 +214,24 @@ fn new_courses(random: &mut Random, count: u32, controls: &[Control]) -> Vec<Cou
             while chosen.len() < length && !pool.is_empty() {
                 chosen.push(pool.remove(random.below(pool.len() as u32) as usize));
             }
+            // The last courses show the other formats. Their controls go by code: no order to follow.
+            let format = match count as usize - i {
+                1 => Format::Score,
+                2 => Format::Free,
+                _ => Format::Imposed,
+            };
+            if format != Format::Imposed {
+                chosen.sort_unstable();
+            }
+            let score = format == Format::Score;
+            let points = chosen.iter().map(|_| if score { random.between(1, 3) * 10 } else { 0 }).collect();
+            let mandatory = chosen.iter().map(|_| score && random.below(4) == 0).collect();
             let kilometers = random.between(20, 75);
             Course {
                 name: COURSE_NAMES[i].into(),
+                format,
+                points,
+                mandatory,
                 categories: CATEGORIES[i],
                 distance: format!("{},{} km · {} m D+", kilometers / 10, kilometers % 10, random.between(4, 22) * 10),
                 entrants: random.between(10, 80),
