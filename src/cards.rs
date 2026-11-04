@@ -266,6 +266,6 @@ impl CardsState {
     }
 }
 
-fn plural(count: usize, noun: &str) -> String {
+pub fn plural(count: usize, noun: &str) -> String {
     format!("{count} {noun}{}", if count > 1 { "s" } else { "" })
 }

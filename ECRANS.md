@@ -14,7 +14,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 6 | Course › Direct | validé par Robin ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
 | 7 | Course › Résultats | validé par Robin ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
 | 8 | Puces (stock de prêt) | validé par Robin ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
-| 9 | Boîtiers (inventaire du club) | à faire |
+| 9 | Boîtiers (inventaire du club) | validé par Robin ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
 | 10 | Coureurs et clubs (base fédérale) | à faire |
 
 ## 0 — Mise en place
@@ -183,6 +183,27 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Date de pile** : seulement pour les SI-Card 10, 11 et SIAC ; les SI-Card 8 et 9 sont supposées sans pile à changer, à confirmer.
 - **Autres événements** : les puces prêtées des événements à venir et passés sont retirées, sauf 1 à 3 non rendues sur des événements passés.
 - **Non testé** : recherche et loupe du téléphone, Perdue…, Annuler, Remise en service, contenu de la bulle Réglages, ouverture depuis la carte de l'accueil. Web et iPhone compilent, sans avoir été ouverts.
+
+## 9 — Boîtiers du club
+- Le prototype n'a que la carte de l'accueil. La page vient de `lot1b-boitiers-serie.md` § 3 à 6 et de `GestionBoitiersV2.html` de chrono-swift, sur le modèle de la page Puces : encart de lecture et parcs en colonne, tableau du parc, filtres par état, alerte des piles à changer, fiche par thèmes.
+- Fonctionnent, sur les données de test seulement : choix du parc, filtres, recherche, Démo › Lire un boîtier, À vérifier, En service, En réparation, Remis en service, Perdu et Détruit (les deux derniers avec confirmation), Pile changée, « Voir » depuis l'alerte. Ajouter des boîtiers, Inventaire, Importer, Imprimer et Exporter sont visibles, sans effet.
+- Générateur : un stock de trois parcs, avec les boîtiers de l'événement du jour dans le parc que l'onglet Boîtiers indique. Les chiffres de l'accueil en sont tirés.
+- Captures : `09-club-stations-*` (tirage fixe). Celles des autres écrans sont refaites : le tirage de test a changé.
+
+### Écarts et points ouverts de l'écran 9
+- **Nom** : « Boîtiers » comme le prototype ; la spec dit « Gestion des boîtiers ». Le titre est le même que l'onglet d'un événement.
+- **Reportés** : déroulé de l'inventaire, Afficher la mémoire, Ajouter à une course, Reconfigurer, cocher plusieurs boîtiers et Déplacer vers, changer un boîtier de parc, créer ou supprimer un parc, modifier la note à la main, tri par les titres, choix de l'année dans Pile changée.
+- **Encart de lecture** : montre l'heure, la pile et la note, pas la mémoire ni le mode. Pas de boîtier inconnu à la lecture : la démonstration lit seulement les boîtiers du stock. Il garde le dernier boîtier lu, sans limite de 30 s.
+- **Réglages** : seulement la description du parc, vide sans générateur.
+- **Pile à changer** : Perdu… et Détruit… ajoutés à Pile changée…, pour pouvoir encore déclarer le boîtier.
+- **En réparation** : direct, sans date ni lieu demandés.
+- **Confirmation de Perdu et Détruit** : dans la fiche, pas dans une fenêtre.
+- **Pile changée…** : note l'année 2026 sans rien demander, écrite en dur dans le générateur ; la charge affiche « — » jusqu'à la prochaine lecture.
+- **Seuil de pile** : « Pile à changer » sous 3,2 V. La spec fixe ce seuil pour l'orange et laisse à la station le jugement de pile faible.
+- **Tableau** : des colonnes disparaissent quand la place manque, sans défilement de côté. Pile et Charge passent alors dans la colonne Note quand elles posent problème ; en iPad portrait, le n° de série passe sous le code et l'heure décalée va dans la Note.
+- **Stock** : seuls les boîtiers de l'événement du jour y sont ; ceux des autres événements n'y figurent pas.
+- **Accueil** : compte Club et Secours, sans Non identifiés. « piles à changer » remplace « piles faibles » du prototype.
+- **Non testé** : recherche et loupe, filtres, changement de parc depuis la colonne, À vérifier, En réparation, Remis en service, clic final sur Marquer perdu ou détruit, Annuler, boîtier perdu relu, contenu de la bulle Réglages, téléphone 320 px, bulle d'alerte sur iPad et téléphone, ouverture depuis la carte de l'accueil. Web et iPhone compilent, sans avoir été ouverts.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

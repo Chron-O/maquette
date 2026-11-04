@@ -8,6 +8,7 @@ import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
 import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
+import { ClubStations, ClubStationsPage, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
 import { Cards, CardsPage, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
 import { Results, ResultsPage, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveRow, LiveStop, LiveLast, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
@@ -16,6 +17,7 @@ import { Starts, StartsPage, StartOverlay, StartsBubble, StartRow, StartSection,
 import { Participants, ParticipantsPage, ParticipantOverlay, ParticipantsBubble, ParticipantRow, ParticipantFilter, Passage } from "pages/participants.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem } from "pages/courses.slint";
 import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem } from "pages/home.slint";
+export { ClubStations, ClubStationRow, BatteryDueItem }
 export { Cards, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard }
 export { Results, ResultRanking, ResultRow }
 export { Live, LiveRow, LiveStop, LiveLast, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
@@ -100,10 +102,11 @@ component Page {
     property <bool> on-live: Navigation.in-event && Navigation.active-tab == 4;
     property <bool> on-results: Navigation.in-event && Navigation.active-tab == 5;
     property <bool> on-cards: Navigation.cards-page;
+    property <bool> on-club-stations: Navigation.stations-page;
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
 
     // These tabs keep their column and their titles in place: only the content scrolls.
-    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results || root.on-cards) && !root.narrow: VerticalLayout {
+    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results || root.on-cards || root.on-club-stations) && !root.narrow: VerticalLayout {
         x: 0;
         y: 0;
         width: root.width;
@@ -140,8 +143,12 @@ component Page {
             layout-mode: root.layout-mode;
             available-width: root.width - root.left-margin - root.right-margin;
         }
+        if root.on-club-stations: ClubStationsPage {
+            layout-mode: root.layout-mode;
+            available-width: root.width - root.left-margin - root.right-margin;
+        }
     }
-    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results || root.on-cards) || root.narrow: scroller := Flickable {
+    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results || root.on-cards || root.on-club-stations) || root.narrow: scroller := Flickable {
         x: 0;
         y: 0;
         width: root.width;
@@ -150,7 +157,7 @@ component Page {
             width: scroller.width;
             alignment: start;
             padding-bottom: root.bottom-margin + Theme.space-medium;
-            if !Navigation.home && !root.on-courses && !root.on-participants && !root.on-starts && !root.on-stations && !root.on-live && !root.on-results && !root.on-cards: VerticalLayout {
+            if !Navigation.home && !root.on-courses && !root.on-participants && !root.on-starts && !root.on-stations && !root.on-live && !root.on-results && !root.on-cards && !root.on-club-stations: VerticalLayout {
                 padding-top: Theme.space-medium;
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
@@ -179,6 +186,15 @@ component Page {
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
                 StationsPage {
+                    layout-mode: root.layout-mode;
+                    available-width: scroller.width - root.left-margin - root.right-margin;
+                }
+            }
+            if root.on-club-stations: VerticalLayout {
+                padding-top: Theme.space-medium;
+                padding-left: root.left-margin;
+                padding-right: root.right-margin;
+                ClubStationsPage {
                     layout-mode: root.layout-mode;
                     available-width: scroller.width - root.left-margin - root.right-margin;
                 }
@@ -274,8 +290,8 @@ component DemoPanel {
             active: Demo.active-test-data;
             clicked(i) => { Demo.select-test-data(i); }
         }
-        if Navigation.in-event && Navigation.active-tab == 3: DemoLabel { text: "Lecture"; }
-        if Navigation.in-event && Navigation.active-tab == 3: SecondaryButton {
+        if (Navigation.in-event && Navigation.active-tab == 3) || Navigation.stations-page: DemoLabel { text: "Lecture"; }
+        if (Navigation.in-event && Navigation.active-tab == 3) || Navigation.stations-page: SecondaryButton {
             label: "Lire un boîtier";
             clicked => { Demo.read-station(); }
         }
@@ -361,6 +377,15 @@ export component App inherits Window {
         // Empty without the band, so the Démo button can sit just above it.
         band-zone := VerticalLayout {
             vertical-stretch: 0;
+            if Navigation.stations-page: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? ClubStations.summary-short : ClubStations.summary;
+                can-inventory: true;
+                can-import: true;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
             if Navigation.cards-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Cards.summary-short : Cards.summary;
                 can-inventory: true;
@@ -442,6 +467,17 @@ export component App inherits Window {
         height: Theme.zone;
         label: "Démo";
         clicked => { root.demo-open = !root.demo-open; }
+    }
+
+    if Navigation.stations-page && Courses.open-bubble > 0: ClubStationsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.stations-page && ClubStations.detail-open && root.layout-mode != LayoutMode.wide: ClubStationOverlay {
+        width: 100%;
+        height: 100%;
     }
 
     if Navigation.cards-page && Courses.open-bubble > 0: CardsBubble {

@@ -98,7 +98,11 @@ export global Cards {
 }
 
 // The parks: the column's navigation.
-component ParkColumn inherits Rectangle {
+export component ParkColumn inherits Rectangle {
+    callback selected(int);
+    in property <[CardParkItem]> parks;
+    in property <int> active;
+
     background: Theme.card;
     border-radius: Theme.card-radius;
     border-width: Theme.card-outline-width;
@@ -122,10 +126,10 @@ component ParkColumn inherits Rectangle {
                 alignment: start;
                 spacing: Theme.space-small;
                 padding-bottom: Theme.zone + Theme.space-medium;
-                for park in Cards.parks: Rectangle {
+                for park in root.parks: Rectangle {
                     height: Theme.zone;
                     border-radius: Theme.block-radius;
-                    background: Cards.active-park == park.index ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+                    background: root.active == park.index ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
                     accessible-role: button;
                     accessible-label: park.name;
                     HorizontalLayout {
@@ -135,21 +139,21 @@ component ParkColumn inherits Rectangle {
                         Text {
                             horizontal-stretch: 1;
                             text: park.name;
-                            color: Cards.active-park == park.index ? Theme.active-tab-text : Theme.text;
+                            color: root.active == park.index ? Theme.active-tab-text : Theme.text;
                             font-size: Theme.text-help;
                             font-weight: Theme.weight-block-title;
                             vertical-alignment: center;
                         }
                         Text {
                             text: park.count;
-                            color: Cards.active-park == park.index ? Theme.active-tab-text : Theme.text-secondary;
+                            color: root.active == park.index ? Theme.active-tab-text : Theme.text-secondary;
                             font-size: Theme.text-help;
                             vertical-alignment: center;
                         }
                     }
                     zone := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { Cards.select-park(park.index); }
+                        clicked => { root.selected(park.index); }
                     }
                 }
             }
@@ -422,7 +426,7 @@ component CardsContent {
     }
 }
 
-component DetailLine {
+export component DetailLine {
     in property <string> label;
     in property <string> value;
 
@@ -433,7 +437,7 @@ component DetailLine {
     }
 }
 
-component DetailTitle inherits Text {
+export component DetailTitle inherits Text {
     color: Theme.text;
     font-size: Theme.text-help;
     font-weight: Theme.weight-screen-title;
@@ -609,7 +613,12 @@ export component CardsPage {
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
             vertical-stretch: 1;
             spacing: Theme.button-margin;
-            ParkColumn { width: Theme.course-list-width; }
+            ParkColumn {
+                width: Theme.course-list-width;
+                parks: Cards.parks;
+                active: Cards.active-park;
+                selected(i) => { Cards.select-park(i); }
+            }
             CardsContent {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;

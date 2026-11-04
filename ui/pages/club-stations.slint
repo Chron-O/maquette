@@ -1,0 +1,654 @@
+// The Boîtiers page of the club, following lot1b-boitiers-serie.md § 3 to 6 and
+// GestionBoitiersV2.html: the reading and the parks in the column, the stations of the
+// chosen park in a table, and the detail of a station.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
+import { Cell } from "participants.slint";
+import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
+import { CardAction, CardEntry, CardParkItem, DetailLine, DetailTitle, ParkColumn } from "cards.slint";
+
+export struct ClubStationRow {
+    serial: int,
+    code: string,
+    badge: Badge,
+    battery: string,
+    battery-warning: bool,
+    charge: string,
+    charge-warning: bool,
+    clock: string,
+    clock-warning: bool,
+    warning: string,
+    note: string,
+    selected: bool,
+}
+
+export struct BatteryDueItem {
+    serial: int,
+    label: string,
+    detail: string,
+}
+
+export global ClubStations {
+    in property <[CardParkItem]> parks;
+    in property <[LiveFilter]> park-chips;
+    in property <int> active-park;
+    in property <[LiveFilter]> filters;
+    in property <int> active-filter;
+    in property <[ClubStationRow]> rows;
+    in property <[string]> chips;
+    in property <string> title;
+    in property <string> description;
+    in property <string> state;
+    in property <string> empty;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> search-text;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[BatteryDueItem]> batteries;
+
+    in property <bool> has-reading;
+    in property <string> read-label;
+    in property <string> read-code;
+    in property <string> read-detail;
+    in property <string> read-clock;
+    in property <string> read-battery;
+    in property <string> read-note;
+
+    in property <bool> detail-open;
+    in property <string> detail-title;
+    in property <string> detail-subtitle;
+    in property <string> detail-serial;
+    in property <string> detail-kind;
+    in property <string> detail-code;
+    in property <string> detail-park;
+    in property <Badge> detail-badge;
+    in property <string> detail-since;
+    in property <string> detail-battery;
+    in property <string> detail-charge;
+    in property <bool> detail-can-change-battery;
+    in property <string> detail-clock;
+    in property <string> detail-measured;
+    in property <string> detail-note;
+    in property <[CardAction]> actions;
+    in property <[CardEntry]> history;
+    in property <string> confirm-question;
+    in property <string> confirm-button;
+
+    callback select-park(int);
+    callback select-filter(int);
+    callback select-row(int);
+    callback search(string);
+    callback close-detail();
+    callback open-station(int);
+    callback act(int);
+    callback confirm();
+    callback cancel-confirm();
+    callback change-battery();
+}
+
+// The last station read, or the wait for one.
+component ReadingBox inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        if !ClubStations.has-reading: Head { text: "Lecture d'un boîtier"; wrap: word-wrap; }
+        if !ClubStations.has-reading: SmallText { text: "Posez un boîtier sur la station"; }
+        if ClubStations.has-reading: SmallText { text: ClubStations.read-label; }
+        if ClubStations.has-reading: Text {
+            text: ClubStations.read-code;
+            color: Theme.text;
+            font-size: Theme.reading-code-size;
+            font-weight: Theme.weight-screen-title;
+        }
+        if ClubStations.has-reading: SmallText { text: ClubStations.read-detail; }
+        if ClubStations.has-reading: DetailLine { label: "Heure"; value: ClubStations.read-clock; }
+        if ClubStations.has-reading: DetailLine { label: "Pile"; value: ClubStations.read-battery; }
+        if ClubStations.has-reading && ClubStations.read-note != "": SmallText { text: ClubStations.read-note; }
+    }
+}
+
+// A measure: never by its color alone, its text says what is wrong.
+component Measure {
+    in property <string> text;
+    in property <bool> warning;
+
+    RowCell {
+        Cell {
+            text: root.text;
+            color: root.warning ? Theme.to-check.badge-text : Theme.text-secondary;
+            font-weight: root.warning ? Theme.weight-block-title : Theme.weight-regular;
+        }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. Columns leave rather than scroll sideways.
+component ClubStationsTable {
+    in property <length> available-width;
+
+    property <bool> full: root.available-width >= Theme.stock-full-width;
+    property <bool> has-serial: root.available-width >= Theme.stock-medium-width;
+    property <length> code-width: root.has-serial ? Theme.stock-code-width : Theme.stock-serial-width;
+    property <length> fixed: root.code-width + Theme.stock-state-width
+        + (root.has-serial ? Theme.stock-serial-width + Theme.stock-measure-width : 0px)
+        + (root.full ? 2 * Theme.stock-measure-width : 0px);
+    property <length> note-width: root.available-width - root.fixed;
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            height: Theme.table-header-height + Theme.space;
+            RowCell { width: root.code-width; Head { text: "Code"; } }
+            if root.has-serial: RowCell { width: Theme.stock-serial-width; Head { text: "N° de série"; } }
+            RowCell { width: Theme.stock-state-width; Head { text: "État"; } }
+            if root.full: RowCell { width: Theme.stock-measure-width; Head { text: "Pile"; } }
+            if root.full: RowCell { width: Theme.stock-measure-width; Head { text: "Charge"; } }
+            if root.has-serial: RowCell { width: Theme.stock-measure-width; Head { text: "Heure"; } }
+            RowCell { width: root.note-width; Head { text: "Note"; } }
+        }
+        RowLine { vertical-stretch: 0; }
+        if ClubStations.empty != "": Text {
+            vertical-stretch: 1;
+            text: ClubStations.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if ClubStations.empty == "": Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                width: root.available-width;
+                alignment: start;
+                for row[n] in ClubStations.rows: VerticalLayout {
+                    if n > 0: RowLine { }
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: row.selected ? Theme.row-selected : transparent;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { ClubStations.select-row(row.serial); }
+                        }
+                        HorizontalLayout {
+                            if root.has-serial: RowCell {
+                                width: root.code-width;
+                                Cell { text: row.code; font-weight: Theme.weight-screen-title; }
+                            }
+                            // Without the room for its column, the serial goes under the code.
+                            if !root.has-serial: VerticalLayout {
+                                width: root.code-width;
+                                alignment: center;
+                                RowCell { Cell { text: row.code; font-weight: Theme.weight-screen-title; } }
+                                RowCell { SmallText { text: row.serial; wrap: no-wrap; } }
+                            }
+                            if root.has-serial: RowCell {
+                                width: Theme.stock-serial-width;
+                                Cell { text: row.serial; }
+                            }
+                            RowCell {
+                                width: Theme.stock-state-width;
+                                VerticalLayout {
+                                    alignment: center;
+                                    StatusBadge { status: Home.status-of(row.badge); }
+                                }
+                            }
+                            if root.full: Measure { width: Theme.stock-measure-width; text: row.battery; warning: row.battery-warning; }
+                            if root.full: Measure { width: Theme.stock-measure-width; text: row.charge; warning: row.charge-warning; }
+                            if root.has-serial: Measure { width: Theme.stock-measure-width; text: row.clock; warning: row.clock-warning; }
+                            HorizontalLayout {
+                                width: root.note-width;
+                                padding-left: Theme.space;
+                                padding-top: Theme.space-small;
+                                padding-bottom: Theme.space-small;
+                                VerticalLayout {
+                                    alignment: center;
+                                    if row.note != "": Cell { text: row.note; color: Theme.text-secondary; wrap: word-wrap; }
+                                    // What the missing columns would have said.
+                                    if !root.full && row.warning != "": SmallText { text: row.warning; }
+                                    if !root.has-serial && row.clock-warning: SmallText { text: "Heure " + row.clock; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: the code and its serial › what needs a look › its state.
+component ClubStationsList {
+    VerticalLayout {
+        if ClubStations.empty != "": Text {
+            height: Theme.live-card-narrow-height;
+            text: ClubStations.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for row[n] in ClubStations.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : transparent;
+                TouchArea {
+                    clicked => { ClubStations.select-row(row.serial); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.code + " · n° " + row.serial;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        if row.warning != "": SmallText { text: row.warning; }
+                        if row.clock-warning: SmallText { text: "Heure " + row.clock; }
+                        if row.note != "": SmallText { text: row.note; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBadge { status: Home.status-of(row.badge); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component ClubStationsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: ClubStations.search-text != "";
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-top: root.narrow ? 0 : Theme.space;
+            SecondaryButton {
+                label: "Ajouter des boîtiers…";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space-small;
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: ClubStations.title;
+                                color: Theme.text;
+                                font-size: Theme.text-body;
+                                font-weight: Theme.weight-screen-title;
+                                wrap: word-wrap;
+                            }
+                            SmallText { text: ClubStations.state; }
+                        }
+                        if root.narrow: VerticalLayout {
+                            alignment: start;
+                            SearchToggle {
+                                open: root.search-open;
+                                clicked => {
+                                    if root.search-open {
+                                        ClubStations.search("");
+                                    }
+                                    root.search-open = !root.search-open;
+                                }
+                            }
+                        }
+                        if !root.narrow: VerticalLayout {
+                            alignment: center;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Code, n° ou note…";
+                                text: ClubStations.search-text;
+                                edited(text) => { ClubStations.search(text); }
+                            }
+                        }
+                    }
+                    if root.narrow && root.search-open: InputField {
+                        placeholder: "Code, n° ou note…";
+                        text: ClubStations.search-text;
+                        init => { self.take-focus(); }
+                        edited(text) => { ClubStations.search(text); }
+                    }
+                    ChipFlow {
+                        items: ClubStations.filters;
+                        active: ClubStations.active-filter;
+                        chip-width: Theme.stock-chip-width;
+                        clicked(i) => { ClubStations.select-filter(i); }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: ClubStationsList { }
+                if !root.narrow: ClubStationsTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+            }
+        }
+    }
+}
+
+export component ClubStationDetail inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: ClubStations.detail-title;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                }
+                SmallText { text: ClubStations.detail-subtitle; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { ClubStations.close-detail(); }
+                }
+            }
+        }
+
+        DetailTitle { text: "Identité"; }
+        DetailLine { label: "N° de série"; value: ClubStations.detail-serial; }
+        DetailLine { label: "Type"; value: ClubStations.detail-kind; }
+        DetailLine { label: "Code"; value: ClubStations.detail-code; }
+        DetailLine { label: "Parc"; value: ClubStations.detail-park; }
+
+        RowLine { }
+        DetailTitle { text: "État"; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                StatusBadge { status: Home.status-of(ClubStations.detail-badge); }
+            }
+            SmallText { text: ClubStations.detail-since; wrap: no-wrap; vertical-alignment: center; }
+        }
+        if ClubStations.confirm-question == "": VerticalLayout {
+            spacing: Theme.space;
+            for action in ClubStations.actions: HorizontalLayout {
+                alignment: start;
+                SecondaryButton {
+                    label: action.label;
+                    danger: action.danger;
+                    clicked => { ClubStations.act(action.id); }
+                }
+            }
+        }
+        if ClubStations.confirm-question != "": VerticalLayout {
+            spacing: Theme.space;
+            BubbleLabel { text: ClubStations.confirm-question; }
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space;
+                SecondaryButton {
+                    label: "Annuler";
+                    clicked => { ClubStations.cancel-confirm(); }
+                }
+                SecondaryButton {
+                    label: ClubStations.confirm-button;
+                    danger: true;
+                    clicked => { ClubStations.confirm(); }
+                }
+            }
+        }
+
+        RowLine { }
+        DetailTitle { text: "Pile"; }
+        DetailLine { label: "Changée en"; value: ClubStations.detail-battery; }
+        DetailLine { label: "Charge"; value: ClubStations.detail-charge; }
+        if ClubStations.detail-can-change-battery: HorizontalLayout {
+            alignment: start;
+            SecondaryButton {
+                label: "Pile changée…";
+                clicked => { ClubStations.change-battery(); }
+            }
+        }
+
+        RowLine { }
+        DetailTitle { text: "Heure"; }
+        DetailLine { label: "Décalage"; value: ClubStations.detail-clock; }
+        DetailLine { label: "Mesuré le"; value: ClubStations.detail-measured; }
+
+        RowLine { }
+        DetailTitle { text: "Note"; }
+        SmallText { text: ClubStations.detail-note; }
+
+        RowLine { }
+        DetailTitle { text: "Historique"; }
+        for entry in ClubStations.history: VerticalLayout {
+            BubbleLabel { text: entry.text; }
+            SmallText { text: entry.date; }
+        }
+    }
+}
+
+export component ClubStationsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && ClubStations.detail-open;
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
+        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+
+    VerticalLayout {
+        spacing: Theme.button-margin;
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            HorizontalLayout {
+                spacing: Theme.space;
+                SummaryZone {
+                    horizontal-stretch: 1;
+                    title: "Réglages";
+                    chips: ClubStations.chips;
+                    bubble: 17;
+                    compact: true;
+                }
+                if ClubStations.alert-title != "": AlertPill {
+                    title: ClubStations.alert-title;
+                    count: ClubStations.alert-count;
+                    bubble: 18;
+                    compact: true;
+                }
+            }
+            ReadingBox { }
+            ChipFlow {
+                items: ClubStations.park-chips;
+                active: ClubStations.active-park;
+                chip-width: Theme.card-park-chip-width;
+                clicked(i) => { ClubStations.select-park(i); }
+            }
+            ClubStationsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.button-margin;
+            SummaryZone {
+                title: "Réglages";
+                chips: ClubStations.chips;
+                bubble: 17;
+                compact: root.layout-mode == LayoutMode.medium;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if ClubStations.alert-title != "": AlertPill {
+                title: ClubStations.alert-title;
+                count: ClubStations.alert-count;
+                bubble: 18;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.button-margin;
+            VerticalLayout {
+                width: Theme.course-list-width;
+                spacing: Theme.space;
+                ReadingBox { vertical-stretch: 0; }
+                ParkColumn {
+                    vertical-stretch: 1;
+                    parks: ClubStations.parks;
+                    active: ClubStations.active-park;
+                    selected(i) => { ClubStations.select-park(i); }
+                }
+            }
+            ClubStationsContent {
+                horizontal-stretch: 1;
+                layout-mode: root.layout-mode;
+                available-width: root.content-width;
+            }
+            if root.detail-beside: Flickable {
+                width: Theme.control-detail-width;
+                content-height: detail.preferred-height;
+                detail := ClubStationDetail {
+                    x: 0;
+                    y: 0;
+                    width: Theme.control-detail-width;
+                    height: self.preferred-height;
+                }
+            }
+        }
+    }
+}
+
+// On medium and narrow layouts, the detail opens over the page, and scrolls when it is long.
+export component ClubStationOverlay {
+    TouchArea {
+        clicked => { ClubStations.close-detail(); }
+    }
+    Rectangle {
+        background: Theme.overlay-veil;
+        Flickable {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
+            height: min(detail.preferred-height, parent.height - 2 * Theme.narrow-margin);
+            content-height: detail.preferred-height;
+            detail := ClubStationDetail {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: self.preferred-height;
+            }
+        }
+    }
+}
+
+// One line per station, each with its button.
+component BatteriesContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: ClubStations.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        for item in ClubStations.batteries: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                BubbleLabel { text: item.label; }
+                SmallText { text: item.detail; }
+            }
+            VerticalLayout {
+                alignment: center;
+                PrimaryButton {
+                    label: "Voir";
+                    in-row: true;
+                    clicked => {
+                        Courses.open-bubble = 0;
+                        ClubStations.open-station(item.serial);
+                    }
+                }
+            }
+        }
+    }
+}
+
+component ParkSettings {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space-small;
+        SmallText { text: "Description"; }
+        BubbleLabel { text: ClubStations.description; }
+    }
+}
+
+export component ClubStationsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        if Courses.open-bubble == 17: ParkSettings { }
+        if Courses.open-bubble == 18: BatteriesContent { }
+    }
+}

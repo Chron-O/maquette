@@ -282,10 +282,59 @@ pub struct CardPark {
     pub cards: Vec<LoanCard>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum StockState {
+    InService,
+    ToCheck,
+    BatteryDue,
+    InRepair,
+    Lost,
+    Destroyed,
+}
+
+// A station of the club, whichever event it goes to.
+pub struct StockStation {
+    pub serial: u32,
+    pub code: String,
+    pub kind: &'static str,
+    pub state: StockState,
+    pub state_since: String,
+    pub battery_year: u32,
+    pub charge: Option<u32>,        // in hundredths of a volt, at the last reading
+    pub clock_gap: Option<u32>,     // in seconds, at the last reading
+    pub measured: Option<String>,
+    pub note: &'static str,
+    pub history: Vec<CardEntry>,    // the latest first
+}
+
+impl StockStation {
+    pub fn old_battery(&self) -> bool {
+        BATTERY_YEAR - self.battery_year > BATTERY_MAX_YEARS
+    }
+
+    pub fn low_charge(&self) -> bool {
+        self.charge.is_some_and(|charge| charge < LOW_CHARGE)
+    }
+
+    pub fn clock_off(&self) -> bool {
+        self.clock_gap.is_some_and(|gap| gap > CLOCK_MAX_GAP)
+    }
+
+    // Only a battery changes a state by itself: the other states are chosen by someone.
+    fn settle(&mut self) {
+        if self.state == StockState::InService && (self.old_battery() || self.low_charge()) {
+            self.state = StockState::BatteryDue;
+        }
+    }
+}
+
+pub struct StationPark {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub stations: Vec<StockStation>,
+}
+
 pub struct ClubFigures {
-    pub stations: u32,
-    pub station_parks: u32,
-    pub low_batteries: u32,
     pub runners: u32,
     pub clubs: u32,
 }
@@ -297,6 +346,7 @@ pub struct Generated {
     pub readers: Vec<String>,
     pub club: ClubFigures,
     pub card_parks: Vec<CardPark>,
+    pub station_parks: Vec<StationPark>,
     pub devices_asking: u32,
     pub screens: u32,
     today: u32,
@@ -866,6 +916,107 @@ fn new_card_parks(seed: u64, events: &mut [Event], past: &[usize], today: u32) -
     ]
 }
 
+const STATION_KINDS: [&str; 3] = ["BSF7", "BSF8", "BSM8"];
+const STATION_NOTES: [&str; 3] = ["Étiquette à refaire", "Bip faible", "Support fendu"];
+const STATION_STOCK_SEED: u64 = 0xB01E;
+const UNIDENTIFIED_PARK: &str = "Non identifiés";
+const BATTERY_YEAR: u32 = 2026;
+const BATTERY_MAX_YEARS: u32 = 5;
+const LOW_CHARGE: u32 = 320;
+const CLOCK_MAX_GAP: u32 = 30;
+
+fn new_stock_station(random: &mut Random, serial: u32, code: String, today: u32) -> StockStation {
+    let state = match random.below(24) {
+        0 => StockState::Lost,
+        1 => StockState::InRepair,
+        2 => StockState::Destroyed,
+        3 | 4 => StockState::ToCheck,
+        _ => StockState::InService,
+    };
+    let measured = random.below(10) > 0;
+    let days = today.saturating_sub(random.below(30));
+    let mut station = StockStation {
+        serial,
+        code,
+        kind: random.pick(&STATION_KINDS),
+        state,
+        state_since: short_date(today.saturating_sub(random.below(30))),
+        battery_year: if random.below(12) == 0 { 2019 } else { random.between(2021, BATTERY_YEAR) },
+        charge: measured.then(|| if random.below(10) == 0 { random.between(300, LOW_CHARGE - 1) } else { random.between(LOW_CHARGE, 335) }),
+        clock_gap: measured.then(|| if random.below(12) == 0 { random.between(CLOCK_MAX_GAP + 1, 60) } else { random.below(4) }),
+        measured: measured.then(|| short_date(days)),
+        note: if state != StockState::InService || random.below(8) == 0 { random.pick(&STATION_NOTES) } else { "" },
+        history: vec![CardEntry { date: short_date(days), text: format!("Utilisé · {}", random.pick(&EVENT_NAMES)) }],
+    };
+    station.settle();
+    station
+}
+
+// The stations of the current event are in the stock, in the park the event says.
+fn new_station_parks(seed: u64, event: &Event, today: u32) -> Vec<StationPark> {
+    let mut random = Random(seed ^ STATION_STOCK_SEED);
+    let (mut club, mut spare): (Vec<StockStation>, Vec<StockStation>) = (Vec::new(), Vec::new());
+    for station in &event.stations {
+        let Some(serial) = station.serial else { continue };
+        if club.iter().chain(spare.iter()).any(|s| s.serial == serial) {
+            continue;
+        }
+        let mut stock = new_stock_station(&mut random, serial, station.code.clone(), today);
+        // It went out for this event: it can be neither lost nor out of order.
+        stock.state = StockState::InService;
+        stock.note = "";
+        if station.low_battery {
+            stock.charge = Some(random.between(300, LOW_CHARGE - 1));
+        } else if stock.low_charge() {
+            stock.charge = Some(LOW_CHARGE);
+        }
+        if let StationState::ClockGap(gap) = station.state {
+            stock.clock_gap = Some(gap);
+            stock.measured = Some(short_date(today));
+        }
+        stock.settle();
+        if station.park == "Secours" { spare.push(stock) } else { club.push(stock) }
+    }
+    for _ in 0..random.between(6, 12) {
+        let serial = random.between(210_000, 219_999);
+        let code = random.between(31, 99).to_string();
+        if club.iter().all(|s| s.serial != serial) {
+            club.push(new_stock_station(&mut random, serial, code, today));
+        }
+    }
+    for _ in 0..random.between(4, 8) {
+        let serial = random.between(220_000, 229_999);
+        let code = random.between(31, 99).to_string();
+        if spare.iter().all(|s| s.serial != serial) {
+            spare.push(new_stock_station(&mut random, serial, code, today));
+        }
+    }
+    club.sort_by_key(|s| s.serial);
+    spare.sort_by_key(|s| s.serial);
+
+    // A station put on a reader that belongs to no park stays in service: only someone
+    // can say it has to be checked.
+    let unknown = vec![StockStation {
+        serial: random.between(300_000, 309_999),
+        code: random.between(31, 99).to_string(),
+        kind: random.pick(&STATION_KINDS),
+        state: StockState::InService,
+        state_since: short_date(today),
+        battery_year: 2024,
+        charge: Some(325),
+        clock_gap: Some(1),
+        measured: Some(short_date(today)),
+        note: "",
+        history: vec![CardEntry { date: short_date(today), text: "Posé sur un lecteur, hors parc".into() }],
+    }];
+
+    vec![
+        StationPark { name: "Club", description: "Caisses du local, pour toutes les courses du club.", stations: club },
+        StationPark { name: "Secours", description: "Boîtiers de remplacement, à emporter en plus.", stations: spare },
+        StationPark { name: UNIDENTIFIED_PARK, description: "Boîtiers posés sur un lecteur, sans parc connu.", stations: unknown },
+    ]
+}
+
 impl Generated {
     pub fn new(seed: u64) -> Self {
         let mut random = Random(seed);
@@ -894,13 +1045,11 @@ impl Generated {
         }
 
         let club = ClubFigures {
-            stations: random.between(30, 60),
-            station_parks: random.between(1, 3),
-            low_batteries: random.below(4),
             runners: random.between(11_000, 14_000),
             clubs: random.between(180, 240),
         };
         let card_parks = new_card_parks(seed, &mut events, &past, today);
+        let station_parks = new_station_parks(seed, &events[CURRENT_EVENT], today);
         let clock_seconds = events[CURRENT_EVENT].readings.last().map(|r| r.at + 30);
         let clock_seconds = clock_seconds.unwrap_or_else(|| random.between(10, 14) * 3600);
         Generated {
@@ -910,12 +1059,85 @@ impl Generated {
             readers: vec!["Arrivée 1".into(), "Arrivée 2".into()],
             club,
             card_parks,
+            station_parks,
             devices_asking: random.below(2),
             screens: random.below(3),
             today,
             clock_seconds,
             random,
         }
+    }
+
+    fn stock_stations(&self) -> impl Iterator<Item = &StockStation> {
+        self.station_parks.iter().flat_map(|p| p.stations.iter())
+    }
+
+    fn stock_station_mut(&mut self, serial: u32) -> Option<&mut StockStation> {
+        self.station_parks.iter_mut().flat_map(|p| p.stations.iter_mut()).find(|s| s.serial == serial)
+    }
+
+    pub fn stock_station(&self, serial: u32) -> Option<&StockStation> {
+        self.stock_stations().find(|s| s.serial == serial)
+    }
+
+    // What the club counts as its own: its parks, without the stations nobody identified.
+    pub fn club_parks(&self) -> impl Iterator<Item = &StationPark> {
+        self.station_parks.iter().filter(|p| p.name != UNIDENTIFIED_PARK)
+    }
+
+    pub fn batteries_due(&self) -> Vec<&StockStation> {
+        self.stock_stations().filter(|s| s.state == StockState::BatteryDue).collect()
+    }
+
+    pub fn set_stock_state(&mut self, serial: u32, state: StockState, text: &str) {
+        let date = short_date(self.today);
+        if let Some(station) = self.stock_station_mut(serial) {
+            station.state = state;
+            station.settle();
+            station.state_since = date.clone();
+            station.history.insert(0, CardEntry { date, text: text.into() });
+        }
+    }
+
+    // The new battery is measured at the next reading.
+    pub fn change_battery(&mut self, serial: u32) {
+        let date = short_date(self.today);
+        if let Some(station) = self.stock_station_mut(serial) {
+            station.battery_year = BATTERY_YEAR;
+            station.charge = None;
+            if station.state == StockState::BatteryDue {
+                station.state = StockState::InService;
+                station.state_since = date.clone();
+            }
+            station.history.insert(0, CardEntry { date, text: "Pile changée".into() });
+        }
+    }
+
+    // A reading measures the station, and never changes a state chosen by someone.
+    pub fn read_stock_station(&mut self) -> Option<u32> {
+        let serials: Vec<u32> = self.stock_stations().filter(|s| s.state != StockState::Destroyed).map(|s| s.serial).collect();
+        if serials.is_empty() {
+            return None;
+        }
+        let serial = self.random.pick(&serials);
+        let charge = if self.random.below(8) == 0 { self.random.between(300, LOW_CHARGE - 1) } else { self.random.between(LOW_CHARGE, 335) };
+        let gap = if self.random.below(8) == 0 { self.random.between(CLOCK_MAX_GAP + 1, 60) } else { self.random.below(4) };
+        let date = short_date(self.today);
+        let station = self.stock_station_mut(serial)?;
+        station.charge = Some(charge);
+        station.clock_gap = Some(gap);
+        station.measured = Some(date.clone());
+        // A lost station read again is back: this is the one change a reading makes alone.
+        let text = if station.state == StockState::Lost {
+            station.state = StockState::InService;
+            station.state_since = date.clone();
+            "Retrouvé sur la station"
+        } else {
+            "Lu sur la station"
+        };
+        station.settle();
+        station.history.insert(0, CardEntry { date, text: text.into() });
+        Some(serial)
     }
 
     fn cards(&self) -> impl Iterator<Item = &LoanCard> {

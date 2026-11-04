@@ -65,6 +65,9 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
     };
     let club = &data.club;
     let overdue = data.overdue_cards().len() as u32;
+    let parks = data.club_parks().count() as u32;
+    let stations = data.club_parks().map(|p| p.stations.len()).sum::<usize>() as u32;
+    let batteries = data.batteries_due().len() as u32;
     let alert = |count: u32, text: String| {
         if count > 0 { badge(&Label { word: text, kind: Kind::ToCheck }) } else { no_badge() }
     };
@@ -77,9 +80,9 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
         ),
         card(
             "Boîtiers",
-            club.stations.to_string(),
-            format!("dans {}", plural(club.station_parks, "parc")),
-            alert(club.low_batteries, format!("{}", plural(club.low_batteries, "pile faible").replace("pile faibles", "piles faibles"))),
+            stations.to_string(),
+            format!("dans {}", plural(parks, "parc")),
+            alert(batteries, if batteries > 1 { format!("{batteries} piles à changer") } else { format!("{batteries} pile à changer") }),
         ),
         card(
             "Coureurs et clubs",

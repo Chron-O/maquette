@@ -5,6 +5,7 @@ slint::include_modules!();
 #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
 mod capture;
 mod cards;
+mod club_stations;
 mod courses;
 mod device;
 mod home;
@@ -50,6 +51,7 @@ pub struct AppState {
     live: live::LiveState,
     results: results::ResultsState,
     cards: cards::CardsState,
+    club_stations: club_stations::ClubStationsState,
     data: Option<Generated>,
 }
 
@@ -67,6 +69,7 @@ impl AppState {
         self.live.show(window, event, readers, clock);
         self.results.show(window, event, event.and_then(|e| self.live.selected_runner(e)));
         self.cards.show(window, self.data.as_ref());
+        self.club_stations.show(window, self.data.as_ref());
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -148,6 +151,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
         let mut state = state_for_page.borrow_mut();
         state.navigator.open_club_page(page as usize);
         state.cards = cards::CardsState::default();
+        state.club_stations = club_stations::ClubStationsState::default();
         if let Some(window) = weak.upgrade() {
             state.show(&window);
         }
@@ -346,7 +350,23 @@ fn connect_stations(window: &App, state: &Rc<RefCell<AppState>>) {
         let punches = data.random_punches();
         s.read_next(&mut data.events[event], punches);
     });
-    window.global::<Demo>().on_read_station(move || read(()));
+    // The same button of the Démo panel reads a station of the club on its page.
+    let (weak, state_for_read) = (window.as_weak(), state.clone());
+    window.global::<Demo>().on_read_station(move || {
+        if !state_for_read.borrow().navigator.on_stations_page() {
+            read(());
+            return;
+        }
+        {
+            let app = &mut *state_for_read.borrow_mut();
+            if let Some(data) = app.data.as_mut() {
+                app.club_stations.read(data);
+            }
+        }
+        if let Some(window) = weak.upgrade() {
+            state_for_read.borrow().show(&window);
+        }
+    });
 }
 
 fn connect_live(window: &App, state: &Rc<RefCell<AppState>>) {
@@ -476,6 +496,56 @@ fn connect_cards(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_confirm(move || confirm(()));
 }
 
+fn connect_club_stations(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut club_stations::ClubStationsState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().club_stations, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    // These read or change the test data.
+    fn on_data_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut club_stations::ClubStationsState, &mut Generated, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            {
+                let app = &mut *state.borrow_mut();
+                if let Some(data) = app.data.as_mut() {
+                    action(&mut app.club_stations, data, value);
+                }
+            }
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<ClubStations>();
+    page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
+    page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    page.on_select_row(on_click(window, state, |c, serial: i32| c.select_row(serial as u32)));
+    page.on_search(on_click(window, state, |c, text: slint::SharedString| c.set_search(&text)));
+    let close = on_click(window, state, |c, _: ()| c.close_detail());
+    page.on_close_detail(move || close(()));
+    let cancel = on_click(window, state, |c, _: ()| c.cancel_confirm());
+    page.on_cancel_confirm(move || cancel(()));
+    page.on_open_station(on_data_click(window, state, |c, data, serial: i32| c.open_station(data, serial as u32)));
+    page.on_act(on_data_click(window, state, |c, data, id: i32| c.act(data, id)));
+    let confirm = on_data_click(window, state, |c, data, _: ()| c.confirm(data));
+    page.on_confirm(move || confirm(()));
+    let battery = on_data_click(window, state, |c, data, _: ()| c.change_battery(data));
+    page.on_change_battery(move || battery(()));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -527,6 +597,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     connect_live(&window, &state);
     connect_results(&window, &state);
     connect_cards(&window, &state);
+    connect_club_stations(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 
