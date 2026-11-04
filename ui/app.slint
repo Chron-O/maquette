@@ -8,12 +8,14 @@ import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
 import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
+import { Results, ResultsPage, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveRow, LiveStop, LiveLast, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem } from "pages/stations.slint";
 import { Starts, StartsPage, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
 import { Participants, ParticipantsPage, ParticipantOverlay, ParticipantsBubble, ParticipantRow, ParticipantFilter, Passage } from "pages/participants.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem } from "pages/courses.slint";
 import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem } from "pages/home.slint";
+export { Results, ResultRanking, ResultRow }
 export { Live, LiveRow, LiveStop, LiveLast, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
 export { Stations, StationRow, CourseMark, StationProblem }
 export { Starts, StartRow, StartSection, StartGroup, StartPoint, FriseCell, FriseRow, ChangedStart }
@@ -94,10 +96,11 @@ component Page {
     property <bool> on-starts: Navigation.in-event && Navigation.active-tab == 2;
     property <bool> on-stations: Navigation.in-event && Navigation.active-tab == 3;
     property <bool> on-live: Navigation.in-event && Navigation.active-tab == 4;
+    property <bool> on-results: Navigation.in-event && Navigation.active-tab == 5;
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
 
     // These tabs keep their column and their titles in place: only the content scrolls.
-    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live) && !root.narrow: VerticalLayout {
+    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results) && !root.narrow: VerticalLayout {
         x: 0;
         y: 0;
         width: root.width;
@@ -126,8 +129,12 @@ component Page {
             layout-mode: root.layout-mode;
             available-width: root.width - root.left-margin - root.right-margin;
         }
+        if root.on-results: ResultsPage {
+            layout-mode: root.layout-mode;
+            available-width: root.width - root.left-margin - root.right-margin;
+        }
     }
-    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live) || root.narrow: scroller := Flickable {
+    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results) || root.narrow: scroller := Flickable {
         x: 0;
         y: 0;
         width: root.width;
@@ -136,7 +143,7 @@ component Page {
             width: scroller.width;
             alignment: start;
             padding-bottom: root.bottom-margin + Theme.space-medium;
-            if !Navigation.home && !root.on-courses && !root.on-participants && !root.on-starts && !root.on-stations && !root.on-live: VerticalLayout {
+            if !Navigation.home && !root.on-courses && !root.on-participants && !root.on-starts && !root.on-stations && !root.on-live && !root.on-results: VerticalLayout {
                 padding-top: Theme.space-medium;
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
@@ -165,6 +172,15 @@ component Page {
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
                 StationsPage {
+                    layout-mode: root.layout-mode;
+                    available-width: scroller.width - root.left-margin - root.right-margin;
+                }
+            }
+            if root.on-results: VerticalLayout {
+                padding-top: Theme.space-medium;
+                padding-left: root.left-margin;
+                padding-right: root.right-margin;
+                ResultsPage {
                     layout-mode: root.layout-mode;
                     available-width: scroller.width - root.left-margin - root.right-margin;
                 }
@@ -329,6 +345,13 @@ export component App inherits Window {
         // Empty without the band, so the Démo button can sit just above it.
         band-zone := VerticalLayout {
             vertical-stretch: 0;
+            if Navigation.in-event && Navigation.active-tab == 5: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? Results.summary-short : Results.summary;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
             if Navigation.in-event && Navigation.active-tab == 4: PageBand {
                 summary: Live.summary;
                 has-actions: false;
@@ -396,13 +419,19 @@ export component App inherits Window {
         clicked => { root.demo-open = !root.demo-open; }
     }
 
+    if Navigation.in-event && Navigation.active-tab == 5 && Courses.open-bubble > 0: ResultsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
     if Navigation.in-event && Navigation.active-tab == 4 && Courses.open-bubble > 0: LiveBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 4 && Live.detail-open && root.layout-mode != LayoutMode.wide: LiveOverlay {
+    if Navigation.in-event && (Navigation.active-tab == 4 || Navigation.active-tab == 5) && Live.detail-open && root.layout-mode != LayoutMode.wide: LiveOverlay {
         width: 100%;
         height: 100%;
     }

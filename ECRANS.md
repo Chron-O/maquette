@@ -12,7 +12,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 4 | Course › Départs | validé par Robin ; réglage des groupes, vrai tirage et modifications à faire plus tard |
 | 5 | Course › Boîtiers | validé par Robin ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
 | 6 | Course › Direct | validé par Robin ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
-| 7 | Course › Résultats | à faire |
+| 7 | Course › Résultats | validé par Robin ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
 | 8 | Puces (stock de prêt) | à faire |
 | 9 | Boîtiers (inventaire du club) | à faire |
 | 10 | Coureurs et clubs (base fédérale) | à faire |
@@ -146,6 +146,24 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Téléphone** : tracé des postes seulement dans la fiche ; pas de bouton dans la grande carte, qu'on touche ; pastilles au lieu des tuiles de lecteur.
 - **Bulle ouverte depuis l'accueil** : sa hauteur est une valeur fixe, l'alerte n'étant pas encore placée à ce moment.
 - **Non testé** : recherche, filtre par lecteur, Garder le premier résultat, le réglage et la bulle sur téléphone et iPad, fiche d'un coureur sans lecture, fil en marche sur iPad et téléphone. Web et iPhone compilent, sans avoir été ouverts.
+
+## 7 — Résultats
+- D'après le prototype et ses captures : classements en colonne, classement choisi en tableau (place, nom, club, temps, écart, état), réglages en bulle, Imprimer et Exporter dans la bande du bas.
+- Fonctionnent, sur les données de test seulement : choix du classement, Classer par catégorie ou par circuit, pastilles de catégorie en mode circuit, recherche, fiche partagée avec le Direct, classements recalculés à chaque lecture. Temps maximal, Imprimer et Exporter sont visibles, sans effet.
+- Captures : `07-results-*` (tirage fixe). `06-live-*` refaites, les places ayant changé.
+
+### Écarts et points ouverts de l'écran 7
+- **Pas de sous-onglets** : Analyse et Remise des prix absents. Pas de vue Colonnes.
+- **Places du Direct et de la fiche** : elles suivent maintenant le réglage « Classer », pour donner le même chiffre que le classement. Le Direct, déjà validé, montre donc la place par catégorie au réglage de départ.
+- **Égalités** : deux temps identiques ont deux places différentes. La vraie règle reste à faire.
+- **Classement par catégorie** : ne garde que les passages sur le premier circuit du coureur. Les autres passages apparaissent seulement par circuit.
+- **Fiche** : refermée au changement d'onglet. Elle montre la dernière lecture du coureur : pour quelqu'un à deux passages, ce peut être l'autre passage que celui de la ligne, et les deux lignes se surlignent ensemble.
+- **Recherche** : limitée au classement affiché.
+- **Dernière lecture** : pas surlignée dans le classement.
+- **« Provisoire »** : retiré quand tout le monde est arrivé.
+- **Alerte** : aucune sur cet écran.
+- **iPad portrait** : le cadre Réglages prend toute la largeur en n'affichant que son titre, comme sur Participants et Boîtiers.
+- **Non testé** : les deux recherches, les pastilles de catégorie, les classements qui changent pendant la course, la bulle sur iPad et téléphone. Web et iPhone compilent, sans avoir été ouverts.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

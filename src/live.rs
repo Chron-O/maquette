@@ -23,6 +23,7 @@ pub struct LiveState {
     search: String,
     list: Option<usize>,
     selected: Option<Selected>,
+    by_course: bool,    // how the Résultats rank: the same places everywhere
 }
 
 fn place_text(place: usize) -> String {
@@ -30,14 +31,13 @@ fn place_text(place: usize) -> String {
 }
 
 // The time and place a reading shows: a card nobody knows has none until it has a runner.
-fn time_and_place(event: &Event, reading: &Reading) -> (String, String) {
-    if reading.runner.is_none() {
-        ("—".into(), String::new())
-    } else if reading.valid {
-        (format_time(reading.seconds), place_text(event.place(reading.course, reading.seconds)))
-    } else {
-        (format_time(reading.seconds), "—".into())
+fn time_and_place(event: &Event, reading: &Reading, by_course: bool) -> (String, String) {
+    let Some(runner) = reading.runner else { return ("—".into(), String::new()) };
+    if !reading.valid {
+        return (format_time(reading.seconds), "—".into());
     }
+    let category = (!by_course).then_some(event.runners[runner].category.as_str());
+    (format_time(reading.seconds), place_text(event.place(reading.course, category, reading.seconds)))
 }
 
 fn category(event: &Event, reading: &Reading) -> String {
@@ -66,6 +66,10 @@ fn stop_time(seconds: u32, stop: usize, stops: usize) -> u32 {
 }
 
 impl LiveState {
+    pub fn set_ranked_by_course(&mut self, by_course: bool) {
+        self.by_course = by_course;
+    }
+
     pub fn select_course(&mut self, course: usize) {
         self.course = course;
     }
@@ -85,6 +89,13 @@ impl LiveState {
 
     pub fn open_row(&mut self, reading: usize) {
         self.selected = Some(Selected::Reading(reading));
+    }
+
+    pub fn selected_runner(&self, event: &Event) -> Option<usize> {
+        match self.selected? {
+            Selected::Reading(i) => event.readings.get(i)?.runner,
+            Selected::Runner(i) => Some(i),
+        }
     }
 
     pub fn close_detail(&mut self) {
@@ -127,7 +138,7 @@ impl LiveState {
 
     fn row(&self, event: &Event, index: usize) -> LiveRow {
         let reading = &event.readings[index];
-        let (time, place) = time_and_place(event, reading);
+        let (time, place) = time_and_place(event, reading, self.by_course);
         let (family, first) = reading.runner.map_or((event.reading_name(reading), String::new()), |i| {
             (event.runners[i].family.to_string(), event.runners[i].first.to_string())
         });
@@ -152,7 +163,7 @@ impl LiveState {
     fn last(&self, event: &Event, readers: &[String]) -> LiveLast {
         let Some(index) = event.readings.len().checked_sub(1) else { return LiveLast::default() };
         let reading = &event.readings[index];
-        let (time, place) = time_and_place(event, reading);
+        let (time, place) = time_and_place(event, reading, self.by_course);
         let club = reading.runner.map_or(String::new(), |i| event.runners[i].club.to_string());
         let course = &event.courses[reading.course];
         let missed = (!reading.valid).then(|| missed_control(reading.seconds, course.controls.len()));
@@ -249,7 +260,7 @@ impl LiveState {
 
         let (word, time, place) = match reading {
             Some(reading) => {
-                let (time, place) = time_and_place(event, reading);
+                let (time, place) = time_and_place(event, reading, self.by_course);
                 (event.reading_label(reading), time, place)
             }
             None => (runner.map(Runner::label).unwrap_or_default(), "—".to_string(), String::new()),

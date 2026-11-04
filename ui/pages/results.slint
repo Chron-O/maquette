@@ -1,0 +1,469 @@
+// The Résultats tab, following the HTML prototype and categories-classements.md: the
+// rankings in the column, and the chosen one in a table. The detail is the Direct's.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { Tabs, TabItem } from "../components/tabs.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { BubbleFrame, BubbleLabel, CourseChip, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
+import { Cell, NameCell } from "participants.slint";
+import { ChipFlow, Head, Live, LiveDetail, LiveFilter, RowCell, TimeText } from "live.slint";
+
+export struct ResultRanking {
+    index: int,
+    label: string,
+    tone: int,
+    count: string,
+}
+
+export struct ResultRow {
+    runner: int,
+    place: string,
+    family: string,
+    first: string,
+    club: string,
+    category: string,
+    time: string,
+    gap: string,
+    badge: Badge,
+    crossed: bool,
+    selected: bool,
+}
+
+export global Results {
+    in property <[ResultRow]> rows;
+    in property <[ResultRanking]> rankings;
+    in property <[LiveFilter]> ranking-chips;
+    in property <int> active-ranking;
+    in property <[LiveFilter]> category-chips;
+    in property <int> active-category;
+    in property <[string]> chips;
+    in property <[TabItem]> modes;
+    in property <int> active-mode;
+    in property <bool> by-course;
+    in property <string> title;
+    in property <int> title-tone;
+    in property <string> state;
+    in property <string> empty;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> search-text;
+    in property <string> ranking-search-text;
+
+    callback select-mode(int);
+    callback select-ranking(int);
+    callback select-category(int);
+    callback search(string);
+    callback search-ranking(string);
+}
+
+// The rankings: the column's navigation, with its magnifier.
+component RankingColumn inherits Rectangle {
+    property <bool> search-open: Results.ranking-search-text != "";
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    clip: true;
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: Theme.space;
+            Head {
+                horizontal-stretch: 1;
+                text: "Classements";
+            }
+            SearchToggle {
+                open: root.search-open;
+                clicked => {
+                    if root.search-open {
+                        Results.search-ranking("");
+                    }
+                    root.search-open = !root.search-open;
+                }
+            }
+        }
+        if root.search-open: InputField {
+            vertical-stretch: 0;
+            placeholder: "Classement…";
+            text: Results.ranking-search-text;
+            init => { self.take-focus(); }
+            edited(text) => { Results.search-ranking(text); }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            // The end of the list stays clear of the Démo button.
+            lines := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                spacing: Theme.space-small;
+                padding-bottom: Theme.zone + Theme.space-medium;
+                for ranking in Results.rankings: Rectangle {
+                    height: Theme.zone;
+                    border-radius: Theme.block-radius;
+                    background: Results.active-ranking == ranking.index ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+                    accessible-role: button;
+                    accessible-label: ranking.label;
+                    HorizontalLayout {
+                        padding-left: Theme.space;
+                        padding-right: Theme.space;
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            alignment: center;
+                            CourseChip { tone: ranking.tone; }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: ranking.label;
+                            color: Results.active-ranking == ranking.index ? Theme.active-tab-text : Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-block-title;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: ranking.count;
+                            color: Results.active-ranking == ranking.index ? Theme.active-tab-text : Theme.text-secondary;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
+                    zone := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { Results.select-ranking(ranking.index); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The titles stay at the top: only the rows scroll.
+component ResultsTable {
+    in property <length> available-width;
+
+    property <bool> wide: root.available-width >= Theme.result-full-width;
+    property <bool> has-category: root.wide && Results.by-course;
+    property <length> fixed: Theme.result-place-width + Theme.result-state-width + Theme.result-time-width
+        + (root.wide ? Theme.result-club-width + Theme.result-gap-width : 0px)
+        + (root.has-category ? Theme.result-category-width : 0px);
+    property <length> name-width: max(Theme.live-name-width, root.available-width - root.fixed);
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            height: Theme.table-header-height + Theme.space;
+            RowCell { width: Theme.result-place-width; Head { text: "Place"; } }
+            RowCell { width: root.name-width; Head { text: "Nom"; } }
+            if root.wide: RowCell { width: Theme.result-club-width; Head { text: "Club"; } }
+            if root.has-category: RowCell { width: Theme.result-category-width; Head { text: "Cat."; } }
+            RowCell { width: Theme.result-time-width; Head { text: "Temps"; } }
+            if root.wide: RowCell { width: Theme.result-gap-width; Head { text: "Écart"; } }
+            RowCell { width: Theme.result-state-width; Head { text: "État"; } }
+        }
+        RowLine { vertical-stretch: 0; }
+        if Results.empty != "": Text {
+            vertical-stretch: 1;
+            text: Results.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if Results.empty == "": Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                width: root.available-width;
+                alignment: start;
+                for row[n] in Results.rows: VerticalLayout {
+                    if n > 0: RowLine { }
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: row.selected ? Theme.row-selected : transparent;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { Live.select-runner(row.runner); }
+                        }
+                        HorizontalLayout {
+                            RowCell {
+                                width: Theme.result-place-width;
+                                Cell { text: row.place; font-weight: Theme.weight-screen-title; }
+                            }
+                            if root.wide: NameCell { width: root.name-width; family: row.family; first: row.first; }
+                            // Without the room for its column, the club goes under the name.
+                            if !root.wide: VerticalLayout {
+                                width: root.name-width;
+                                alignment: center;
+                                NameCell { family: row.family; first: row.first; }
+                                RowCell { SmallText { text: Results.by-course ? row.club + " · " + row.category : row.club; wrap: no-wrap; } }
+                            }
+                            if root.wide: RowCell { width: Theme.result-club-width; Cell { text: row.club; } }
+                            if root.has-category: RowCell { width: Theme.result-category-width; Cell { text: row.category; } }
+                            if root.wide: RowCell {
+                                width: Theme.result-time-width;
+                                TimeText { time: row.time; crossed: row.crossed; }
+                            }
+                            if !root.wide: VerticalLayout {
+                                width: Theme.result-time-width;
+                                alignment: center;
+                                RowCell { TimeText { time: row.time; crossed: row.crossed; } }
+                                if row.gap != "": RowCell { SmallText { text: row.gap; wrap: no-wrap; } }
+                            }
+                            if root.wide: RowCell { width: Theme.result-gap-width; Cell { text: row.gap; color: Theme.text-secondary; } }
+                            RowCell {
+                                width: Theme.result-state-width;
+                                VerticalLayout {
+                                    alignment: center;
+                                    StatusBadge { status: Home.status-of(row.badge); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: place › who › time.
+component ResultsList {
+    VerticalLayout {
+        if Results.empty != "": Text {
+            height: Theme.live-card-narrow-height;
+            text: Results.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for row[n] in Results.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : transparent;
+                TouchArea {
+                    clicked => { Live.select-runner(row.runner); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    Cell {
+                        width: Theme.result-narrow-place-width;
+                        text: row.place;
+                        font-size: Theme.text-body;
+                        font-weight: Theme.weight-screen-title;
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.family + " " + row.first;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: Results.by-course ? row.club + " · " + row.category : row.club; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: end;
+                            TimeText { time: row.time; crossed: row.crossed; weight: Theme.weight-screen-title; }
+                        }
+                        if row.gap != "": HorizontalLayout {
+                            alignment: end;
+                            SmallText { text: row.gap; wrap: no-wrap; }
+                        }
+                        if row.crossed: HorizontalLayout {
+                            alignment: end;
+                            StatusBadge { status: Home.status-of(row.badge); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component ResultsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Results.search-text != "";
+
+    Rectangle {
+        background: Theme.card;
+        border-radius: Theme.card-radius;
+        border-width: Theme.card-outline-width;
+        border-color: Theme.card-outline;
+        clip: true;
+        VerticalLayout {
+            VerticalLayout {
+                vertical-stretch: 0;
+                padding: Theme.space;
+                spacing: Theme.space-small;
+                HorizontalLayout {
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Theme.space-small;
+                            if Results.title-tone >= 0: VerticalLayout {
+                                alignment: center;
+                                CourseChip { tone: Results.title-tone; }
+                            }
+                            Text {
+                                text: Results.title;
+                                color: Theme.text;
+                                font-size: Theme.text-body;
+                                font-weight: Theme.weight-screen-title;
+                                wrap: word-wrap;
+                            }
+                        }
+                        SmallText { text: Results.state; }
+                    }
+                    if root.narrow: VerticalLayout {
+                        alignment: start;
+                        SearchToggle {
+                            open: root.search-open;
+                            clicked => {
+                                if root.search-open {
+                                    Results.search("");
+                                }
+                                root.search-open = !root.search-open;
+                            }
+                        }
+                    }
+                    if !root.narrow: VerticalLayout {
+                        alignment: center;
+                        InputField {
+                            width: Theme.code-search-width;
+                            placeholder: "Nom, club ou puce…";
+                            text: Results.search-text;
+                            edited(text) => { Results.search(text); }
+                        }
+                    }
+                }
+                if root.narrow && root.search-open: InputField {
+                    placeholder: "Nom, club ou puce…";
+                    text: Results.search-text;
+                    init => { self.take-focus(); }
+                    edited(text) => { Results.search(text); }
+                }
+                if Results.category-chips.length > 0: ChipFlow {
+                    items: Results.category-chips;
+                    active: Results.active-category;
+                    chip-width: Theme.live-reader-chip-width;
+                    clicked(i) => { Results.select-category(i); }
+                }
+            }
+            RowLine { vertical-stretch: 0; }
+            if root.narrow: ResultsList { }
+            if !root.narrow: ResultsTable {
+                vertical-stretch: 1;
+                available-width: root.available-width;
+            }
+        }
+    }
+}
+
+export component ResultsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Live.detail-open;
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
+        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+
+    VerticalLayout {
+        spacing: Theme.button-margin;
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            SummaryZone {
+                title: "Réglages";
+                chips: Results.chips;
+                bubble: 14;
+                compact: true;
+            }
+            ChipFlow {
+                items: Results.ranking-chips;
+                active: Results.active-ranking;
+                chip-width: Theme.live-reader-chip-width;
+                clicked(i) => { Results.select-ranking(i); }
+            }
+            ResultsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 0;
+            SummaryZone {
+                title: "Réglages";
+                chips: Results.chips;
+                bubble: 14;
+                compact: root.layout-mode == LayoutMode.medium;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.button-margin;
+            RankingColumn { width: Theme.course-list-width; }
+            ResultsContent {
+                horizontal-stretch: 1;
+                layout-mode: root.layout-mode;
+                available-width: root.content-width;
+            }
+            if root.detail-beside: Flickable {
+                width: Theme.control-detail-width;
+                content-height: detail.preferred-height;
+                detail := LiveDetail {
+                    x: 0;
+                    y: 0;
+                    width: Theme.control-detail-width;
+                    height: self.preferred-height;
+                }
+            }
+        }
+    }
+}
+
+export component ResultsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        VerticalLayout {
+            padding: Theme.space-medium;
+            spacing: Theme.button-margin;
+            HorizontalLayout {
+                spacing: Theme.space;
+                BubbleLabel { horizontal-stretch: 1; text: "Classer"; }
+                Tabs {
+                    tabs: Results.modes;
+                    active: Results.active-mode;
+                    clicked(i) => { Results.select-mode(i); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Theme.space;
+                BubbleLabel { horizontal-stretch: 1; text: "Temps maximal"; }
+                BubbleLabel { text: "aucun"; wrap: no-wrap; }
+            }
+        }
+    }
+}

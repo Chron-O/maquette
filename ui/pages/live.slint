@@ -140,7 +140,7 @@ export global Live {
 }
 
 // A time, crossed out when it does not count (charte, 03/11).
-component TimeText {
+export component TimeText {
     in property <string> time;
     in property <bool> crossed;
     in property <color> tone: Theme.text;
@@ -168,14 +168,14 @@ component TimeText {
     }
 }
 
-component Head inherits Text {
+export component Head inherits Text {
     color: Theme.text;
     font-size: Theme.text-help;
     font-weight: Theme.weight-block-title;
     vertical-alignment: center;
 }
 
-component RowCell inherits HorizontalLayout {
+export component RowCell inherits HorizontalLayout {
     padding-left: Theme.space;
     alignment: start;
 }
@@ -578,7 +578,7 @@ component LastReading inherits Rectangle {
 }
 
 // A row of small chips, going to the next row when they do not fit.
-component ChipFlow {
+export component ChipFlow {
     callback clicked(int);
     in property <[LiveFilter]> items;
     in property <int> active;

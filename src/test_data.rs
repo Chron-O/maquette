@@ -199,11 +199,15 @@ impl Event {
         reading.runner.map_or(format!("Puce {}", reading.card), |i| self.runners[i].name())
     }
 
-    // Among the valid results of a course, how many are better, plus one.
-    pub fn place(&self, course: usize, seconds: u32) -> usize {
-        let better = self.runners.iter().flat_map(|r| &r.runs).filter(|run| {
-            run.course == course && matches!(run.result, Some((time, true)) if time < seconds)
-        });
+    // Among the valid results of a ranking, how many are better, plus one. A ranking is a
+    // course, or one category on a course.
+    pub fn place(&self, course: usize, category: Option<&str>, seconds: u32) -> usize {
+        let better = self
+            .runners
+            .iter()
+            .filter(|r| category.is_none_or(|c| r.category == c))
+            .flat_map(|r| &r.runs)
+            .filter(|run| run.course == course && matches!(run.result, Some((time, true)) if time < seconds));
         better.count() + 1
     }
 

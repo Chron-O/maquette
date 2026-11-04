@@ -10,6 +10,7 @@ mod home;
 mod live;
 mod navigation;
 mod participants;
+mod results;
 mod starts;
 mod stations;
 mod test_data;
@@ -46,6 +47,7 @@ pub struct AppState {
     starts: starts::StartsState,
     stations: stations::StationsState,
     live: live::LiveState,
+    results: results::ResultsState,
     data: Option<Generated>,
 }
 
@@ -61,6 +63,7 @@ impl AppState {
         self.stations.show(window, event);
         let (readers, clock) = self.data.as_ref().map_or((&[][..], 0), |d| (&d.readers[..], d.clock()));
         self.live.show(window, event, readers, clock);
+        self.results.show(window, event, event.and_then(|e| self.live.selected_runner(e)));
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -129,6 +132,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
             state.starts = starts::StartsState::default();
             state.stations = stations::StationsState::default();
             state.live = live::LiveState::default();
+            state.results = results::ResultsState::default();
             if let Some(window) = weak.upgrade() {
                 state.show(&window);
             }
@@ -136,7 +140,16 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
     };
     navigation.on_open_event(open_event);
     navigation.on_open_club_page(on_click(window, state, Navigator::open_club_page));
-    navigation.on_select_tab(on_click(window, state, Navigator::select_tab));
+    // The Direct and the Résultats share their detail: it stays behind when leaving them.
+    let (weak, state_for_tab) = (window.as_weak(), state.clone());
+    navigation.on_select_tab(move |tab| {
+        let mut state = state_for_tab.borrow_mut();
+        state.navigator.select_tab(tab as usize);
+        state.live.close_detail();
+        if let Some(window) = weak.upgrade() {
+            state.show(&window);
+        }
+    });
     // From the home page, « à traiter » opens the Direct with its alert open.
     let open_direct = on_click(window, state, |n, _| n.open_direct(CURRENT_EVENT));
     let weak = window.as_weak();
@@ -373,6 +386,36 @@ fn connect_live(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_keep_first(move || keep(()));
 }
 
+fn connect_results(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut results::ResultsState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().results, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<Results>();
+    let (weak, state_for_mode) = (window.as_weak(), state.clone());
+    page.on_select_mode(move |mode| {
+        let mut state = state_for_mode.borrow_mut();
+        state.results.select_mode(mode as usize);
+        state.live.set_ranked_by_course(mode == 1);
+        if let Some(window) = weak.upgrade() {
+            state.show(&window);
+        }
+    });
+    page.on_select_ranking(on_click(window, state, |r, i: i32| r.select_ranking(i as usize)));
+    page.on_select_category(on_click(window, state, |r, i: i32| r.select_category(i as usize)));
+    page.on_search(on_click(window, state, |r, text: slint::SharedString| r.set_search(&text)));
+    page.on_search_ranking(on_click(window, state, |r, text: slint::SharedString| r.set_ranking_search(&text)));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -422,6 +465,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     connect_starts(&window, &state);
     connect_stations(&window, &state);
     connect_live(&window, &state);
+    connect_results(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 
