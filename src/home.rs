@@ -64,15 +64,16 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
         ];
     };
     let club = &data.club;
+    let overdue = data.overdue_cards().len() as u32;
     let alert = |count: u32, text: String| {
         if count > 0 { badge(&Label { word: text, kind: Kind::ToCheck }) } else { no_badge() }
     };
     vec![
         card(
             "Puces de prêt",
-            club.cards_free.to_string(),
-            format!("au parc · {} prêtée{}", club.cards_lent, if club.cards_lent > 1 { "s" } else { "" }),
-            alert(club.cards_overdue, plural(club.cards_overdue, "non rendue")),
+            data.cards_free().to_string(),
+            format!("au parc · {}", plural(data.cards_lent(), "prêtée")),
+            alert(overdue, plural(overdue, "non rendue")),
         ),
         card(
             "Boîtiers",

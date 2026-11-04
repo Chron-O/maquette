@@ -1,0 +1,709 @@
+// The Puces de prêt page, following puces-pret-parc.md § 10 to 13 and GestionPuces.html: the
+// parks in the column, the cards of the chosen park in a table, and the detail of a card.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
+import { Cell } from "participants.slint";
+import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
+
+export struct CardParkItem {
+    index: int,
+    name: string,
+    count: string,
+}
+
+export struct CardRow {
+    number: int,
+    kind: string,
+    badge: Badge,
+    place: string,
+    place-detail: string,
+    battery: string,
+    borrower: string,
+    loans: string,
+    note: string,
+    to-handle: bool,
+    selected: bool,
+}
+
+export struct CardEntry {
+    date: string,
+    text: string,
+}
+
+export struct CardAction {
+    id: int,
+    label: string,
+    danger: bool,
+}
+
+export struct OverdueCard {
+    number: int,
+    detail: string,
+}
+
+export global Cards {
+    in property <[CardParkItem]> parks;
+    in property <[LiveFilter]> park-chips;
+    in property <int> active-park;
+    in property <[LiveFilter]> filters;
+    in property <int> active-filter;
+    in property <[CardRow]> rows;
+    in property <[string]> chips;
+    in property <string> title;
+    in property <string> description;
+    in property <string> state;
+    in property <string> empty;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> search-text;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[OverdueCard]> overdue;
+
+    in property <bool> detail-open;
+    in property <string> detail-number;
+    in property <string> detail-subtitle;
+    in property <string> detail-kind;
+    in property <string> detail-park;
+    in property <Badge> detail-badge;
+    in property <string> detail-since;
+    in property <string> detail-place-label;
+    in property <string> detail-place;
+    in property <string> detail-place-detail;
+    in property <bool> detail-has-battery;
+    in property <string> detail-battery;
+    in property <string> detail-note;
+    in property <string> detail-loans;
+    in property <[CardAction]> actions;
+    in property <[CardEntry]> history;
+    in property <string> confirm-question;
+    in property <string> confirm-button;
+
+    callback select-park(int);
+    callback select-filter(int);
+    callback select-row(int);
+    callback search(string);
+    callback close-detail();
+    callback open-card(int);
+    callback act(int);
+    callback confirm();
+    callback cancel-confirm();
+}
+
+// The parks: the column's navigation.
+component ParkColumn inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    clip: true;
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            min-height: Theme.zone;
+            padding-left: Theme.space;
+            Head { text: "Parcs"; }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            // The end of the list stays clear of the Démo button.
+            lines := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                spacing: Theme.space-small;
+                padding-bottom: Theme.zone + Theme.space-medium;
+                for park in Cards.parks: Rectangle {
+                    height: Theme.zone;
+                    border-radius: Theme.block-radius;
+                    background: Cards.active-park == park.index ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+                    accessible-role: button;
+                    accessible-label: park.name;
+                    HorizontalLayout {
+                        padding-left: Theme.space;
+                        padding-right: Theme.space;
+                        spacing: Theme.space;
+                        Text {
+                            horizontal-stretch: 1;
+                            text: park.name;
+                            color: Cards.active-park == park.index ? Theme.active-tab-text : Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-block-title;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: park.count;
+                            color: Cards.active-park == park.index ? Theme.active-tab-text : Theme.text-secondary;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
+                    zone := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { Cards.select-park(park.index); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component StateCell {
+    in property <Badge> badge;
+
+    RowCell {
+        VerticalLayout {
+            alignment: center;
+            StatusBadge { status: Home.status-of(root.badge); }
+        }
+    }
+}
+
+// Where the card is, then who has it. `note`: when the table has no column left for it.
+component PlaceCell {
+    in property <string> place;
+    in property <string> detail;
+    in property <string> note;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-top: Theme.space-small;
+        padding-bottom: Theme.space-small;
+        VerticalLayout {
+            alignment: center;
+            Cell {
+                text: root.place;
+                wrap: word-wrap;
+            }
+            if root.detail != "": SmallText { text: root.detail; }
+            if root.note != "": SmallText { text: root.note; }
+        }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. Columns leave rather than scroll sideways.
+component CardsTable {
+    in property <length> available-width;
+
+    property <bool> full: root.available-width >= Theme.card-full-width;
+    property <bool> has-kind: root.available-width >= Theme.card-medium-width;
+    property <length> fixed: Theme.card-number-width + Theme.card-state-width
+        + (root.has-kind ? Theme.card-kind-width + Theme.card-loans-width : 0px)
+        + (root.full ? Theme.card-battery-width + Theme.card-borrower-width + Theme.card-note-width : 0px);
+    property <length> place-width: root.available-width - root.fixed;
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            height: Theme.table-header-height + Theme.space;
+            RowCell { width: Theme.card-number-width; Head { text: "Numéro SI"; } }
+            if root.has-kind: RowCell { width: Theme.card-kind-width; Head { text: "Type"; } }
+            RowCell { width: Theme.card-state-width; Head { text: "État"; } }
+            RowCell { width: root.place-width; Head { text: "Emplacement"; } }
+            if root.full: RowCell { width: Theme.card-battery-width; Head { text: "Pile changée"; } }
+            if root.full: RowCell { width: Theme.card-borrower-width; Head { text: "Dernier emprunteur"; wrap: word-wrap; } }
+            if root.has-kind: RowCell { width: Theme.card-loans-width; Head { text: "Prêts"; } }
+            if root.full: RowCell { width: Theme.card-note-width; Head { text: "Note"; } }
+        }
+        RowLine { vertical-stretch: 0; }
+        if Cards.empty != "": Text {
+            vertical-stretch: 1;
+            text: Cards.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if Cards.empty == "": Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                width: root.available-width;
+                alignment: start;
+                for row[n] in Cards.rows: VerticalLayout {
+                    if n > 0: RowLine { }
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: row.selected ? Theme.row-selected : row.to-handle ? Theme.row-to-handle : transparent;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { Cards.select-row(row.number); }
+                        }
+                        HorizontalLayout {
+                            if root.has-kind: RowCell {
+                                width: Theme.card-number-width;
+                                Cell { text: row.number; font-weight: Theme.weight-screen-title; }
+                            }
+                            // Without the room for its column, the type goes under the number.
+                            if !root.has-kind: VerticalLayout {
+                                width: Theme.card-number-width;
+                                alignment: center;
+                                RowCell { Cell { text: row.number; font-weight: Theme.weight-screen-title; } }
+                                RowCell { SmallText { text: row.kind; wrap: no-wrap; } }
+                            }
+                            if root.has-kind: RowCell {
+                                width: Theme.card-kind-width;
+                                Cell { text: row.kind; }
+                            }
+                            StateCell { width: Theme.card-state-width; badge: row.badge; }
+                            PlaceCell {
+                                width: root.place-width;
+                                place: row.place;
+                                detail: row.place-detail;
+                                note: root.full ? "" : row.note;
+                            }
+                            if root.full: RowCell {
+                                width: Theme.card-battery-width;
+                                Cell { text: row.battery; color: Theme.text-secondary; }
+                            }
+                            if root.full: HorizontalLayout {
+                                width: Theme.card-borrower-width;
+                                padding-left: Theme.space;
+                                Cell { text: row.borrower; wrap: word-wrap; }
+                            }
+                            if root.has-kind: RowCell {
+                                width: Theme.card-loans-width;
+                                Cell { text: row.loans; }
+                            }
+                            if root.full: HorizontalLayout {
+                                width: Theme.card-note-width;
+                                padding-left: Theme.space;
+                                Cell { text: row.note; color: Theme.text-secondary; wrap: word-wrap; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: the number › where it is › its state.
+component CardsList {
+    VerticalLayout {
+        if Cards.empty != "": Text {
+            height: Theme.live-card-narrow-height;
+            text: Cards.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for row[n] in Cards.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : row.to-handle ? Theme.row-to-handle : transparent;
+                TouchArea {
+                    clicked => { Cards.select-row(row.number); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.number + " · " + row.kind;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: row.place-detail != "" ? row.place + " · " + row.place-detail : row.place; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBadge { status: Home.status-of(row.badge); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component CardsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Cards.search-text != "";
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-top: root.narrow ? 0 : Theme.space;
+            SecondaryButton {
+                label: "Ajouter des puces…";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space-small;
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: Cards.title;
+                                color: Theme.text;
+                                font-size: Theme.text-body;
+                                font-weight: Theme.weight-screen-title;
+                                wrap: word-wrap;
+                            }
+                            SmallText { text: Cards.state; }
+                        }
+                        if root.narrow: VerticalLayout {
+                            alignment: start;
+                            SearchToggle {
+                                open: root.search-open;
+                                clicked => {
+                                    if root.search-open {
+                                        Cards.search("");
+                                    }
+                                    root.search-open = !root.search-open;
+                                }
+                            }
+                        }
+                        if !root.narrow: VerticalLayout {
+                            alignment: center;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Numéro, nom ou note…";
+                                text: Cards.search-text;
+                                edited(text) => { Cards.search(text); }
+                            }
+                        }
+                    }
+                    if root.narrow && root.search-open: InputField {
+                        placeholder: "Numéro, nom ou note…";
+                        text: Cards.search-text;
+                        init => { self.take-focus(); }
+                        edited(text) => { Cards.search(text); }
+                    }
+                    ChipFlow {
+                        items: Cards.filters;
+                        active: Cards.active-filter;
+                        chip-width: Theme.card-chip-width;
+                        clicked(i) => { Cards.select-filter(i); }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: CardsList { }
+                if !root.narrow: CardsTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+            }
+        }
+    }
+}
+
+component DetailLine {
+    in property <string> label;
+    in property <string> value;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        SmallText { horizontal-stretch: 1; text: root.label; }
+        BubbleLabel { text: root.value; wrap: no-wrap; }
+    }
+}
+
+component DetailTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-screen-title;
+}
+
+export component CardDetail inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: Cards.detail-number;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                }
+                SmallText { text: Cards.detail-subtitle; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Cards.close-detail(); }
+                }
+            }
+        }
+
+        DetailTitle { text: "Identité"; }
+        DetailLine { label: "Type"; value: Cards.detail-kind; }
+        DetailLine { label: "Parc"; value: Cards.detail-park; }
+
+        RowLine { }
+        DetailTitle { text: "État"; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                StatusBadge { status: Home.status-of(Cards.detail-badge); }
+            }
+            SmallText { text: Cards.detail-since; wrap: no-wrap; vertical-alignment: center; }
+        }
+        VerticalLayout {
+            SmallText { text: Cards.detail-place-label; }
+            BubbleLabel { text: Cards.detail-place; }
+            if Cards.detail-place-detail != "": SmallText { text: Cards.detail-place-detail; }
+        }
+        if Cards.confirm-question == "": VerticalLayout {
+            spacing: Theme.space;
+            for action in Cards.actions: HorizontalLayout {
+                alignment: start;
+                SecondaryButton {
+                    label: action.label;
+                    danger: action.danger;
+                    clicked => { Cards.act(action.id); }
+                }
+            }
+        }
+        if Cards.confirm-question != "": VerticalLayout {
+            spacing: Theme.space;
+            BubbleLabel { text: Cards.confirm-question; }
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space;
+                SecondaryButton {
+                    label: "Annuler";
+                    clicked => { Cards.cancel-confirm(); }
+                }
+                SecondaryButton {
+                    label: Cards.confirm-button;
+                    danger: true;
+                    clicked => { Cards.confirm(); }
+                }
+            }
+        }
+
+        if Cards.detail-has-battery: RowLine { }
+        if Cards.detail-has-battery: DetailTitle { text: "Pile"; }
+        if Cards.detail-has-battery: DetailLine { label: "Changée en"; value: Cards.detail-battery; }
+        if Cards.detail-has-battery: HorizontalLayout { alignment: start; SecondaryButton { label: "Pile changée…"; } }
+
+        RowLine { }
+        DetailTitle { text: "Note"; }
+        SmallText { text: Cards.detail-note; }
+
+        RowLine { }
+        DetailTitle { text: "Historique"; }
+        SmallText { text: Cards.detail-loans; }
+        for entry in Cards.history: VerticalLayout {
+            BubbleLabel { text: entry.text; }
+            SmallText { text: entry.date; }
+        }
+    }
+}
+
+export component CardsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Cards.detail-open;
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
+        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+
+    VerticalLayout {
+        spacing: Theme.button-margin;
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            HorizontalLayout {
+                spacing: Theme.space;
+                SummaryZone {
+                    horizontal-stretch: 1;
+                    title: "Réglages";
+                    chips: Cards.chips;
+                    bubble: 15;
+                    compact: true;
+                }
+                if Cards.alert-title != "": AlertPill {
+                    title: Cards.alert-title;
+                    count: Cards.alert-count;
+                    bubble: 16;
+                    compact: true;
+                }
+            }
+            ChipFlow {
+                items: Cards.park-chips;
+                active: Cards.active-park;
+                chip-width: Theme.card-park-chip-width;
+                clicked(i) => { Cards.select-park(i); }
+            }
+            CardsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.button-margin;
+            SummaryZone {
+                title: "Réglages";
+                chips: Cards.chips;
+                bubble: 15;
+                compact: root.layout-mode == LayoutMode.medium;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if Cards.alert-title != "": AlertPill {
+                title: Cards.alert-title;
+                count: Cards.alert-count;
+                bubble: 16;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.button-margin;
+            ParkColumn { width: Theme.course-list-width; }
+            CardsContent {
+                horizontal-stretch: 1;
+                layout-mode: root.layout-mode;
+                available-width: root.content-width;
+            }
+            if root.detail-beside: Flickable {
+                width: Theme.control-detail-width;
+                content-height: detail.preferred-height;
+                detail := CardDetail {
+                    x: 0;
+                    y: 0;
+                    width: Theme.control-detail-width;
+                    height: self.preferred-height;
+                }
+            }
+        }
+    }
+}
+
+// On medium and narrow layouts, the detail opens over the page, and scrolls when it is long.
+export component CardOverlay {
+    TouchArea {
+        clicked => { Cards.close-detail(); }
+    }
+    Rectangle {
+        background: Theme.overlay-veil;
+        Flickable {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
+            height: min(detail.preferred-height, parent.height - 2 * Theme.narrow-margin);
+            content-height: detail.preferred-height;
+            detail := CardDetail {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: self.preferred-height;
+            }
+        }
+    }
+}
+
+// One line per card, each with its button.
+component OverdueContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Cards.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        for card in Cards.overdue: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                BubbleLabel { text: card.number; }
+                SmallText { text: card.detail; }
+            }
+            VerticalLayout {
+                alignment: center;
+                PrimaryButton {
+                    label: "Voir";
+                    in-row: true;
+                    clicked => {
+                        Courses.open-bubble = 0;
+                        Cards.open-card(card.number);
+                    }
+                }
+            }
+        }
+    }
+}
+
+component ParkSettings {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space-small;
+        SmallText { text: "Description"; }
+        BubbleLabel { text: Cards.description; }
+    }
+}
+
+export component CardsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        if Courses.open-bubble == 15: ParkSettings { }
+        if Courses.open-bubble == 16: OverdueContent { }
+    }
+}

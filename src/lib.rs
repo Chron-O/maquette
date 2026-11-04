@@ -4,6 +4,7 @@ slint::include_modules!();
 
 #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
 mod capture;
+mod cards;
 mod courses;
 mod device;
 mod home;
@@ -48,6 +49,7 @@ pub struct AppState {
     stations: stations::StationsState,
     live: live::LiveState,
     results: results::ResultsState,
+    cards: cards::CardsState,
     data: Option<Generated>,
 }
 
@@ -57,13 +59,14 @@ impl AppState {
         home::show(window, self.data.as_ref());
         let event = self.navigator.event().and_then(|e| self.data.as_ref().map(|d| &d.events[e]));
         self.courses.show(window, event);
-        let cards_free = self.data.as_ref().map_or(0, |d| d.club.cards_free);
+        let cards_free = self.data.as_ref().map_or(0, Generated::cards_free);
         self.participants.show(window, event, cards_free);
         self.starts.show(window, event);
         self.stations.show(window, event);
         let (readers, clock) = self.data.as_ref().map_or((&[][..], 0), |d| (&d.readers[..], d.clock()));
         self.live.show(window, event, readers, clock);
         self.results.show(window, event, event.and_then(|e| self.live.selected_runner(e)));
+        self.cards.show(window, self.data.as_ref());
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -139,7 +142,16 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
         }
     };
     navigation.on_open_event(open_event);
-    navigation.on_open_club_page(on_click(window, state, Navigator::open_club_page));
+    // Opening a club page starts it from the beginning.
+    let (weak, state_for_page) = (window.as_weak(), state.clone());
+    navigation.on_open_club_page(move |page| {
+        let mut state = state_for_page.borrow_mut();
+        state.navigator.open_club_page(page as usize);
+        state.cards = cards::CardsState::default();
+        if let Some(window) = weak.upgrade() {
+            state.show(&window);
+        }
+    });
     // The Direct and the Résultats share their detail: it stays behind when leaving them.
     let (weak, state_for_tab) = (window.as_weak(), state.clone());
     navigation.on_select_tab(move |tab| {
@@ -416,6 +428,54 @@ fn connect_results(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_search_ranking(on_click(window, state, |r, text: slint::SharedString| r.set_ranking_search(&text)));
 }
 
+fn connect_cards(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut cards::CardsState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().cards, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    // These read or change the test data.
+    fn on_data_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut cards::CardsState, &mut Generated, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            {
+                let app = &mut *state.borrow_mut();
+                if let Some(data) = app.data.as_mut() {
+                    action(&mut app.cards, data, value);
+                }
+            }
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<Cards>();
+    page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
+    page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    page.on_select_row(on_click(window, state, |c, number: i32| c.select_row(number as u32)));
+    page.on_search(on_click(window, state, |c, text: slint::SharedString| c.set_search(&text)));
+    let close = on_click(window, state, |c, _: ()| c.close_detail());
+    page.on_close_detail(move || close(()));
+    let cancel = on_click(window, state, |c, _: ()| c.cancel_confirm());
+    page.on_cancel_confirm(move || cancel(()));
+    page.on_open_card(on_data_click(window, state, |c, data, number: i32| c.open_card(data, number as u32)));
+    page.on_act(on_data_click(window, state, |c, data, id: i32| c.act(data, id)));
+    let confirm = on_data_click(window, state, |c, data, _: ()| c.confirm(data));
+    page.on_confirm(move || confirm(()));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -466,6 +526,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     connect_stations(&window, &state);
     connect_live(&window, &state);
     connect_results(&window, &state);
+    connect_cards(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 

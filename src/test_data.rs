@@ -242,10 +242,47 @@ impl Event {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum CardState {
+    InService,
+    ToCheck,
+    Broken,
+    Lost,
+}
+
+// Where a loan card is. A lost card keeps its last known place.
+#[derive(Clone, PartialEq)]
+pub enum CardPlace {
+    Park,
+    Lent { who: String, event: String, date: String },
+    NotReturned { who: String, event: String, since: String },
+}
+
+pub struct CardEntry {
+    pub date: String,
+    pub text: String,
+}
+
+pub struct LoanCard {
+    pub number: u32,
+    pub kind: &'static str,
+    pub state: CardState,
+    pub state_since: String,
+    pub place: CardPlace,
+    pub battery: Option<&'static str>,
+    pub last_borrower: Option<String>,
+    pub loans: u32,
+    pub note: &'static str,
+    pub history: Vec<CardEntry>,    // the latest first
+}
+
+pub struct CardPark {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub cards: Vec<LoanCard>,
+}
+
 pub struct ClubFigures {
-    pub cards_free: u32,
-    pub cards_lent: u32,
-    pub cards_overdue: u32,
     pub stations: u32,
     pub station_parks: u32,
     pub low_batteries: u32,
@@ -259,6 +296,7 @@ pub struct Generated {
     pub past: Vec<usize>,
     pub readers: Vec<String>,
     pub club: ClubFigures,
+    pub card_parks: Vec<CardPark>,
     pub devices_asking: u32,
     pub screens: u32,
     today: u32,
@@ -696,6 +734,138 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
     }
 }
 
+const CARD_KINDS: [&str; 6] = ["SI-Card 8", "SI-Card 9", "SI-Card 10", "SI-Card 10", "SI-Card 11", "SIAC"];
+const CARD_BATTERIES: [&str; 5] = ["09/2024", "03/2025", "11/2025", "03/2026", "06/2026"];
+const CARD_NOTES: [&str; 3] = ["Bouton qui accroche", "Rangée à part", "Pile faible"];
+const STOCK_SEED: u64 = 0x5EED;
+
+fn short_date(days: u32) -> String {
+    let (_, day, _, short) = date(days);
+    format!("{day} {short}")
+}
+
+fn new_card(random: &mut Random, number: u32, today: u32) -> LoanCard {
+    let kind = random.pick(&CARD_KINDS);
+    let state = match random.below(16) {
+        0 => CardState::Broken,
+        1 => CardState::Lost,
+        2 | 3 => CardState::ToCheck,
+        _ => CardState::InService,
+    };
+    let loans = random.below(19);
+    let mut history = Vec::new();
+    let mut last_borrower = None;
+    let mut days = today;
+    for i in 0..loans.min(3) {
+        days = days.saturating_sub(random.between(3, 9));
+        let who = format!("{} {}", random.pick(&FAMILY_NAMES), random.pick(&FIRST_NAMES));
+        let text = format!("Prêtée à {who} · {} · rendue", random.pick(&EVENT_NAMES));
+        history.push(CardEntry { date: short_date(days), text });
+        if i == 0 {
+            last_borrower = Some(who);
+        }
+    }
+    let troubled = state != CardState::InService;
+    let battery = if kind == "SI-Card 8" || kind == "SI-Card 9" { None } else { Some(random.pick(&CARD_BATTERIES)) };
+    // The notes that speak of a battery stay on the cards that have one.
+    let notes = if battery.is_some() { &CARD_NOTES[..] } else { &CARD_NOTES[..2] };
+    LoanCard {
+        number,
+        kind,
+        state,
+        state_since: short_date(today.saturating_sub(random.below(30))),
+        place: CardPlace::Park,
+        battery,
+        last_borrower,
+        loans,
+        note: if troubled || random.below(8) == 0 { random.pick(notes) } else { "" },
+        history,
+    }
+}
+
+// A card that went out with a runner: it can be lent, so it is not broken or lost.
+fn lent_card(random: &mut Random, number: u32, today: u32, place: CardPlace, who: String, entry: CardEntry) -> LoanCard {
+    let mut card = new_card(random, number, today);
+    if matches!(card.state, CardState::Broken | CardState::Lost) {
+        card.state = CardState::InService;
+        card.note = "";
+    }
+    card.place = place;
+    card.last_borrower = Some(who);
+    card.loans += 1;
+    card.history.insert(0, entry);
+    card
+}
+
+// The stock comes after the events: it holds the cards lent to their runners, so all
+// the screens agree. Only the current event and a past one or two still have cards out.
+fn new_card_parks(seed: u64, events: &mut [Event], past: &[usize], today: u32) -> Vec<CardPark> {
+    let mut random = Random(seed ^ STOCK_SEED);
+    let mut club: Vec<LoanCard> = Vec::new();
+    let mut overdue = random.between(1, 3);
+
+    for (index, event) in events.iter_mut().enumerate() {
+        let name = event.name.clone();
+        let day = format!("{} {}", event.day, event.month_short);
+        let is_past = past.contains(&index);
+        let is_current = index == CURRENT_EVENT;
+        for runner in event.runners.iter_mut().filter(|r| r.lent) {
+            let Some(number) = runner.card else { continue };
+            if club.iter().any(|c| c.number == number) {
+                runner.lent = false;
+                continue;
+            }
+            let who = runner.name();
+            if is_current {
+                let place = CardPlace::Lent { who: who.clone(), event: name.clone(), date: day.clone() };
+                let entry = CardEntry { date: day.clone(), text: format!("Prêtée à {who} · {name}") };
+                club.push(lent_card(&mut random, number, today, place, who, entry));
+            } else if is_past && overdue > 0 {
+                overdue -= 1;
+                let place = CardPlace::NotReturned { who: who.clone(), event: name.clone(), since: day.clone() };
+                let entry = CardEntry { date: day.clone(), text: format!("Prêtée à {who} · {name} · non rendue") };
+                club.push(lent_card(&mut random, number, today, place, who, entry));
+            } else {
+                runner.lent = false;
+            }
+        }
+    }
+    for _ in 0..random.between(22, 32) {
+        let number = random.between(2_040_000, 2_049_999);
+        if club.iter().all(|c| c.number != number) {
+            club.push(new_card(&mut random, number, today));
+        }
+    }
+    club.sort_by_key(|c| c.number);
+
+    let mut league: Vec<LoanCard> = (0..random.between(8, 14))
+        .map(|i| new_card(&mut random, 2_051_000 + i * 7, today))
+        .collect();
+    league.sort_by_key(|c| c.number);
+
+    // Cards put on a reader that belong to no park: nothing is known about them yet.
+    let unknown = (0..2)
+        .map(|i| LoanCard {
+            number: random.between(7_000_000, 7_999_999) + i,
+            kind: random.pick(&CARD_KINDS),
+            state: CardState::ToCheck,
+            state_since: short_date(today),
+            place: CardPlace::Park,
+            battery: None,
+            last_borrower: None,
+            loans: 0,
+            note: "",
+            history: vec![CardEntry { date: short_date(today), text: "Posée sur un lecteur, hors parc".into() }],
+        })
+        .collect();
+
+    vec![
+        CardPark { name: "Parc du club", description: "Mallette rouge, rangée au local du club.", cards: club },
+        CardPark { name: "Ligue AURA (prêt)", description: "Puces prêtées au club par la ligue.", cards: league },
+        CardPark { name: "Non identifiées", description: "Puces posées sur un lecteur, sans parc connu.", cards: unknown },
+    ]
+}
+
 impl Generated {
     pub fn new(seed: u64) -> Self {
         let mut random = Random(seed);
@@ -724,15 +894,13 @@ impl Generated {
         }
 
         let club = ClubFigures {
-            cards_free: random.between(10, 30),
-            cards_lent: random.below(4),
-            cards_overdue: random.below(3),
             stations: random.between(30, 60),
             station_parks: random.between(1, 3),
             low_batteries: random.below(4),
             runners: random.between(11_000, 14_000),
             clubs: random.between(180, 240),
         };
+        let card_parks = new_card_parks(seed, &mut events, &past, today);
         let clock_seconds = events[CURRENT_EVENT].readings.last().map(|r| r.at + 30);
         let clock_seconds = clock_seconds.unwrap_or_else(|| random.between(10, 14) * 3600);
         Generated {
@@ -741,11 +909,52 @@ impl Generated {
             past,
             readers: vec!["Arrivée 1".into(), "Arrivée 2".into()],
             club,
+            card_parks,
             devices_asking: random.below(2),
             screens: random.below(3),
             today,
             clock_seconds,
             random,
+        }
+    }
+
+    fn cards(&self) -> impl Iterator<Item = &LoanCard> {
+        self.card_parks.iter().flat_map(|p| p.cards.iter())
+    }
+
+    pub fn card(&self, number: u32) -> Option<&LoanCard> {
+        self.cards().find(|c| c.number == number)
+    }
+
+    // The cards that can be lent right now.
+    pub fn cards_free(&self) -> u32 {
+        self.cards()
+            .filter(|c| c.place == CardPlace::Park && matches!(c.state, CardState::InService | CardState::ToCheck))
+            .count() as u32
+    }
+
+    pub fn cards_lent(&self) -> u32 {
+        self.cards().filter(|c| matches!(c.place, CardPlace::Lent { .. })).count() as u32
+    }
+
+    pub fn overdue_cards(&self) -> Vec<&LoanCard> {
+        self.cards().filter(|c| matches!(c.place, CardPlace::NotReturned { .. }) && c.state != CardState::Lost).collect()
+    }
+
+    pub fn set_card_state(&mut self, number: u32, state: CardState, text: &str) {
+        let date = short_date(self.today);
+        if let Some(card) = self.card_parks.iter_mut().flat_map(|p| p.cards.iter_mut()).find(|c| c.number == number) {
+            card.state = state;
+            card.state_since = date.clone();
+            card.history.insert(0, CardEntry { date, text: text.into() });
+        }
+    }
+
+    pub fn return_card(&mut self, number: u32) {
+        let date = short_date(self.today);
+        if let Some(card) = self.card_parks.iter_mut().flat_map(|p| p.cards.iter_mut()).find(|c| c.number == number) {
+            card.place = CardPlace::Park;
+            card.history.insert(0, CardEntry { date, text: "Rendue".into() });
         }
     }
 

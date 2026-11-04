@@ -13,7 +13,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 5 | Course › Boîtiers | validé par Robin ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
 | 6 | Course › Direct | validé par Robin ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
 | 7 | Course › Résultats | validé par Robin ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
-| 8 | Puces (stock de prêt) | à faire |
+| 8 | Puces (stock de prêt) | validé par Robin ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
 | 9 | Boîtiers (inventaire du club) | à faire |
 | 10 | Coureurs et clubs (base fédérale) | à faire |
 
@@ -164,6 +164,25 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Alerte** : aucune sur cet écran.
 - **iPad portrait** : le cadre Réglages prend toute la largeur en n'affichant que son titre, comme sur Participants et Boîtiers.
 - **Non testé** : les deux recherches, les pastilles de catégorie, les classements qui changent pendant la course, la bulle sur iPad et téléphone. Web et iPhone compilent, sans avoir été ouverts.
+
+## 8 — Puces de prêt
+- Le prototype n'a que la carte de l'accueil. La page vient de `puces-pret-parc.md` § 10 à 13 et de `GestionPuces.html` de chrono-swift, rangée selon les règles de placement : parcs en colonne, tableau du parc, filtres par état, alerte des puces non rendues, fiche par thèmes.
+- Fonctionnent, sur les données de test seulement : choix du parc, filtres, recherche, À vérifier, En service, HS et Perdue (les deux derniers avec confirmation), Remise en service, Rendue, « Voir » depuis l'alerte. Ajouter des puces, Inventaire, Importer, Imprimer, Exporter, Prêter et Pile changée sont visibles, sans effet.
+- Générateur : un stock de trois parcs. Les chiffres de l'accueil et de Participants en sont tirés ; les puces prêtées du tableau sont celles de Participants.
+- Captures : `08-cards-*` (tirage fixe). Celles des autres écrans sont refaites : le tirage de test a changé, ainsi que les puces prêtées des autres événements.
+
+### Écarts et points ouverts de l'écran 8
+- **Nom** : « Puces de prêt » comme le prototype ; la spec dit « Gestion des puces ».
+- **Reportés** : cocher plusieurs puces et Déplacer vers, changer une puce de parc, créer ou supprimer un parc, modifier la note ou l'emplacement à la main, tri par les titres, phrases d'explication des actions d'état.
+- **Onglet Puces de prêt de la course** (En circulation, Fin de journée, pièce d'identité) : absent des 6 onglets et du prototype.
+- **Réglages** : seulement la description du parc, vide sans générateur.
+- **Confirmation de HS et Perdue** : dans la fiche, pas dans une fenêtre.
+- **« au parc »** : l'accueil et Participants comptent les puces prêtables, la bande du bas compte aussi les HS et les perdues.
+- **Puce perdue** : le tableau montre son dernier emplacement sans le dire ; seule la fiche écrit « Dernier lieu connu ». Pas de Rendue tant qu'elle est perdue.
+- **Tableau** : des colonnes disparaissent quand la place manque, sans défilement de côté. Le dernier emprunteur n'apparaît alors que dans l'historique de la fiche.
+- **Date de pile** : seulement pour les SI-Card 10, 11 et SIAC ; les SI-Card 8 et 9 sont supposées sans pile à changer, à confirmer.
+- **Autres événements** : les puces prêtées des événements à venir et passés sont retirées, sauf 1 à 3 non rendues sur des événements passés.
+- **Non testé** : recherche et loupe du téléphone, Perdue…, Annuler, Remise en service, contenu de la bulle Réglages, ouverture depuis la carte de l'accueil. Web et iPhone compilent, sans avoir été ouverts.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

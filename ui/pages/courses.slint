@@ -2057,6 +2057,7 @@ export component CoursesPage {
 export component PageBand {
     callback publish();
     in property <string> summary;
+    in property <bool> can-inventory;
     in property <bool> can-import;
     in property <bool> has-actions: true;
     in property <bool> can-publish;
@@ -2074,7 +2075,11 @@ export component PageBand {
         RowLine { }
         if root.narrow: VerticalLayout {
             padding-top: Theme.space;
-            BandSummary { text: root.summary; }
+            HorizontalLayout {
+                spacing: Theme.space;
+                BandSummary { horizontal-stretch: 1; text: root.summary; }
+                if root.can-inventory: SecondaryButton { label: "Inventaire"; }
+            }
             HorizontalLayout {
                 spacing: Theme.space;
                 alignment: end;
@@ -2088,6 +2093,7 @@ export component PageBand {
             padding-top: Theme.space-small;
             spacing: Theme.space;
             BandSummary { horizontal-stretch: 1; text: root.summary; }
+            if root.can-inventory: SecondaryButton { label: "Inventaire"; }
             if root.can-import: SecondaryButton { label: "Importer"; }
             if root.has-actions: SecondaryButton { label: "Imprimer"; }
             if root.has-actions: SecondaryButton { label: "Exporter"; }
@@ -2263,7 +2269,7 @@ export component BubbleFrame {
     in property <length> margin;
 
     property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 || Courses.open-bubble == 13 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 || Courses.open-bubble == 13 || Courses.open-bubble == 16 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }

@@ -10,6 +10,7 @@ pub const CLUB_PAGES: [&str; 3] = ["Puces de prêt", "Boîtiers", "Coureurs et c
 pub const TABS: [&str; 6] = ["Circuits", "Participants", "Départs", "Boîtiers", "Direct", "Résultats"];
 
 const APP_NAME: &str = "Chron'O";
+const CARDS_PAGE: usize = 0;
 const DIRECT_TAB: usize = 4;
 
 #[derive(Default)]
@@ -66,10 +67,11 @@ impl Navigator {
         let navigation = window.global::<Navigation>();
         navigation.set_home(matches!(self.view, View::Home));
         navigation.set_in_event(matches!(self.view, View::Event { .. }));
+        navigation.set_cards_page(matches!(self.view, View::ClubPage(CARDS_PAGE)));
 
         let (header, page, tab) = match self.view {
             View::Home => (APP_NAME, HOME, 0),
-            View::ClubPage(page) => (APP_NAME, CLUB_PAGES[page], 0),
+            View::ClubPage(page) => (if page == CARDS_PAGE { CLUB_PAGES[page] } else { APP_NAME }, CLUB_PAGES[page], 0),
             View::Event { event, tab } => {
                 let name = data.map_or(APP_NAME, |d| d.events[event].name.as_str());
                 (name, TABS[tab], tab)
