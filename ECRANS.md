@@ -15,7 +15,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 7 | Course › Résultats | validé par Robin ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
 | 8 | Puces (stock de prêt) | validé par Robin ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
 | 9 | Boîtiers (inventaire du club) | validé par Robin ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
-| 10 | Coureurs et clubs (base fédérale) | à faire |
+| 10 | Coureurs et clubs (base fédérale) | validé par Robin ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
 
 ## 0 — Mise en place
 - Ranger le prototype HTML dans `html/` (il reste en ligne à `…/maquette/html/`) ; mettre à jour le README.
@@ -204,6 +204,25 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Stock** : seuls les boîtiers de l'événement du jour y sont ; ceux des autres événements n'y figurent pas.
 - **Accueil** : compte Club et Secours, sans Non identifiés. « piles à changer » remplace « piles faibles » du prototype.
 - **Non testé** : recherche et loupe, filtres, changement de parc depuis la colonne, À vérifier, En réparation, Remis en service, clic final sur Marquer perdu ou détruit, Annuler, boîtier perdu relu, contenu de la bulle Réglages, téléphone 320 px, bulle d'alerte sur iPad et téléphone, ouverture depuis la carte de l'accueil. Web et iPhone compilent, sans avoir été ouverts.
+
+## 10 — Coureurs et clubs
+- Le prototype n'a que la carte de l'accueil. La page vient de `coureurs-clubs.md` et de `mise-en-page-universelle.md` de chrono-swift, rangée selon les règles de placement : pas de colonne, tableau de la base, filtres par licence, alerte des points à vérifier, fiche par blocs.
+- Fonctionnent, sur les données de test seulement : tri par les titres, filtres, recherche, « Voir » depuis l'alerte, Supprimer avec confirmation. Ajouter un coureur, Importer FFCO, Exporter, Fusionner des clubs, Modifier et Chercher le licencié sont visibles, sans effet.
+- Générateur : une base de 280 à 340 fiches inventées, avec les participants de l'événement du jour et les emprunteurs de puces. Les chiffres de l'accueil en sont tirés.
+- Captures : `10-runner-base-*` (tirage fixe). Celles des autres écrans sont refaites : le tirage de test a changé.
+
+### Écarts et points ouverts de l'écran 10
+- **Taille de la base** : quelques centaines de fiches, au lieu d'environ 9 000 en vrai. Tenue de Slint à cette taille à tester si le code sert à l'app.
+- **Reportés** : fenêtres de contrôle des doublons et des puces sur deux fiches, fusion, aperçu et lecture des imports FFCO, colonnes facultatives (Sexe, Courses, Dernière course), filtres par club, ligue et catégorie, contact (téléphone, e-mail).
+- **Tableau** : pas de défilement de côté, malgré ce que permet la spec sur cet écran ; des colonnes disparaissent quand la place manque. « Découverte » et « Loisir » écrits courts dans le tableau et les filtres ; nom complet dans la fiche.
+- **Doublons** : règle simplifiée, une fiche saisie au nom et prénom exacts d'un licencié.
+- **Recherche** : ignore les majuscules, pas les accents ; pas la recherche de la saisie d'un coureur.
+- **Fiche** : à droite en large, par-dessus sinon, au lieu de la modale de la spec. Modifier… n'est pas en orange, pour garder un seul bouton orange par écran.
+- **Téléphone** : pas de découpage aux coins arrondis de la carte, trop haute pour le mode de dessin (carte noire sinon). La première et la dernière ligne peuvent dépasser légèrement.
+- **Données inventées** : le sexe et l'année suivent la catégorie, un prénom peut ne pas y correspondre. Le code du club individuel est inventé.
+- **Générateur des boîtiers** : parfois beaucoup de piles à changer (10 sur 28 vu sur un tirage), à baisser si besoin.
+- **Fiche ouverte seule** : vue une fois sur une capture iPad, sans clic programmé, jamais revue. Cause non établie.
+- **Non testé** : recherche et loupe, filtres, tri décroissant, Annuler, contenu de la bulle Réglages, puce partagée et puce non rendue dans la fiche, coureur non relicencié, fiche et bulle sur téléphone et iPad, iPad paysage, téléphone 320 px après la correction, page vide sans données, performances sur un vrai téléphone. Le web compile, sans avoir été ouvert.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

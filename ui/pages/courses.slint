@@ -2057,8 +2057,10 @@ export component CoursesPage {
 export component PageBand {
     callback publish();
     in property <string> summary;
-    in property <bool> can-inventory;
+    in property <string> first-action;
     in property <bool> can-import;
+    in property <string> import-label: "Importer";
+    in property <bool> can-print: true;
     in property <bool> has-actions: true;
     in property <bool> can-publish;
     in property <LayoutMode> layout-mode;
@@ -2078,13 +2080,13 @@ export component PageBand {
             HorizontalLayout {
                 spacing: Theme.space;
                 BandSummary { horizontal-stretch: 1; text: root.summary; }
-                if root.can-inventory: SecondaryButton { label: "Inventaire"; }
+                if root.first-action != "": SecondaryButton { label: root.first-action; }
             }
             HorizontalLayout {
                 spacing: Theme.space;
                 alignment: end;
-                if root.can-import: SecondaryButton { label: "Importer"; }
-                if root.has-actions: SecondaryButton { label: "Imprimer"; }
+                if root.can-import: SecondaryButton { label: root.import-label; }
+                if root.has-actions && root.can-print: SecondaryButton { label: "Imprimer"; }
                 if root.has-actions: SecondaryButton { label: "Exporter"; }
                 if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
             }
@@ -2093,9 +2095,9 @@ export component PageBand {
             padding-top: Theme.space-small;
             spacing: Theme.space;
             BandSummary { horizontal-stretch: 1; text: root.summary; }
-            if root.can-inventory: SecondaryButton { label: "Inventaire"; }
-            if root.can-import: SecondaryButton { label: "Importer"; }
-            if root.has-actions: SecondaryButton { label: "Imprimer"; }
+            if root.first-action != "": SecondaryButton { label: root.first-action; }
+            if root.can-import: SecondaryButton { label: root.import-label; }
+            if root.has-actions && root.can-print: SecondaryButton { label: "Imprimer"; }
             if root.has-actions: SecondaryButton { label: "Exporter"; }
             if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
         }
@@ -2269,7 +2271,7 @@ export component BubbleFrame {
     in property <length> margin;
 
     property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 || Courses.open-bubble == 13 || Courses.open-bubble == 16 || Courses.open-bubble == 18 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 || Courses.open-bubble == 13 || Courses.open-bubble == 16 || Courses.open-bubble == 18 || Courses.open-bubble == 20 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }

@@ -63,7 +63,8 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
             card("Coureurs et clubs", "0".into(), "".into(), no_badge()),
         ];
     };
-    let club = &data.club;
+    let licensed = data.runner_base.iter().filter(|r| r.licence.is_some()).count() as u32;
+    let clubs = data.runner_base.iter().map(|r| r.club).collect::<std::collections::BTreeSet<_>>().len() as u32;
     let overdue = data.overdue_cards().len() as u32;
     let parks = data.club_parks().count() as u32;
     let stations = data.club_parks().map(|p| p.stations.len()).sum::<usize>() as u32;
@@ -86,9 +87,9 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
         ),
         card(
             "Coureurs et clubs",
-            thousands(club.runners),
-            format!("licenciés · {} clubs", club.clubs),
-            no_badge(),
+            thousands(licensed),
+            format!("licenciés · {}", plural(clubs, "club")),
+            badge(&Label::new(format!("Archive FFCO du {}", data.archive_date), Kind::Inactive)),
         ),
     ]
 }

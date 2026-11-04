@@ -13,6 +13,7 @@ mod live;
 mod navigation;
 mod participants;
 mod results;
+mod runner_base;
 mod starts;
 mod stations;
 mod test_data;
@@ -52,6 +53,7 @@ pub struct AppState {
     results: results::ResultsState,
     cards: cards::CardsState,
     club_stations: club_stations::ClubStationsState,
+    runner_base: runner_base::RunnerBaseState,
     data: Option<Generated>,
 }
 
@@ -70,6 +72,7 @@ impl AppState {
         self.results.show(window, event, event.and_then(|e| self.live.selected_runner(e)));
         self.cards.show(window, self.data.as_ref());
         self.club_stations.show(window, self.data.as_ref());
+        self.runner_base.show(window, self.data.as_ref());
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -152,6 +155,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
         state.navigator.open_club_page(page as usize);
         state.cards = cards::CardsState::default();
         state.club_stations = club_stations::ClubStationsState::default();
+        state.runner_base = runner_base::RunnerBaseState::default();
         if let Some(window) = weak.upgrade() {
             state.show(&window);
         }
@@ -546,6 +550,46 @@ fn connect_club_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_change_battery(move || battery(()));
 }
 
+fn connect_runner_base(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut runner_base::RunnerBaseState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().runner_base, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<RunnerBase>();
+    page.on_select_filter(on_click(window, state, |r, i: i32| r.select_filter(i as usize)));
+    page.on_select_row(on_click(window, state, |r, id: i32| r.select_row(id as u32)));
+    page.on_open_runner(on_click(window, state, |r, id: i32| r.open_runner(id as u32)));
+    page.on_sort_by(on_click(window, state, |r, column: i32| r.sort_by(column as usize)));
+    page.on_search(on_click(window, state, |r, text: slint::SharedString| r.set_search(&text)));
+    let close = on_click(window, state, |r, _: ()| r.close_detail());
+    page.on_close_detail(move || close(()));
+    let ask = on_click(window, state, |r, _: ()| r.ask_delete());
+    page.on_ask_delete(move || ask(()));
+    let cancel = on_click(window, state, |r, _: ()| r.cancel_delete());
+    page.on_cancel_delete(move || cancel(()));
+    let (weak, state_for_delete) = (window.as_weak(), state.clone());
+    page.on_confirm_delete(move || {
+        {
+            let app = &mut *state_for_delete.borrow_mut();
+            if let Some(data) = app.data.as_mut() {
+                app.runner_base.confirm_delete(data);
+            }
+        }
+        if let Some(window) = weak.upgrade() {
+            state_for_delete.borrow().show(&window);
+        }
+    });
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -598,6 +642,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     connect_results(&window, &state);
     connect_cards(&window, &state);
     connect_club_stations(&window, &state);
+    connect_runner_base(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 

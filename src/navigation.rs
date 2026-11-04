@@ -12,6 +12,7 @@ pub const TABS: [&str; 6] = ["Circuits", "Participants", "Départs", "Boîtiers"
 const APP_NAME: &str = "Chron'O";
 const CARDS_PAGE: usize = 0;
 const STATIONS_PAGE: usize = 1;
+const RUNNERS_PAGE: usize = 2;
 const DIRECT_TAB: usize = 4;
 
 #[derive(Default)]
@@ -74,17 +75,17 @@ impl Navigator {
         navigation.set_in_event(matches!(self.view, View::Event { .. }));
         navigation.set_cards_page(matches!(self.view, View::ClubPage(CARDS_PAGE)));
         navigation.set_stations_page(self.on_stations_page());
+        navigation.set_runners_page(matches!(self.view, View::ClubPage(RUNNERS_PAGE)));
 
-        let (header, page, tab) = match self.view {
-            View::Home => (APP_NAME, HOME, 0),
-            View::ClubPage(page) => (if page == CARDS_PAGE || page == STATIONS_PAGE { CLUB_PAGES[page] } else { APP_NAME }, CLUB_PAGES[page], 0),
+        let (header, tab) = match self.view {
+            View::Home => (APP_NAME, 0),
+            View::ClubPage(page) => (CLUB_PAGES[page], 0),
             View::Event { event, tab } => {
                 let name = data.map_or(APP_NAME, |d| d.events[event].name.as_str());
-                (name, TABS[tab], tab)
+                (name, tab)
             }
         };
         navigation.set_header_title(header.into());
-        navigation.set_page_title(page.into());
         navigation.set_active_tab(tab as i32);
     }
 }

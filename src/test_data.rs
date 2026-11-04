@@ -334,9 +334,36 @@ pub struct StationPark {
     pub stations: Vec<StockStation>,
 }
 
-pub struct ClubFigures {
-    pub runners: u32,
-    pub clubs: u32,
+// One person of the club's local base: the federal archive, and the cards typed by hand.
+pub struct BaseRunner {
+    pub id: u32,
+    pub family: &'static str,
+    pub first: &'static str,
+    pub club: &'static str,
+    pub club_code: &'static str,
+    pub sex: &'static str,
+    pub year: u32,
+    pub category: String,
+    pub licence: Option<u32>,       // none: typed by hand
+    pub licence_kind: Option<LicenceKind>,
+    pub renewed: bool,
+    pub card: Option<u32>,
+    pub points: Option<(u32, String)>,
+    pub entered_on: String,         // when it was typed by hand
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum LicenceKind {
+    Competition,
+    Discovery,
+    Leisure,
+    Handisport,
+}
+
+impl BaseRunner {
+    pub fn name(&self) -> String {
+        format!("{} {}", self.family, self.first)
+    }
 }
 
 pub struct Generated {
@@ -344,7 +371,8 @@ pub struct Generated {
     pub upcoming: Vec<usize>,
     pub past: Vec<usize>,
     pub readers: Vec<String>,
-    pub club: ClubFigures,
+    pub runner_base: Vec<BaseRunner>,
+    pub archive_date: String,
     pub card_parks: Vec<CardPark>,
     pub station_parks: Vec<StationPark>,
     pub devices_asking: u32,
@@ -916,6 +944,135 @@ fn new_card_parks(seed: u64, events: &mut [Event], past: &[usize], today: u32) -
     ]
 }
 
+const BASE_SEED: u64 = 0xBA5E;
+const BASE_FAMILY_NAMES: [&str; 30] = [
+    "ARNAUD", "BLANC", "BONNET", "BRUN", "CARON", "CHEVALIER", "CLÉMENT", "COLIN", "DAVID", "DUBOIS", "FABRE", "FONTAINE",
+    "GARNIER", "GAUTIER", "GUÉRIN", "HENRY", "JOLY", "LAMBERT", "LEFEBVRE", "MARCHAND", "MEUNIER", "MICHEL", "PERRIN", "PICARD",
+    "RENARD", "RICHARD", "RIVIÈRE", "ROUSSEL", "SIMON", "VIDAL",
+];
+const NO_CLUB: &str = "Individuel (sans club)";
+// The clubs of the base with their code: its last two letters are the league.
+const BASE_CLUBS: [(&str, &str); 11] = [
+    ("ASO Lyon", "6905AR"),
+    ("SMOC", "6912AR"),
+    ("TAD", "3804AR"),
+    ("COLE", "0102AR"),
+    ("CO Brou", "0106AR"),
+    ("OTB", "4207AR"),
+    ("CO des Vallons", "2903BR"),
+    ("Balise 44", "4401PL"),
+    ("Raid du Nord", "5908HF"),
+    ("Orient'Sud", "3402OC"),
+    (NO_CLUB, "0000AR"),
+];
+
+fn club_code(club: &str) -> &'static str {
+    BASE_CLUBS.iter().find(|(name, _)| *name == club).map_or("", |(_, code)| *code)
+}
+
+// A category says the sex and the age, when it is a known one.
+fn set_base_category(random: &mut Random, person: &mut BaseRunner, category: &str) {
+    person.category = category.to_string();
+    if category.starts_with('D') {
+        person.sex = "F";
+    } else if category.starts_with('H') {
+        person.sex = "H";
+    }
+    let age: String = category.chars().filter(char::is_ascii_digit).collect();
+    if let Ok(age) = age.parse::<u32>() {
+        person.year = BATTERY_YEAR - age - random.below(3);
+    }
+}
+
+fn new_base_runner(random: &mut Random, id: u32, family: &'static str, first: &'static str, club: &'static str, today: u32) -> BaseRunner {
+    let kind = match random.below(12) {
+        0 | 1 => LicenceKind::Discovery,
+        2 => LicenceKind::Leisure,
+        3 if random.below(4) == 0 => LicenceKind::Handisport,
+        _ => LicenceKind::Competition,
+    };
+    let scored = random.below(5) < 2;
+    let category = random.pick(&ALL_CATEGORIES);
+    let mut person = BaseRunner {
+        id,
+        family,
+        first,
+        club,
+        club_code: club_code(club),
+        sex: "H",
+        year: random.between(1950, 2012),
+        category: String::new(),
+        licence: Some(random.between(100_000, 999_999)),
+        licence_kind: Some(kind),
+        renewed: random.below(30) > 0,
+        card: (random.below(5) > 0).then(|| random.between(8_100_000, 8_199_999)),
+        points: scored.then(|| (random.between(800, 1500), short_date(today.saturating_sub(random.between(5, 25))))),
+        entered_on: String::new(),
+    };
+    set_base_category(random, &mut person, category);
+    person
+}
+
+// The base holds the runners of today's event and those who have a card of the club, so
+// that the screens agree. Some cards typed by hand, some shared cards: things to check.
+fn new_runner_base(seed: u64, events: &[Event], today: u32) -> Vec<BaseRunner> {
+    let mut random = Random(seed ^ BASE_SEED);
+    let mut base: Vec<BaseRunner> = Vec::new();
+    let known = |base: &[BaseRunner], family: &str, first: &str| base.iter().any(|b| b.family == family && b.first == first);
+
+    for (index, event) in events.iter().enumerate() {
+        for runner in event.runners.iter().filter(|r| index == CURRENT_EVENT || r.lent) {
+            if known(&base, runner.family, runner.first) {
+                continue;
+            }
+            let id = base.len() as u32;
+            let mut person = new_base_runner(&mut random, id, runner.family, runner.first, runner.club, today);
+            set_base_category(&mut random, &mut person, &runner.category);
+            person.card = runner.card;
+            base.push(person);
+        }
+    }
+    let wanted = random.between(280, 340) as usize;
+    while base.len() < wanted {
+        let family = if random.below(4) == 0 { random.pick(&FAMILY_NAMES) } else { random.pick(&BASE_FAMILY_NAMES) };
+        let first = random.pick(&FIRST_NAMES);
+        if !known(&base, family, first) {
+            let club = random.pick(&BASE_CLUBS).0;
+            let id = base.len() as u32;
+            base.push(new_base_runner(&mut random, id, family, first, club, today));
+        }
+    }
+    // Two licensed runners sharing a card, twice.
+    for _ in 0..2 {
+        let (from, to) = (random.below(base.len() as u32) as usize, random.below(base.len() as u32) as usize);
+        if from != to && base[from].card.is_some() {
+            base[to].card = base[from].card;
+        }
+    }
+    // Cards typed by hand: some are probably someone who has a licence, some are not.
+    for i in 0..6 {
+        let id = base.len() as u32;
+        let (family, first) = if i < 3 {
+            let original = random.below(id) as usize;
+            (base[original].family, base[original].first)
+        } else {
+            let mut name = (random.pick(&BASE_FAMILY_NAMES), random.pick(&FIRST_NAMES));
+            while known(&base, name.0, name.1) {
+                name = (random.pick(&BASE_FAMILY_NAMES), random.pick(&FIRST_NAMES));
+            }
+            name
+        };
+        let mut person = new_base_runner(&mut random, id, family, first, NO_CLUB, today);
+        person.licence = None;
+        person.licence_kind = None;
+        person.points = None;
+        person.card = None;
+        person.entered_on = short_date(today.saturating_sub(random.below(30)));
+        base.push(person);
+    }
+    base
+}
+
 const STATION_KINDS: [&str; 3] = ["BSF7", "BSF8", "BSM8"];
 const STATION_NOTES: [&str; 3] = ["Étiquette à refaire", "Bip faible", "Support fendu"];
 const STATION_STOCK_SEED: u64 = 0xB01E;
@@ -1044,12 +1201,10 @@ impl Generated {
             events.push(new_event(&mut random, name(i), days, Moment::Past));
         }
 
-        let club = ClubFigures {
-            runners: random.between(11_000, 14_000),
-            clubs: random.between(180, 240),
-        };
         let card_parks = new_card_parks(seed, &mut events, &past, today);
         let station_parks = new_station_parks(seed, &events[CURRENT_EVENT], today);
+        let archive_date = short_date(today.saturating_sub(4));
+        let runner_base = new_runner_base(seed, &events, today);
         let clock_seconds = events[CURRENT_EVENT].readings.last().map(|r| r.at + 30);
         let clock_seconds = clock_seconds.unwrap_or_else(|| random.between(10, 14) * 3600);
         Generated {
@@ -1057,7 +1212,8 @@ impl Generated {
             upcoming,
             past,
             readers: vec!["Arrivée 1".into(), "Arrivée 2".into()],
-            club,
+            runner_base,
+            archive_date,
             card_parks,
             station_parks,
             devices_asking: random.below(2),
