@@ -7,6 +7,7 @@ mod capture;
 mod courses;
 mod device;
 mod home;
+mod live;
 mod navigation;
 mod participants;
 mod starts;
@@ -22,6 +23,11 @@ use std::time::Duration;
 use test_data::{CURRENT_EVENT, Generated};
 
 const SECONDS_BETWEEN_READINGS: u64 = 3;
+const NARROW_WIDTH: f32 = 600.0;
+// Just under the alert of the Direct, opened from the home page before it is laid out.
+const BUBBLE_TOP: f32 = 164.0;
+const BUBBLE_TOP_TOUCH: f32 = 200.0;
+const BUBBLE_TOP_NARROW: f32 = 237.0;
 
 fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(rows))
@@ -39,6 +45,7 @@ pub struct AppState {
     participants: participants::ParticipantsState,
     starts: starts::StartsState,
     stations: stations::StationsState,
+    live: live::LiveState,
     data: Option<Generated>,
 }
 
@@ -52,6 +59,8 @@ impl AppState {
         self.participants.show(window, event, cards_free);
         self.starts.show(window, event);
         self.stations.show(window, event);
+        let (readers, clock) = self.data.as_ref().map_or((&[][..], 0), |d| (&d.readers[..], d.clock()));
+        self.live.show(window, event, readers, clock);
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -119,6 +128,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
             state.participants = participants::ParticipantsState::default();
             state.starts = starts::StartsState::default();
             state.stations = stations::StationsState::default();
+            state.live = live::LiveState::default();
             if let Some(window) = weak.upgrade() {
                 state.show(&window);
             }
@@ -127,8 +137,25 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
     navigation.on_open_event(open_event);
     navigation.on_open_club_page(on_click(window, state, Navigator::open_club_page));
     navigation.on_select_tab(on_click(window, state, Navigator::select_tab));
+    // From the home page, « à traiter » opens the Direct with its alert open.
     let open_direct = on_click(window, state, |n, _| n.open_direct(CURRENT_EVENT));
-    navigation.on_open_direct(move || open_direct(0));
+    let weak = window.as_weak();
+    navigation.on_open_direct(move || {
+        open_direct(0);
+        if let Some(window) = weak.upgrade() {
+            let courses = window.global::<Courses>();
+            let width = window.window().size().to_logical(window.window().scale_factor()).width;
+            courses.set_bubble_right(width);
+            courses.set_bubble_top(if width < NARROW_WIDTH {
+                BUBBLE_TOP_NARROW
+            } else if window.global::<Theme>().get_touch() {
+                BUBBLE_TOP_TOUCH
+            } else {
+                BUBBLE_TOP
+            });
+            courses.set_open_bubble(live::LiveState::ALERT_BUBBLE);
+        }
+    });
     let go_back = on_click(window, state, |n, _| n.go_home());
     navigation.on_go_back(move || go_back(0));
 
@@ -297,6 +324,55 @@ fn connect_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     window.global::<Demo>().on_read_station(move || read(()));
 }
 
+fn connect_live(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut live::LiveState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().live, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    // These read or change the test data of the open event.
+    fn on_data_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut live::LiveState, &mut test_data::Event, u32, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            {
+                let app = &mut *state.borrow_mut();
+                if let (Some(event), Some(data)) = (app.navigator.event(), app.data.as_mut()) {
+                    let clock = data.clock();
+                    action(&mut app.live, &mut data.events[event], clock, value);
+                }
+            }
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<Live>();
+    page.on_select_course(on_click(window, state, |l, i: i32| l.select_course(i as usize)));
+    page.on_select_reader(on_click(window, state, |l, i: i32| l.select_reader(i as usize)));
+    page.on_select_row(on_click(window, state, |l, i: i32| l.select_row(i as usize)));
+    page.on_open_row(on_click(window, state, |l, i: i32| l.open_row(i as usize)));
+    page.on_toggle_list(on_click(window, state, |l, i: i32| l.toggle_list(i as usize)));
+    page.on_search(on_click(window, state, |l, text: slint::SharedString| l.set_search(&text)));
+    let close = on_click(window, state, |l, _: ()| l.close_detail());
+    page.on_close_detail(move || close(()));
+    page.on_select_runner(on_data_click(window, state, |l, event, _, i: i32| l.select_runner(event, i as usize)));
+    page.on_give_to(on_data_click(window, state, |l, event, clock, i: i32| l.give_to(event, i as usize, clock)));
+    let keep = on_data_click(window, state, |l, event, clock, _: ()| l.keep_first(event, clock));
+    page.on_keep_first(move || keep(()));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -345,6 +421,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     connect_participants(&window, &state);
     connect_starts(&window, &state);
     connect_stations(&window, &state);
+    connect_live(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 

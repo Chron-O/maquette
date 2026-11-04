@@ -2058,6 +2058,7 @@ export component PageBand {
     callback publish();
     in property <string> summary;
     in property <bool> can-import;
+    in property <bool> has-actions: true;
     in property <bool> can-publish;
     in property <LayoutMode> layout-mode;
     in property <length> left-margin;
@@ -2078,8 +2079,8 @@ export component PageBand {
                 spacing: Theme.space;
                 alignment: end;
                 if root.can-import: SecondaryButton { label: "Importer"; }
-                SecondaryButton { label: "Imprimer"; }
-                SecondaryButton { label: "Exporter"; }
+                if root.has-actions: SecondaryButton { label: "Imprimer"; }
+                if root.has-actions: SecondaryButton { label: "Exporter"; }
                 if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
             }
         }
@@ -2088,8 +2089,8 @@ export component PageBand {
             spacing: Theme.space;
             BandSummary { horizontal-stretch: 1; text: root.summary; }
             if root.can-import: SecondaryButton { label: "Importer"; }
-            SecondaryButton { label: "Imprimer"; }
-            SecondaryButton { label: "Exporter"; }
+            if root.has-actions: SecondaryButton { label: "Imprimer"; }
+            if root.has-actions: SecondaryButton { label: "Exporter"; }
             if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
         }
     }
@@ -2262,7 +2263,7 @@ export component BubbleFrame {
     in property <length> margin;
 
     property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 || Courses.open-bubble == 13 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }

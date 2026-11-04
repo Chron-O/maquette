@@ -97,6 +97,32 @@ pub struct Station {
     pub state: StationState,
 }
 
+// What a card reading still asks someone to decide.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Issue {
+    UnknownCard,
+    AlreadyRead,
+}
+
+// One card read at the finish. The live feed keeps them all, oldest first.
+pub struct Reading {
+    pub runner: Option<usize>,  // none for a card nobody knows
+    pub course: usize,
+    pub card: u32,
+    pub seconds: u32,
+    pub valid: bool,
+    pub at: u32,
+    pub reader: usize,
+    pub issue: Option<Issue>,
+    pub settled_at: Option<u32>,
+}
+
+impl Reading {
+    pub fn to_handle(&self) -> bool {
+        self.issue.is_some() && self.settled_at.is_none()
+    }
+}
+
 pub struct Vacant {
     pub course: usize,
     pub time: u32,
@@ -143,6 +169,8 @@ pub struct Event {
     pub place: &'static str,
     pub participants: String,
     pub station: u32,
+    pub closing: u32,
+    pub readings: Vec<Reading>,
     pub runners: Vec<Runner>,
     pub stations: Vec<Station>,
     pub vacants: Vec<Vacant>,
@@ -154,16 +182,60 @@ pub struct Event {
 }
 
 impl Event {
+    pub fn to_handle(&self) -> usize {
+        self.readings.iter().filter(|r| r.to_handle()).count()
+    }
+
+    pub fn reading_label(&self, reading: &Reading) -> Label {
+        match reading.issue {
+            Some(Issue::UnknownCard) if reading.settled_at.is_none() => Label::new("Inconnue", Kind::Unknown),
+            Some(Issue::AlreadyRead) if reading.settled_at.is_none() => Label::new("Déjà lue", Kind::ToCheck),
+            _ if reading.valid => Label::new("OK", Kind::Ok),
+            _ => Label::new("PM", Kind::Pm),
+        }
+    }
+
+    pub fn reading_name(&self, reading: &Reading) -> String {
+        reading.runner.map_or(format!("Puce {}", reading.card), |i| self.runners[i].name())
+    }
+
+    // Among the valid results of a course, how many are better, plus one.
+    pub fn place(&self, course: usize, seconds: u32) -> usize {
+        let better = self.runners.iter().flat_map(|r| &r.runs).filter(|run| {
+            run.course == course && matches!(run.result, Some((time, true)) if time < seconds)
+        });
+        better.count() + 1
+    }
+
+    // Who a card nobody knows may belong to: runners still out on the course it matches.
+    pub fn candidates(&self, course: usize) -> Vec<usize> {
+        (0..self.runners.len())
+            .filter(|i| {
+                let runner = &self.runners[*i];
+                runner.started && runner.runs.iter().any(|r| r.course == course && r.result.is_none())
+            })
+            .collect()
+    }
+
+    pub fn give_reading_to(&mut self, reading: usize, runner: usize, clock: u32) {
+        let entry = &mut self.readings[reading];
+        let result = (entry.seconds, entry.valid);
+        entry.runner = Some(runner);
+        entry.settled_at = Some(clock);
+        entry.card = self.runners[runner].card.unwrap_or(entry.card);
+        let course = entry.course;
+        if let Some(run) = self.runners[runner].runs.iter_mut().find(|r| r.course == course && r.result.is_none()) {
+            run.result = Some(result);
+        }
+    }
+
+    pub fn keep_first_result(&mut self, reading: usize, clock: u32) {
+        self.readings[reading].settled_at = Some(clock);
+    }
+
     pub fn detail(&self) -> String {
         format!("{} {} {} · {}", self.weekday, self.day, self.month, self.place)
     }
-}
-
-pub struct Reading {
-    pub label: Label,
-    pub name: String,
-    pub time: String,
-    pub clock: String,
 }
 
 pub struct ClubFigures {
@@ -181,9 +253,7 @@ pub struct Generated {
     pub events: Vec<Event>,
     pub upcoming: Vec<usize>,
     pub past: Vec<usize>,
-    pub to_handle: u32,
     pub readers: Vec<String>,
-    pub readings: Vec<Reading>,
     pub club: ClubFigures,
     pub devices_asking: u32,
     pub screens: u32,
@@ -267,6 +337,15 @@ pub fn format_time(seconds: u32) -> String {
 
 pub fn format_clock(seconds: u32) -> String {
     format!("{}:{:02}", seconds / 3600, seconds / 60 % 60)
+}
+
+pub fn format_clock_seconds(seconds: u32) -> String {
+    format!("{}:{:02}:{:02}", seconds / 3600, seconds / 60 % 60, seconds % 60)
+}
+
+// The control a runner missed on a course without a valid result, always the same one.
+pub fn missed_control(seconds: u32, controls: usize) -> usize {
+    seconds as usize % controls.max(1)
 }
 
 const COURSE_NAMES: [&str; 5] = ["Circuit A", "Circuit B", "Circuit C", "Circuit D", "Jaune"];
@@ -497,6 +576,59 @@ fn new_groups(random: &mut Random, runners: &[Runner], first_start: u32) -> Vec<
     ]
 }
 
+// Who is already back has been read: the feed starts with them, oldest first.
+fn first_readings(random: &mut Random, runners: &[Runner], courses: &[Course], moment: Moment) -> Vec<Reading> {
+    let mut readings = Vec::new();
+    for (index, runner) in runners.iter().enumerate() {
+        let mut at = runner.start;
+        for run in &runner.runs {
+            let Some((seconds, valid)) = run.result else { continue };
+            at += seconds;
+            readings.push(Reading {
+                runner: Some(index),
+                course: run.course,
+                card: runner.card.unwrap_or_default(),
+                seconds,
+                valid,
+                at,
+                reader: random.below(2) as usize,
+                issue: None,
+                settled_at: None,
+            });
+        }
+    }
+    readings.sort_by_key(|r| r.at);
+    // Today, two readings wait for someone: a card nobody knows, and one read twice.
+    if moment == Moment::Today && !courses.is_empty() {
+        let last = readings.last().map_or(0, |r| r.at);
+        if let Some(twice) = readings.last().filter(|_| readings.len() > 1).map(|r| Reading {
+            runner: r.runner,
+            course: r.course,
+            card: r.card,
+            seconds: r.seconds,
+            valid: r.valid,
+            at: last + random.between(20, 60),
+            reader: random.below(2) as usize,
+            issue: Some(Issue::AlreadyRead),
+            settled_at: None,
+        }) {
+            readings.push(twice);
+        }
+        readings.push(Reading {
+            runner: None,
+            course: random.below(courses.len() as u32) as usize,
+            card: random.between(2_000_000, 9_999_999),
+            seconds: random.between(1500, 4200),
+            valid: random.below(8) > 0,
+            at: last + random.between(70, 120),
+            reader: random.below(2) as usize,
+            issue: Some(Issue::UnknownCard),
+            settled_at: None,
+        });
+    }
+    readings
+}
+
 fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Event {
     let past = moment == Moment::Past;
     let (weekday, day, month, month_short) = date(days);
@@ -523,6 +655,13 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
     for (i, course) in courses.iter_mut().enumerate() {
         course.entrants = runners.iter().filter(|r| r.runs.iter().any(|run| run.course == i)).count() as u32;
     }
+    // Today, at least one result that does not count: the feed must show one.
+    if moment == Moment::Today {
+        if let Some(run) = runners.iter_mut().filter(|r| r.is_back()).flat_map(|r| &mut r.runs).nth(3) {
+            run.result = run.result.map(|(seconds, _)| (seconds, false));
+        }
+    }
+    let readings = first_readings(random, &runners, &courses, moment);
     let entered = runners.len();
     let label = if past {
         Label::new("Résultats publiés", Kind::Inactive)
@@ -540,6 +679,8 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
         place: random.pick(&PLACES),
         participants: format!("{entered} {}", if past { "participants" } else { "inscrits" }),
         station: random.between(100_000, 999_999),
+        closing: first_start + 5 * 3600,
+        readings,
         runners,
         stations,
         vacants,
@@ -588,18 +729,18 @@ impl Generated {
             runners: random.between(11_000, 14_000),
             clubs: random.between(180, 240),
         };
+        let clock_seconds = events[CURRENT_EVENT].readings.last().map(|r| r.at + 30);
+        let clock_seconds = clock_seconds.unwrap_or_else(|| random.between(10, 14) * 3600);
         Generated {
             events,
             upcoming,
             past,
-            to_handle: 0,
             readers: vec!["Arrivée 1".into(), "Arrivée 2".into()],
-            readings: Vec::new(),
             club,
             devices_asking: random.below(2),
             screens: random.below(3),
             today,
-            clock_seconds: random.between(10, 14) * 3600,
+            clock_seconds,
             random,
         }
     }
@@ -641,38 +782,50 @@ impl Generated {
         event.runners.iter_mut().for_each(|r| r.changed = false);
     }
 
-    // A runner out on a course comes back and reads their card. Now and then, a card nobody knows.
+    pub fn clock(&self) -> u32 {
+        self.clock_seconds
+    }
+
+    // A runner out on a course comes back and reads their card. Now and then, a card nobody
+    // knows or one read a second time.
     pub fn read_a_card(&mut self) {
         let random = &mut self.random;
-        let seconds = random.between(1500, 4200);
         self.clock_seconds += random.between(5, 40);
-        let racing: Vec<usize> = self.events[CURRENT_EVENT]
-            .runners
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r.is_racing())
-            .map(|(i, _)| i)
-            .collect();
+        let at = self.clock_seconds;
+        let event = &mut self.events[CURRENT_EVENT];
+        let racing: Vec<usize> = (0..event.runners.len()).filter(|i| event.runners[*i].is_racing()).collect();
         if racing.is_empty() {
             return;
         }
-        let (label, name) = if random.below(12) == 0 {
-            self.to_handle += 1;
-            (Label::new("Inconnue", Kind::Unknown), format!("Puce {}", random.between(2_000_000, 9_999_999)))
-        } else {
-            let valid = random.below(8) > 0;
-            let runner = &mut self.events[CURRENT_EVENT].runners[random.pick(&racing)];
-            if let Some(run) = runner.runs.iter_mut().find(|r| r.result.is_none()) {
-                run.result = Some((seconds, valid));
+        let reader = random.below(2) as usize;
+        let draw = random.below(12);
+        let reading = if draw == 0 {
+            Reading {
+                runner: None,
+                course: event.runners[racing[0]].runs[0].course,
+                card: random.between(2_000_000, 9_999_999),
+                seconds: random.between(1500, 4200),
+                valid: random.below(8) > 0,
+                at,
+                reader,
+                issue: Some(Issue::UnknownCard),
+                settled_at: None,
             }
-            (if valid { Label::new("OK", Kind::Ok) } else { Label::new("PM", Kind::Pm) }, runner.name())
+        } else if draw == 1 && event.readings.iter().any(|r| r.issue.is_none()) {
+            let known: Vec<usize> = (0..event.readings.len()).filter(|i| event.readings[*i].issue.is_none()).collect();
+            let first = &event.readings[random.pick(&known)];
+            Reading { runner: first.runner, course: first.course, card: first.card, seconds: first.seconds, valid: first.valid, at, reader, issue: Some(Issue::AlreadyRead), settled_at: None }
+        } else {
+            let index = random.pick(&racing);
+            let runner = &mut event.runners[index];
+            // Their time follows from the clock when it makes sense: the generator's start times can be late.
+            let since_start = at.saturating_sub(runner.start);
+            let seconds = if (900..=9000).contains(&since_start) { since_start } else { random.between(1500, 4200) };
+            let valid = random.below(8) > 0;
+            let run = runner.runs.iter_mut().find(|r| r.result.is_none()).expect("a racing runner has a run left");
+            run.result = Some((seconds, valid));
+            Reading { runner: Some(index), course: run.course, card: runner.card.unwrap_or_default(), seconds, valid, at, reader, issue: None, settled_at: None }
         };
-        self.readings.insert(
-            0,
-            Reading { label, name, time: format_time(seconds), clock: format_clock(self.clock_seconds) },
-        );
-        self.readings.truncate(READINGS_SHOWN);
+        event.readings.push(reading);
     }
 }
-
-const READINGS_SHOWN: usize = 3;

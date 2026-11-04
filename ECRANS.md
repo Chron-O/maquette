@@ -11,7 +11,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 3 | Course › Participants | validé par Robin ; nouveau participant et attribution de puce à faire plus tard |
 | 4 | Course › Départs | validé par Robin ; réglage des groupes, vrai tirage et modifications à faire plus tard |
 | 5 | Course › Boîtiers | validé par Robin ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
-| 6 | Course › Direct | à faire |
+| 6 | Course › Direct | validé par Robin ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
 | 7 | Course › Résultats | à faire |
 | 8 | Puces (stock de prêt) | à faire |
 | 9 | Boîtiers (inventaire du club) | à faire |
@@ -124,6 +124,28 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Numéro du lecteur de l'encart** : inventé par la maquette.
 - **Référence** : les captures du prototype montrent l'ancien essai à sous-onglets ; le code du prototype fait foi ici.
 - **Non testé** : boutons Oui, Ajouter à la course, Tout ajouter et Voir ; recherche, tri ; bulle des réglages ; fiche d'un besoin sans boîtier ; Ramasser sur téléphone et iPad. Web et iPhone compilent, sans avoir été ouverts.
+
+## 6 — Direct
+- D'après `08-direct.png`, le code du prototype, `live-fil.md` et `fiche-coureur-live.md` de chrono-swift : lecteurs et « La course en direct » en colonne, dernière lecture en grand, fil de toutes les lectures, filtres par circuit et par lecteur, recherche, fiche, alerte en bulle.
+- Fonctionnent, sur les données de test seulement : lectures toutes les 3 s, Attribuer une puce inconnue, Garder le premier résultat d'une puce lue deux fois, listes des chiffres, filtres. Arrivée manuelle, Chercher un autre participant, C'est un autre coureur, Imprimer le ticket et Modifier le participant sont visibles, sans effet.
+- Générateur : les coureurs rentrés sont dans le fil dès le départ, avec au moins un PM et deux lectures à régler ; d'autres arrivent ensuite de temps en temps.
+- Captures : `06-live-*` (tirage fixe).
+
+### Écarts et points ouverts de l'écran 6
+- **Onglet, pas tiroir** : décision du cadrage ; le prototype ouvre le Direct en tiroir, avec sa barre en bas.
+- **La course en direct** : vient de la spec, absente du prototype. « À régler » reste seulement dans l'alerte, pour ne pas le montrer deux fois.
+- **« en course »** comme le prototype, au lieu de « en forêt » de la spec.
+- **Noter l'heure, Arrivée sans puce, Mémoire des boîtiers** (`live-barre-actions.md`) : absents, comme le prototype. Pas de bouton orange hors des lignes.
+- **Dernière lecture** : reste jusqu'à la suivante, comme la spec. Le prototype l'efface après 15 s.
+- **Fiche** : à droite en large, par-dessus sinon, comme les autres écrans (décision de Robin). La spec prévoit presque toute la fenêtre, avec Pourquoi ?, décisions d'arbitre et Passer, non faits.
+- **Temps de passage** : le générateur ne garde pas les poinçons. Temps répartis régulièrement sur le temps total ; poste manquant d'un PM tiré d'après ce temps.
+- **« réglée à 10:22 »** sans « par <nom> » : pas de personnes dans la maquette.
+- **Attribuer et Régler** : les mots du prototype, au lieu de « Qui est-ce ?… » de la spec.
+- **Filtre des lecteurs** : « 2 lecteurs » au lieu de « Tous », pour éviter deux « Tous » côte à côte.
+- **Tableau** : pas de tri par les titres, le fil reste dans l'ordre des lectures. Bouton « ⋯ » de ligne remplacé par la fiche. Quand la place manque, catégorie sous le nom et place à côté du temps.
+- **Téléphone** : tracé des postes seulement dans la fiche ; pas de bouton dans la grande carte, qu'on touche ; pastilles au lieu des tuiles de lecteur.
+- **Bulle ouverte depuis l'accueil** : sa hauteur est une valeur fixe, l'alerte n'étant pas encore placée à ce moment.
+- **Non testé** : recherche, filtre par lecteur, Garder le premier résultat, le réglage et la bulle sur téléphone et iPad, fiche d'un coureur sans lecture, fil en marche sur iPad et téléphone. Web et iPhone compilent, sans avoir été ouverts.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

@@ -1,8 +1,10 @@
 // Turns the test data, or the lack of it, into what the home page shows.
 
-use crate::test_data::{CURRENT_EVENT, Generated, Kind, Label};
+use crate::test_data::{CURRENT_EVENT, Generated, Kind, Label, format_clock, format_time};
 use crate::{App, Badge, BadgeKind, ClubCard, CurrentEvent, EventRow, Home, Icons, IndicatorItem, Reading, Stat, model};
 use slint::{ComponentHandle, SharedString};
+
+const READINGS_SHOWN: usize = 3;
 
 pub fn badge(label: &Label) -> Badge {
     Badge {
@@ -146,17 +148,21 @@ pub fn show(window: &App, data: Option<&Generated>) {
     });
     home.set_readers(model(data.readers.iter().map(|r| SharedString::from(r.as_str())).collect()));
     home.set_readings(model(
-        data.readings
+        current
+            .readings
             .iter()
+            .rev()
+            .take(READINGS_SHOWN)
             .map(|r| Reading {
-                badge: badge(&r.label),
-                name: r.name.clone().into(),
-                time: r.time.clone().into(),
-                clock: r.clock.clone().into(),
+                badge: badge(&current.reading_label(r)),
+                name: current.reading_name(r).into(),
+                time: format_time(r.seconds).into(),
+                clock: format_clock(r.at).into(),
             })
             .collect(),
     ));
-    home.set_to_handle(if data.to_handle > 0 { format!("{} à traiter ›", data.to_handle).into() } else { "".into() });
+    let to_handle = current.to_handle();
+    home.set_to_handle(if to_handle > 0 { format!("{to_handle} à traiter ›").into() } else { "".into() });
     home.set_upcoming(model(data.upcoming.iter().map(|id| event_row(data, *id)).collect()));
     home.set_past(model(data.past.iter().map(|id| event_row(data, *id)).collect()));
 }
