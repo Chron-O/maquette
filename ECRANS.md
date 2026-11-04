@@ -8,7 +8,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
 | 1 | Accueil | validé par Robin |
 | 2 | Course › Circuits | validé par Robin ; Mixte à maquetter, modification des circuits à faire plus tard |
-| 3 | Course › Participants | à faire |
+| 3 | Course › Participants | validé par Robin ; nouveau participant et attribution de puce à faire plus tard |
 | 4 | Course › Départs | à faire |
 | 5 | Course › Boîtiers | à faire |
 | 6 | Course › Direct | à faire |
@@ -72,6 +72,23 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Ordre libre et Score, ajouts à la spec** : Départ et Arrivée au-dessus et en dessous de la zone en Métro, pour ne pas défiler de côté. Dans Tous les postes, cercle vide à la place du rang, et « libre » dans la fiche, sans les postes avant et après.
 - **Résumé de « Tous les circuits »** : affiche le réglage général (« Ordre imposé »), même sur un circuit libre.
 - **Postes présents deux fois, Mixte, tronçons non comptés** : pas encore faits ; le générateur ne les produit pas.
+
+## 3 — Participants
+- D'après `02-participants.png`, `participants-resultats.md` et `mise-en-page-universelle.md` de chrono-swift : encart de lecture et puces prêtées en colonne, tableau trié par les titres, filtres par circuit, recherche, fiche avec un tracé par passage. Lecture seule : Nouveau participant, Attribuer, Vérifier, Modifier, Arrivée manuelle, Historique, Importer, Imprimer et Exporter sont visibles, sans effet.
+- Générateur : 30 à 60 vrais coureurs par événement. L'accueil et le Direct en dépendent : une lecture fait revenir un coureur en course.
+- Captures : `03-participants-*` (tirage fixe).
+
+### Écarts et points ouverts de l'écran 3
+- **Fiche** : à droite en large, par-dessus sinon, comme la fiche du poste (décision de Robin). Le prototype l'ouvre sous la ligne, les specs dans une modale accrochée à la ligne. Affichée en lecture, sans champs modifiables, et sans « Enregistré à chaque changement ».
+- **Importer** : dans la bande du bas, comme les specs ; le prototype le met près de la recherche.
+- **Colonne** : « + Ajouter un panneau » retiré.
+- **Bouton « … »** de ligne retiré, ses actions sont dans la fiche.
+- **Tableau allégé selon la place** : sans Club ni Départ, et « Attribuer » au lieu de « Attribuer une puce », dès que la largeur manque, y compris sur iPad paysage avec la fiche ouverte.
+- **Téléphone** : dernière colonne avec le temps si le coureur est revenu, sinon l'heure de départ ; bande raccourcie à « N participants · N sans puce ».
+- **Icône de l'encart de lecture** : celle de l'Arrivée, la charte n'ayant pas d'icône pour la cible de la spec.
+- **Bouton de ligne** : 16 gras comme la charte, plus gros que dans le prototype.
+- **Pastilles par circuit** : pas de regroupement par couleur de la spec, le générateur nomme ses circuits A, B, C.
+- **Non testé** : saisie dans la recherche, défilement du tableau au doigt.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

@@ -8,6 +8,7 @@ mod courses;
 mod device;
 mod home;
 mod navigation;
+mod participants;
 mod test_data;
 
 use device::Device;
@@ -33,6 +34,7 @@ fn word(label: &str) -> TabItem {
 pub struct AppState {
     navigator: Navigator,
     courses: courses::CoursesState,
+    participants: participants::ParticipantsState,
     data: Option<Generated>,
 }
 
@@ -42,6 +44,8 @@ impl AppState {
         home::show(window, self.data.as_ref());
         let event = self.navigator.event().and_then(|e| self.data.as_ref().map(|d| &d.events[e]));
         self.courses.show(window, event);
+        let cards_free = self.data.as_ref().map_or(0, |d| d.club.cards_free);
+        self.participants.show(window, event, cards_free);
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -106,6 +110,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
             let mut state = state.borrow_mut();
             state.navigator.open_event(i as usize);
             state.courses = courses::CoursesState::default();
+            state.participants = participants::ParticipantsState::default();
             if let Some(window) = weak.upgrade() {
                 state.show(&window);
             }
@@ -158,6 +163,29 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
     courses.on_close_detail(move || close(()));
 }
 
+fn connect_participants(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut participants::ParticipantsState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().participants, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<Participants>();
+    page.on_select_row(on_click(window, state, |p, i: i32| p.select_row(i as usize)));
+    page.on_sort_by(on_click(window, state, |p, i: i32| p.sort_by(i)));
+    page.on_select_filter(on_click(window, state, |p, i: i32| p.select_filter(i as usize)));
+    page.on_search(on_click(window, state, |p, text: slint::SharedString| p.set_search(&text)));
+    let close = on_click(window, state, |p, _: ()| p.close_detail());
+    page.on_close_detail(move || close(()));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -203,6 +231,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     let window = App::new()?;
     let state = Rc::new(RefCell::new(AppState::default()));
     connect_navigation(&window, &state);
+    connect_participants(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 

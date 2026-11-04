@@ -196,7 +196,7 @@ export global Courses {
     }
 }
 
-component CourseChip inherits Rectangle {
+export component CourseChip inherits Rectangle {
     in property <int> tone;
 
     width: Theme.course-chip;
@@ -257,7 +257,7 @@ component RankDot {
     }
 }
 
-component SmallText inherits Text {
+export component SmallText inherits Text {
     color: Theme.text-secondary;
     font-size: Theme.text-help;
     wrap: word-wrap;
@@ -339,7 +339,7 @@ component CourseListItem inherits Rectangle {
 }
 
 // A magnifier that unfolds a search field below it, and closes it again.
-component SearchToggle inherits Rectangle {
+export component SearchToggle inherits Rectangle {
     callback clicked();
     in property <bool> open;
 
@@ -455,8 +455,11 @@ export component CourseList inherits Rectangle {
 }
 
 // The alert, always the height of the settings next to it. Its detail opens in a bubble.
-component AlertPill inherits Rectangle {
+export component AlertPill inherits Rectangle {
     in property <bool> compact;
+    in property <string> title: Courses.alert-title;
+    in property <string> count: Courses.alert-count;
+    in property <int> bubble: 2;
 
     height: Theme.zone;
     border-radius: self.height / 2;
@@ -464,7 +467,7 @@ component AlertPill inherits Rectangle {
     border-color: Theme.to-handle-outline;
     background: zone.has-hover ? Theme.tab-hover : Theme.card;
     accessible-role: button;
-    accessible-label: Courses.alert-title;
+    accessible-label: root.title;
     HorizontalLayout {
         padding-left: Theme.button-margin;
         padding-right: Theme.button-margin;
@@ -479,7 +482,7 @@ component AlertPill inherits Rectangle {
             }
         }
         Text {
-            text: root.compact ? Courses.alert-count : Courses.alert-title;
+            text: root.compact ? root.count : root.title;
             color: Theme.text;
             font-size: Theme.text-help;
             font-weight: Theme.weight-block-title;
@@ -491,13 +494,13 @@ component AlertPill inherits Rectangle {
         clicked => {
             Courses.bubble-right = root.absolute-position.x + root.width;
             Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
-            Courses.open-bubble = 2;
+            Courses.open-bubble = root.bubble;
         }
     }
 }
 
 // The settings of the page, summed up. They open in a bubble. `compact`: the title alone.
-component SummaryZone inherits Rectangle {
+export component SummaryZone inherits Rectangle {
     in property <bool> compact;
     in property <string> title: Courses.zone-title;
     in property <[string]> chips: Courses.chips;
@@ -555,7 +558,7 @@ component SummaryZone inherits Rectangle {
     }
 }
 
-component SortMark {
+export component SortMark {
     in property <bool> ascending;
 
     width: Theme.sort-mark;
@@ -644,7 +647,7 @@ component FixedRow {
     }
 }
 
-component RowLine inherits Rectangle {
+export component RowLine inherits Rectangle {
     height: Theme.thin-outline-width;
     background: Theme.separator;
 }
@@ -807,7 +810,7 @@ component ControlsList {
 }
 
 // The stops of a course, going to the next row instead of scrolling sideways.
-component StopsFlow {
+export component StopsFlow {
     in property <[SequenceStop]> stops;
     in property <bool> ordered;
     in property <int> tone;
@@ -989,7 +992,7 @@ component ControlsMap inherits Rectangle {
     }
 }
 
-component Switch inherits Rectangle {
+export component Switch inherits Rectangle {
     in property <bool> on;
 
     width: Theme.toggle-width;
@@ -1128,7 +1131,7 @@ component NarrowTop {
     }
 }
 
-component HighlightChip inherits Rectangle {
+export component HighlightChip inherits Rectangle {
     callback clicked();
     in property <string> label;
     in property <int> tone;
@@ -1984,7 +1987,6 @@ export component StopDetail inherits Rectangle {
 }
 
 component BandSummary inherits Text {
-    text: Courses.summary;
     color: Theme.text;
     font-size: Theme.text-help;
     font-weight: Theme.weight-block-title;
@@ -2031,11 +2033,18 @@ export component CoursesPage {
                 layout-mode: root.layout-mode;
                 available-width: root.content-width;
             }
-            if root.detail-beside: VerticalLayout {
-                alignment: start;
+            // A long detail scrolls on its own: it must not push the page out of the window.
+            if root.detail-beside: Flickable {
                 width: Theme.control-detail-width;
-                if !Courses.course-selected: ControlDetail { }
-                if Courses.course-selected: StopDetail { }
+                content-height: detail.preferred-height;
+                detail := VerticalLayout {
+                    x: 0;
+                    y: 0;
+                    width: Theme.control-detail-width;
+                    height: self.preferred-height;
+                    if !Courses.course-selected: ControlDetail { }
+                    if Courses.course-selected: StopDetail { }
+                }
             }
             if Courses.empty: Rectangle { horizontal-stretch: 1; }
         }
@@ -2043,7 +2052,9 @@ export component CoursesPage {
 }
 
 // Stays at the bottom of the window, whatever the page scrolls to.
-export component CoursesBand {
+export component PageBand {
+    in property <string> summary;
+    in property <bool> can-import;
     in property <LayoutMode> layout-mode;
     in property <length> left-margin;
     in property <length> right-margin;
@@ -2058,10 +2069,11 @@ export component CoursesBand {
         RowLine { }
         if root.narrow: VerticalLayout {
             padding-top: Theme.space;
-            BandSummary { }
+            BandSummary { text: root.summary; }
             HorizontalLayout {
                 spacing: Theme.space;
                 alignment: end;
+                if root.can-import: SecondaryButton { label: "Importer"; }
                 SecondaryButton { label: "Imprimer"; }
                 SecondaryButton { label: "Exporter"; }
             }
@@ -2069,7 +2081,8 @@ export component CoursesBand {
         if !root.narrow: HorizontalLayout {
             padding-top: Theme.space-small;
             spacing: Theme.space;
-            BandSummary { horizontal-stretch: 1; }
+            BandSummary { horizontal-stretch: 1; text: root.summary; }
+            if root.can-import: SecondaryButton { label: "Importer"; }
             SecondaryButton { label: "Imprimer"; }
             SecondaryButton { label: "Exporter"; }
         }
@@ -2100,7 +2113,7 @@ export component DetailOverlay {
     }
 }
 
-component BubbleLabel inherits Text {
+export component BubbleLabel inherits Text {
     color: Theme.text;
     font-size: Theme.text-help;
     font-weight: Theme.weight-block-title;
@@ -2239,11 +2252,11 @@ component AlertBubble {
 }
 
 // A bubble opens under what was clicked, and closes when clicking anywhere else.
-export component BubbleOverlay {
+export component BubbleFrame {
     in property <length> margin;
 
     property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }
@@ -2261,10 +2274,21 @@ export component BubbleOverlay {
         drop-shadow-color: Theme.bubble-shadow;
         TouchArea { }
         content := VerticalLayout {
-            if Courses.open-bubble == 1 && !Courses.course-selected: SettingsBubble { }
-            if Courses.open-bubble == 1 && Courses.course-selected: AllCoursesBubble { }
-            if Courses.open-bubble == 4: CourseBubble { }
-            if Courses.open-bubble == 2: AlertBubble { }
+            @children
         }
+    }
+}
+
+export component BubbleOverlay {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        if Courses.open-bubble == 1 && !Courses.course-selected: SettingsBubble { }
+        if Courses.open-bubble == 1 && Courses.course-selected: AllCoursesBubble { }
+        if Courses.open-bubble == 4: CourseBubble { }
+        if Courses.open-bubble == 2: AlertBubble { }
     }
 }

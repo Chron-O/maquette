@@ -1,0 +1,700 @@
+// The Participants tab, following 02-participants.png and participants-resultats.md.
+// Rust gives the rows, already sorted and filtered; this file shows them and sends the clicks back.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { Tabs } from "../components/tabs.slint";
+import { StatusBadge, StatusBlock } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SequenceStop, SmallText, SortMark, StopsFlow, SummaryZone, Switch } from "courses.slint";
+
+export struct ParticipantRow {
+    index: int,
+    badge: Badge,
+    family: string,
+    first: string,
+    club: string,
+    category: string,
+    category-short: string,
+    tone: int,          // -1 when no course yet
+    card: string,
+    no-card: bool,
+    start: string,
+    result: string,     // on a phone: the time when back, otherwise the start
+    selected: bool,
+}
+
+export struct ParticipantFilter {
+    label: string,
+    tone: int,
+}
+
+export struct Passage {
+    course: string,
+    tone: int,
+    ordered: bool,
+    stops: [SequenceStop],
+    time: string,
+    badge: Badge,
+}
+
+export global Participants {
+    in property <[ParticipantRow]> rows;
+    in property <[string]> chips;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[string]> problems;
+    in property <[ParticipantFilter]> filters;
+    in property <int> active-filter;
+    in property <string> search-text;
+    in property <int> sort-column;
+    in property <bool> sort-ascending: true;
+    in property <string> station;
+    in property <string> lent-count;
+    in property <string> lent-detail;
+    in property <string> lent-name;
+
+    in property <bool> detail-open;
+    in property <string> detail-name;
+    in property <string> detail-category;
+    in property <int> detail-tone;
+    in property <string> detail-club;
+    in property <string> detail-card;
+    in property <string> detail-start;
+    in property <[Passage]> passages;
+
+    callback select-row(int);
+    callback sort-by(int);
+    callback select-filter(int);
+    callback search(string);
+    callback close-detail();
+}
+
+// The reader, always first: what a card read here will do.
+component ReaderTile inherits Rectangle {
+    background: Theme.header;
+    border-radius: Theme.card-radius;
+    HorizontalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.co-finish;
+                colorize: Theme.reader-ring;
+                width: Theme.reader-icon;
+                height: Theme.reader-icon;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: Participants.station;
+                color: Theme.reader-detail;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "Prêt";
+                color: Theme.header-text;
+                font-size: Theme.text-block-title;
+                font-weight: Theme.weight-block-title;
+            }
+        }
+    }
+}
+
+component LentCards inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space-small;
+        Text {
+            text: "Puces prêtées";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            Text {
+                text: Participants.lent-count;
+                color: Theme.text;
+                font-size: Theme.text-screen-title;
+                font-weight: Theme.weight-screen-title;
+                vertical-alignment: center;
+            }
+            SmallText {
+                text: Participants.lent-detail;
+                wrap: no-wrap;
+                vertical-alignment: center;
+            }
+        }
+        if Participants.lent-name != "": SmallText { text: Participants.lent-name; }
+    }
+}
+
+component Title inherits Rectangle {
+    callback clicked();
+    in property <string> label;
+    in property <int> column;
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        Text {
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        if Participants.sort-column == root.column: VerticalLayout {
+            alignment: center;
+            SortMark { ascending: Participants.sort-ascending; }
+        }
+    }
+}
+
+component Cell inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    vertical-alignment: center;
+}
+
+component NameCell {
+    in property <string> family;
+    in property <string> first;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        Cell {
+            text: root.family;
+            font-weight: Theme.weight-screen-title;
+        }
+        Cell { text: root.first; }
+    }
+}
+
+component CategoryCell {
+    in property <string> category;
+    in property <int> tone;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        if root.tone >= 0: VerticalLayout {
+            alignment: center;
+            CourseChip { tone: root.tone; }
+        }
+        Cell { text: root.category; }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. It scrolls sideways when it does not fit.
+component ParticipantsTable {
+    in property <length> available-width;
+
+    // Light when the room is short, whatever the device: next to an open detail, on a small tablet.
+    property <bool> wide: root.available-width >= Theme.participant-full-width;
+    property <length> category-width: root.wide ? Theme.participant-category-width : Theme.participant-light-category-width;
+    property <length> card-width: root.wide ? Theme.participant-card-width : Theme.participant-light-card-width;
+    property <length> fixed: Theme.participant-state-width + root.category-width + root.card-width
+        + (root.wide ? Theme.participant-club-width + Theme.participant-start-width : 0px);
+    property <length> table-width: max(root.width, root.fixed + Theme.participant-name-width);
+    property <length> name-width: root.table-width - root.fixed;
+
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-width: root.table-width;
+        content-height: root.height;
+        VerticalLayout {
+            width: root.table-width;
+            height: root.height;
+            HorizontalLayout {
+                vertical-stretch: 0;
+                height: Theme.table-header-height + Theme.space;
+                Title { width: Theme.participant-state-width; label: "État"; column: 0; clicked => { Participants.sort-by(0); } }
+                Title { width: root.name-width; label: "Nom"; column: 1; clicked => { Participants.sort-by(1); } }
+                if root.wide: Title { width: Theme.participant-club-width; label: "Club"; column: 2; clicked => { Participants.sort-by(2); } }
+                Title { width: root.category-width; label: "Catégorie"; column: 3; clicked => { Participants.sort-by(3); } }
+                Title { width: root.card-width; label: "Puce"; column: 4; clicked => { Participants.sort-by(4); } }
+                if root.wide: Title { width: Theme.participant-start-width; label: "Départ"; column: 5; clicked => { Participants.sort-by(5); } }
+            }
+            RowLine { vertical-stretch: 0; }
+            Flickable {
+                vertical-stretch: 1;
+                content-height: lines.preferred-height;
+                lines := VerticalLayout {
+                    width: root.table-width;
+                    for row[n] in Participants.rows: VerticalLayout {
+                        if n > 0: RowLine { }
+                        Rectangle {
+                            min-height: Theme.zone;
+                            background: row.selected ? Theme.row-selected : row.no-card ? Theme.row-to-handle : transparent;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { Participants.select-row(row.index); }
+                            }
+                            HorizontalLayout {
+                                VerticalLayout {
+                                    width: Theme.participant-state-width;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        padding-left: Theme.space;
+                                        alignment: start;
+                                        StatusBadge { status: Home.status-of(row.badge); }
+                                    }
+                                }
+                                NameCell { width: root.name-width; family: row.family; first: row.first; }
+                                if root.wide: HorizontalLayout {
+                                    width: Theme.participant-club-width;
+                                    padding-left: Theme.space;
+                                    Cell { text: row.club; }
+                                }
+                                CategoryCell { width: root.category-width; category: root.wide ? row.category : row.category-short; tone: row.tone; }
+                                HorizontalLayout {
+                                    width: root.card-width;
+                                    padding-left: Theme.space;
+                                    if !row.no-card: Cell { text: row.card; }
+                                    if row.no-card: HorizontalLayout {
+                                        alignment: start;
+                                        PrimaryButton { label: root.wide ? "Attribuer une puce" : "Attribuer"; in-row: true; }
+                                    }
+                                }
+                                if root.wide: HorizontalLayout {
+                                    width: Theme.participant-start-width;
+                                    padding-left: Theme.space;
+                                    Cell { text: row.start; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: status block › who and where › the time.
+component ParticipantsList {
+    VerticalLayout {
+        for row[n] in Participants.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : row.no-card ? Theme.row-to-handle : transparent;
+                TouchArea {
+                    clicked => { Participants.select-row(row.index); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBlock { status: Home.status-of(row.badge); }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.family + " " + row.first;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-block-title;
+                            wrap: word-wrap;
+                        }
+                        CategoryCell { category: row.category; tone: row.tone; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        if !row.no-card: Cell {
+                            text: row.result;
+                            font-weight: Theme.weight-block-title;
+                        }
+                        if row.no-card: PrimaryButton { label: "Attribuer"; in-row: true; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The filter of the list: one chip per course, going to the next row when they do not fit.
+component FilterFlow {
+    property <length> step: Theme.participant-chip-width + Theme.space-small;
+    property <int> per-row: max(1, floor((root.width + Theme.space-small) / root.step));
+
+    height: ceil(Participants.filters.length / root.per-row) * Theme.zone;
+    for item[i] in Participants.filters: HighlightChip {
+        x: mod(i, root.per-row) * root.step;
+        y: floor(i / root.per-row) * Theme.zone;
+        width: Theme.participant-chip-width;
+        label: item.label;
+        tone: item.tone;
+        active: Participants.active-filter == i;
+        clicked => { Participants.select-filter(i); }
+    }
+}
+
+component ParticipantsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Participants.search-text != "";
+    property <bool> search-below: !root.narrow
+        && root.available-width < 3 * Theme.space + 2 * Theme.participant-chip-width + Theme.code-search-width;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            padding-top: root.narrow ? 0 : Theme.space;
+            spacing: Theme.space;
+            SecondaryButton {
+                label: "Nouveau participant";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        FilterFlow { horizontal-stretch: 1; }
+                        if root.narrow: VerticalLayout {
+                            alignment: start;
+                            SearchToggle {
+                                open: root.search-open;
+                                clicked => {
+                                    if root.search-open {
+                                        Participants.search("");
+                                    }
+                                    root.search-open = !root.search-open;
+                                }
+                            }
+                        }
+                        if !root.narrow && !root.search-below: VerticalLayout {
+                            alignment: start;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Nom, club ou puce…";
+                                text: Participants.search-text;
+                                edited(text) => { Participants.search(text); }
+                            }
+                        }
+                    }
+                    if root.search-below: InputField {
+                        placeholder: "Nom, club ou puce…";
+                        text: Participants.search-text;
+                        edited(text) => { Participants.search(text); }
+                    }
+                    if root.narrow && root.search-open: InputField {
+                        placeholder: "Nom, club ou puce…";
+                        text: Participants.search-text;
+                        init => { self.take-focus(); }
+                        edited(text) => { Participants.search(text); }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: ParticipantsList { }
+                if !root.narrow: ParticipantsTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+            }
+        }
+    }
+}
+
+export component ParticipantDetail inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: Participants.detail-name;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                CategoryCell { category: Participants.detail-category; tone: Participants.detail-tone; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Participants.close-detail(); }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Club"; }
+            BubbleLabel { text: Participants.detail-club; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Puce"; }
+            BubbleLabel { text: Participants.detail-card; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Heure de départ"; }
+            BubbleLabel { text: Participants.detail-start; wrap: no-wrap; }
+        }
+        for passage in Participants.passages: VerticalLayout {
+            spacing: Theme.space;
+            RowLine { }
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space-small;
+                VerticalLayout {
+                    alignment: center;
+                    CourseChip { tone: passage.tone; }
+                }
+                BubbleLabel { text: passage.course; wrap: no-wrap; }
+            }
+            StopsFlow {
+                stops: passage.stops;
+                ordered: passage.ordered;
+                tone: passage.tone;
+            }
+            if passage.time != "": HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space;
+                BubbleLabel { text: "Temps " + passage.time; wrap: no-wrap; }
+                VerticalLayout {
+                    alignment: center;
+                    StatusBadge { status: Home.status-of(passage.badge); }
+                }
+            }
+        }
+        RowLine { }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Modifier…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Arrivée manuelle…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Historique"; } }
+    }
+}
+
+export component ParticipantsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Participants.detail-open;
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
+        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+
+    VerticalLayout {
+        spacing: Theme.button-margin;
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            ReaderTile { }
+            HorizontalLayout {
+                spacing: Theme.space;
+                SummaryZone {
+                    horizontal-stretch: 1;
+                    title: "Réglages";
+                    chips: Participants.chips;
+                    bubble: 5;
+                    compact: true;
+                }
+                if Participants.alert-title != "": AlertPill {
+                    title: Participants.alert-title;
+                    count: Participants.alert-count;
+                    bubble: 6;
+                    compact: true;
+                }
+            }
+            ParticipantsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.button-margin;
+            SummaryZone {
+                title: "Réglages";
+                chips: Participants.chips;
+                bubble: 5;
+                compact: root.layout-mode == LayoutMode.medium;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if Participants.alert-title != "": AlertPill {
+                title: Participants.alert-title;
+                count: Participants.alert-count;
+                bubble: 6;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.button-margin;
+            VerticalLayout {
+                width: Theme.course-list-width;
+                alignment: start;
+                spacing: Theme.space;
+                ReaderTile { }
+                LentCards { }
+            }
+            ParticipantsContent {
+                horizontal-stretch: 1;
+                layout-mode: root.layout-mode;
+                available-width: root.content-width;
+            }
+            // A long detail scrolls on its own: it must not push the page out of the window.
+            if root.detail-beside: Flickable {
+                width: Theme.control-detail-width;
+                content-height: detail.preferred-height;
+                detail := ParticipantDetail {
+                    x: 0;
+                    y: 0;
+                    width: Theme.control-detail-width;
+                    height: self.preferred-height;
+                }
+            }
+        }
+    }
+}
+
+// On medium and narrow layouts, the detail opens over the page.
+export component ParticipantOverlay {
+    Rectangle { background: Theme.overlay-veil; }
+    // A long detail, with several passages, scrolls instead of leaving the screen.
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-height: max(root.height, detail.preferred-height + 2 * Theme.narrow-margin);
+        TouchArea {
+            width: root.width;
+            height: parent.height;
+            clicked => { Participants.close-detail(); }
+        }
+        detail := ParticipantDetail {
+            x: (root.width - self.width) / 2;
+            y: max(Theme.narrow-margin, (root.height - self.height) / 2);
+            width: min(Theme.detail-overlay-width, root.width - 2 * Theme.narrow-margin);
+            height: self.preferred-height;
+            TouchArea { }
+        }
+    }
+}
+
+component SettingsContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Inscription"; }
+            Tabs {
+                tabs: [{ label: "Par catégorie" }, { label: "Par circuit" }];
+                active: 0;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Dossards"; }
+            VerticalLayout {
+                alignment: center;
+                Switch { }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: Participants.chips[2]; }
+            SecondaryButton {
+                label: "Champ";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+        }
+    }
+}
+
+// One line per problem, each with its button.
+component ProblemsContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Participants.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        for problem in Participants.problems: HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: problem; }
+            PrimaryButton { label: "Vérifier"; in-row: true; }
+        }
+    }
+}
+
+export component ParticipantsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        if Courses.open-bubble == 5: SettingsContent { }
+        if Courses.open-bubble == 6: ProblemsContent { }
+    }
+}

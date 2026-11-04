@@ -4,12 +4,13 @@ use crate::test_data::{CURRENT_EVENT, Generated, Kind, Label};
 use crate::{App, Badge, BadgeKind, ClubCard, CurrentEvent, EventRow, Home, Icons, IndicatorItem, Reading, Stat, model};
 use slint::{ComponentHandle, SharedString};
 
-fn badge(label: &Label) -> Badge {
+pub fn badge(label: &Label) -> Badge {
     Badge {
         word: label.word.clone().into(),
         kind: match label.kind {
             Kind::None => BadgeKind::None,
             Kind::Valid => BadgeKind::Valid,
+            Kind::Racing => BadgeKind::Racing,
             Kind::ToCheck => BadgeKind::ToCheck,
             Kind::Inactive => BadgeKind::Inactive,
             Kind::Ok => BadgeKind::Ok,
@@ -138,8 +139,8 @@ pub fn show(window: &App, data: Option<&Generated>) {
         name: current.name.clone().into(),
         detail: current.detail().into(),
         stats: model(vec![
-            stat(data.racing, "en course"),
-            stat(data.finished, "arrivés"),
+            stat(data.racing(), "en course"),
+            stat(data.back(), "arrivés"),
             stat(current.courses.len() as u32, "circuits"),
         ]),
     });

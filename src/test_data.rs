@@ -7,6 +7,7 @@ pub enum Kind {
     #[default]
     None,
     Valid,
+    Racing,
     ToCheck,
     Inactive,
     Ok,
@@ -21,7 +22,7 @@ pub struct Label {
 }
 
 impl Label {
-    fn new(word: impl Into<String>, kind: Kind) -> Self {
+    pub fn new(word: impl Into<String>, kind: Kind) -> Self {
         Label { word: word.into(), kind }
     }
 }
@@ -52,6 +53,51 @@ pub struct Control {
     pub y: f32,
 }
 
+// One course run by a runner: its time and whether it is valid, once back.
+pub struct Run {
+    pub course: usize,
+    pub result: Option<(u32, bool)>,
+}
+
+pub struct Runner {
+    pub family: &'static str,
+    pub first: &'static str,
+    pub club: &'static str,
+    pub category: String,
+    pub unknown_category: bool,
+    pub card: Option<u32>,
+    pub lent: bool,
+    pub start: u32,
+    pub started: bool,
+    pub runs: Vec<Run>,
+}
+
+impl Runner {
+    pub fn name(&self) -> String {
+        format!("{} {}", self.family, self.first)
+    }
+
+    pub fn is_racing(&self) -> bool {
+        self.started && self.runs.iter().any(|r| r.result.is_none())
+    }
+
+    pub fn is_back(&self) -> bool {
+        self.started && !self.is_racing()
+    }
+
+    pub fn label(&self) -> Label {
+        if !self.started {
+            Label::new("Inscrit", Kind::Inactive)
+        } else if self.is_racing() {
+            Label::new("En course", Kind::Racing)
+        } else if self.runs.iter().all(|r| matches!(r.result, Some((_, true)))) {
+            Label::new("Arrivé", Kind::Ok)
+        } else {
+            Label::new("PM", Kind::Pm)
+        }
+    }
+}
+
 pub struct Event {
     pub name: String,
     pub weekday: &'static str,
@@ -60,6 +106,8 @@ pub struct Event {
     pub month_short: &'static str,
     pub place: &'static str,
     pub participants: String,
+    pub station: u32,
+    pub runners: Vec<Runner>,
     pub courses: Vec<Course>,
     pub controls: Vec<Control>,
     pub label: Label,
@@ -93,8 +141,6 @@ pub struct Generated {
     pub events: Vec<Event>,
     pub upcoming: Vec<usize>,
     pub past: Vec<usize>,
-    pub racing: u32,
-    pub finished: u32,
     pub to_handle: u32,
     pub readers: Vec<String>,
     pub readings: Vec<Reading>,
@@ -171,16 +217,19 @@ fn date(days: u32) -> (&'static str, u32, &'static str, &'static str) {
     (weekday, 31, "janvier", "janv.")
 }
 
-fn format_time(seconds: u32) -> String {
+pub fn format_time(seconds: u32) -> String {
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
-fn format_clock(seconds: u32) -> String {
+pub fn format_clock(seconds: u32) -> String {
     format!("{}:{:02}", seconds / 3600, seconds / 60 % 60)
 }
 
 const COURSE_NAMES: [&str; 5] = ["Circuit A", "Circuit B", "Circuit C", "Circuit D", "Jaune"];
 const CATEGORIES: [&str; 5] = ["H21E, H20", "D21E, H35", "H16, D16, D40", "H18, D18", "Open jaune"];
+const CLUBS: [&str; 6] = ["ASO Lyon", "SMOC", "TAD", "COLE", "CO Brou", "OTB"];
+const ALL_CATEGORIES: [&str; 6] = ["H21E", "D21E", "H35", "D40", "H16", "D18"];
+const UNKNOWN_CATEGORY: &str = "H70";
 const MAP_COLUMNS: u32 = 5;
 const MAP_ROWS: u32 = 3;
 
@@ -241,13 +290,94 @@ fn new_courses(random: &mut Random, count: u32, controls: &[Control]) -> Vec<Cou
         .collect()
 }
 
-fn new_event(random: &mut Random, name: &str, days: u32, past: bool) -> Event {
+#[derive(Clone, Copy, PartialEq)]
+enum Moment {
+    Past,
+    Today,
+    Upcoming,
+}
+
+fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<Runner> {
+    let count = random.between(30, 60) as usize;
+    let mut runners: Vec<Runner> = Vec::new();
+    let first_start = random.between(9, 11) * 3600;
+    for n in 0..count {
+        // Two different people: the same name only comes later, on purpose.
+        let (mut family, mut first) = (random.pick(&FAMILY_NAMES), random.pick(&FIRST_NAMES));
+        while runners.iter().any(|r| r.family == family && r.first == first) {
+            family = random.pick(&FAMILY_NAMES);
+            first = random.pick(&FIRST_NAMES);
+        }
+        let has_card = moment == Moment::Past || random.below(12) > 0;
+        let lent = has_card && random.below(12) == 0;
+        let started = has_card && (moment == Moment::Past || (moment == Moment::Today && random.below(5) > 0));
+        let done = moment == Moment::Past || random.below(2) == 0;
+        let mut runs = Vec::new();
+        let mut passages = if random.below(8) == 0 { 2 } else { 1 };
+        let mut course = if courses.is_empty() { 0 } else { random.below(courses.len() as u32) as usize };
+        let categories: Vec<&str> =
+            courses.get(course).map_or(ALL_CATEGORIES.to_vec(), |c| c.categories.split(", ").collect());
+        while passages > 0 && !courses.is_empty() {
+            let result = (started && done).then(|| (random.between(1500, 4200), random.below(8) > 0));
+            runs.push(Run { course, result });
+            course = (course + 1) % courses.len();
+            passages -= 1;
+        }
+        runners.push(Runner {
+            family,
+            first,
+            club: random.pick(&CLUBS),
+            category: random.pick(&categories).to_string(),
+            unknown_category: false,
+            card: has_card.then(|| if lent { random.between(2_040_000, 2_049_999) } else { random.between(8_100_000, 8_199_999) }),
+            lent,
+            start: first_start + n as u32 * 120,
+            started,
+            runs,
+        });
+    }
+    // Things to check after an import: a possible duplicate, an unknown category.
+    if moment != Moment::Past {
+        for _ in 0..random.below(3) {
+            let original = random.below(runners.len() as u32) as usize;
+            let (family, first) = (runners[original].family, runners[original].first);
+            let start = first_start + runners.len() as u32 * 120;
+            let category = runners[original].category.clone();
+            let course = runners[original].runs.first().map(|r| r.course);
+            runners.push(Runner {
+                family,
+                first,
+                club: random.pick(&CLUBS),
+                category,
+                unknown_category: false,
+                card: None,
+                lent: false,
+                start,
+                started: false,
+                runs: course.map(|course| Run { course, result: None }).into_iter().collect(),
+            });
+        }
+        if random.below(2) == 0 {
+            let last = runners.len() - 1;
+            runners[last].category = UNKNOWN_CATEGORY.into();
+            runners[last].unknown_category = true;
+        }
+    }
+    runners
+}
+
+fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Event {
+    let past = moment == Moment::Past;
     let (weekday, day, month, month_short) = date(days);
     // An upcoming event sometimes has no course yet.
     let course_count = if !past && random.below(4) == 0 { 0 } else { random.between(3, 5) };
     let controls = if course_count == 0 { Vec::new() } else { new_controls(random) };
-    let courses = new_courses(random, course_count, &controls);
-    let entered = random.between(30, 320);
+    let mut courses = new_courses(random, course_count, &controls);
+    let runners = new_runners(random, &courses, moment);
+    for (i, course) in courses.iter_mut().enumerate() {
+        course.entrants = runners.iter().filter(|r| r.runs.iter().any(|run| run.course == i)).count() as u32;
+    }
+    let entered = runners.len();
     let label = if past {
         Label::new("Résultats publiés", Kind::Inactive)
     } else if course_count == 0 {
@@ -263,6 +393,8 @@ fn new_event(random: &mut Random, name: &str, days: u32, past: bool) -> Event {
         month_short,
         place: random.pick(&PLACES),
         participants: format!("{entered} {}", if past { "participants" } else { "inscrits" }),
+        station: random.between(100_000, 999_999),
+        runners,
         courses,
         controls,
         label,
@@ -276,11 +408,10 @@ impl Generated {
         let name = |i: usize| EVENT_NAMES[(first + i) % EVENT_NAMES.len()];
         let today = 40 + random.below(30);
 
-        let mut events = vec![new_event(&mut random, name(0), today, false)];
-        if events[CURRENT_EVENT].courses.is_empty() {
-            events[CURRENT_EVENT].controls = new_controls(&mut random);
-            let controls = events[CURRENT_EVENT].controls.clone();
-            events[CURRENT_EVENT].courses = new_courses(&mut random, 4, &controls);
+        // The current event always has courses, so that runners can be out on them.
+        let mut events = vec![new_event(&mut random, name(0), today, Moment::Today)];
+        while events[CURRENT_EVENT].courses.is_empty() {
+            events[CURRENT_EVENT] = new_event(&mut random, name(0), today, Moment::Today);
         }
         events[CURRENT_EVENT].label = Label::default();
         let (mut upcoming, mut past) = (Vec::new(), Vec::new());
@@ -288,13 +419,13 @@ impl Generated {
         for i in 1..=3 {
             days += random.between(3, 12);
             upcoming.push(events.len());
-            events.push(new_event(&mut random, name(i), days, false));
+            events.push(new_event(&mut random, name(i), days, Moment::Upcoming));
         }
         let mut days = today;
         for i in 4..=5 {
             days -= random.between(4, 16);
             past.push(events.len());
-            events.push(new_event(&mut random, name(i), days, true));
+            events.push(new_event(&mut random, name(i), days, Moment::Past));
         }
 
         let club = ClubFigures {
@@ -311,8 +442,6 @@ impl Generated {
             events,
             upcoming,
             past,
-            racing: random.between(40, 120),
-            finished: random.between(60, 200),
             to_handle: 0,
             readers: vec!["Arrivée 1".into(), "Arrivée 2".into()],
             readings: Vec::new(),
@@ -324,21 +453,40 @@ impl Generated {
         }
     }
 
-    // A runner comes back and reads their card.
+    pub fn racing(&self) -> u32 {
+        self.events[CURRENT_EVENT].runners.iter().filter(|r| r.is_racing()).count() as u32
+    }
+
+    pub fn back(&self) -> u32 {
+        self.events[CURRENT_EVENT].runners.iter().filter(|r| r.is_back()).count() as u32
+    }
+
+    // A runner out on a course comes back and reads their card. Now and then, a card nobody knows.
     pub fn read_a_card(&mut self) {
         let random = &mut self.random;
         let seconds = random.between(1500, 4200);
         self.clock_seconds += random.between(5, 40);
-        let (label, name) = match random.below(12) {
-            0 => {
-                self.to_handle += 1;
-                (Label::new("Inconnue", Kind::Unknown), format!("Puce {}", random.between(2_000_000, 9_999_999)))
+        let racing: Vec<usize> = self.events[CURRENT_EVENT]
+            .runners
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.is_racing())
+            .map(|(i, _)| i)
+            .collect();
+        if racing.is_empty() {
+            return;
+        }
+        let (label, name) = if random.below(12) == 0 {
+            self.to_handle += 1;
+            (Label::new("Inconnue", Kind::Unknown), format!("Puce {}", random.between(2_000_000, 9_999_999)))
+        } else {
+            let valid = random.below(8) > 0;
+            let runner = &mut self.events[CURRENT_EVENT].runners[random.pick(&racing)];
+            if let Some(run) = runner.runs.iter_mut().find(|r| r.result.is_none()) {
+                run.result = Some((seconds, valid));
             }
-            1 => (Label::new("PM", Kind::Pm), random_runner(random)),
-            _ => (Label::new("OK", Kind::Ok), random_runner(random)),
+            (if valid { Label::new("OK", Kind::Ok) } else { Label::new("PM", Kind::Pm) }, runner.name())
         };
-        self.racing = self.racing.saturating_sub(1);
-        self.finished += 1;
         self.readings.insert(
             0,
             Reading { label, name, time: format_time(seconds), clock: format_clock(self.clock_seconds) },
@@ -348,7 +496,3 @@ impl Generated {
 }
 
 const READINGS_SHOWN: usize = 3;
-
-fn random_runner(random: &mut Random) -> String {
-    format!("{} {}", random.pick(&FAMILY_NAMES), random.pick(&FIRST_NAMES))
-}

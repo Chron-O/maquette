@@ -10,7 +10,7 @@ import { LiveDot } from "../components/dot.slint";
 import { PrimaryButton, SecondaryButton, QuietButton } from "../components/buttons.slint";
 import { Status, Statuses, StatusBadge } from "../components/status.slint";
 
-export enum BadgeKind { none, valid, to-check, inactive, ok, pm, unknown }
+export enum BadgeKind { none, valid, racing, to-check, inactive, ok, pm, unknown }
 
 export struct Badge {
     word: string,
@@ -76,6 +76,9 @@ export global Home {
     public pure function status-of(badge: Badge) -> Status {
         if badge.kind == BadgeKind.valid {
             return { word: badge.word, state: Theme.valid, icon: Icons.check };
+        }
+        if badge.kind == BadgeKind.racing {
+            return { word: badge.word, state: Theme.in-progress, dot: true };
         }
         if badge.kind == BadgeKind.to-check {
             return { word: badge.word, state: Theme.to-check, icon: Icons.triangle-alert };
