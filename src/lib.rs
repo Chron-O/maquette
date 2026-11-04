@@ -9,6 +9,7 @@ mod device;
 mod home;
 mod navigation;
 mod participants;
+mod starts;
 mod test_data;
 
 use device::Device;
@@ -35,6 +36,7 @@ pub struct AppState {
     navigator: Navigator,
     courses: courses::CoursesState,
     participants: participants::ParticipantsState,
+    starts: starts::StartsState,
     data: Option<Generated>,
 }
 
@@ -46,6 +48,7 @@ impl AppState {
         self.courses.show(window, event);
         let cards_free = self.data.as_ref().map_or(0, |d| d.club.cards_free);
         self.participants.show(window, event, cards_free);
+        self.starts.show(window, event);
     }
 
     fn start_test_data(&mut self, seed: u64) {
@@ -111,6 +114,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
             state.navigator.open_event(i as usize);
             state.courses = courses::CoursesState::default();
             state.participants = participants::ParticipantsState::default();
+            state.starts = starts::StartsState::default();
             if let Some(window) = weak.upgrade() {
                 state.show(&window);
             }
@@ -186,6 +190,56 @@ fn connect_participants(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_close_detail(move || close(()));
 }
 
+fn connect_starts(window: &App, state: &Rc<RefCell<AppState>>) {
+    fn on_click<T: 'static>(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut starts::StartsState, T) + 'static,
+    ) -> impl Fn(T) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |value| {
+            action(&mut state.borrow_mut().starts, value);
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    // These change the test data of the open event.
+    fn on_data_click(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut starts::StartsState, &mut Generated, usize) + 'static,
+    ) -> impl Fn() + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move || {
+            {
+                let app = &mut *state.borrow_mut();
+                if let (Some(event), Some(data)) = (app.navigator.event(), app.data.as_mut()) {
+                    action(&mut app.starts, data, event);
+                }
+            }
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let page = window.global::<Starts>();
+    page.on_select_row(on_click(window, state, |s, i: i32| s.select_row(i as usize)));
+    page.on_sort_by(on_click(window, state, |s, i: i32| s.sort_by(i)));
+    page.on_select_group(on_click(window, state, |s, i: i32| s.select_group(i as usize)));
+    page.on_select_point(on_click(window, state, |s, i: i32| s.select_point(i as usize)));
+    page.on_select_view(on_click(window, state, |s, i: i32| s.select_view(i as usize)));
+    page.on_search(on_click(window, state, |s, text: slint::SharedString| s.set_search(&text)));
+    let close = on_click(window, state, |s, _: ()| s.close_detail());
+    page.on_close_detail(move || close(()));
+    let abandon = on_click(window, state, |s, _: ()| s.preview = None);
+    page.on_abandon(move || abandon(()));
+    page.on_draw(on_data_click(window, state, |s, data, event| s.preview = Some(data.draw(event))));
+    page.on_apply(on_data_click(window, state, |s, data, event| s.apply(&mut data.events[event])));
+    page.on_publish(on_data_click(window, state, |_, data, event| data.publish(event)));
+    page.on_toggle_lock(on_data_click(window, state, |s, data, event| s.toggle_lock(&mut data.events[event])));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -232,6 +286,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     let state = Rc::new(RefCell::new(AppState::default()));
     connect_navigation(&window, &state);
     connect_participants(&window, &state);
+    connect_starts(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 

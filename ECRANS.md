@@ -9,7 +9,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 1 | Accueil | validé par Robin |
 | 2 | Course › Circuits | validé par Robin ; Mixte à maquetter, modification des circuits à faire plus tard |
 | 3 | Course › Participants | validé par Robin ; nouveau participant et attribution de puce à faire plus tard |
-| 4 | Course › Départs | à faire |
+| 4 | Course › Départs | validé par Robin ; réglage des groupes, vrai tirage et modifications à faire plus tard |
 | 5 | Course › Boîtiers | à faire |
 | 6 | Course › Direct | à faire |
 | 7 | Course › Résultats | à faire |
@@ -89,6 +89,25 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Bouton de ligne** : 16 gras comme la charte, plus gros que dans le prototype.
 - **Pastilles par circuit** : pas de regroupement par couleur de la spec, le générateur nomme ses circuits A, B, C.
 - **Non testé** : saisie dans la recherche, défilement du tableau au doigt.
+
+## 4 — Départs
+- D'après le prototype, `departs-tirage-v2.md`, `departs-horaires.md` et `lot4-departs.md` de chrono-swift : groupes en colonne, Liste par circuit et Frise, réglages en bulles, fiche du coureur.
+- Fonctionnent, sur les données de test seulement : tirage en aperçu (Refaire, Abandonner, Appliquer), verrou, publication. Le reste est visible, sans effet.
+- Captures : `04-starts-*` (tirage fixe, en Liste).
+
+### Écarts et points ouverts de l'écran 4
+- **Pas de sous-onglets** : décision de Robin, comme le prototype et les deux niveaux de `CLAUDE.md`. Les specs prévoient Groupes, Tirage, Frise, Liste de départ.
+- **Tirage simplifié** : au hasard dans chaque circuit, sans toucher aux coureurs verrouillés ou partis. Clubs, groupes, demandes et « mise à jour minimale » de la spec ne sont pas appliqués.
+- **Cadenas** : absent de la charte, ajouté à la demande de Robin, dessin Lucide.
+- **Vacant** : contour clair au lieu de pointillés, que Slint ne dessine pas.
+- **Bouton « ⋯ »** de ligne remplacé par la fiche.
+- **« Diffuser »** retiré : les écrans publics se gèrent depuis l'indicateur de l'en-tête.
+- **Phrases d'aide du prototype** retirées.
+- **Téléphone** : Liste seule, sans Frise ni groupes.
+- **Tableau allégé selon la place** : sans Club ni Puce. Colonne « Cat. » abrégée. « Nouvel horaire » remplace « Pas encore parti ».
+- **Générateur** : les heures de départ n'influencent pas qui rentre ; un coureur parti tard peut être arrivé avant un parti tôt.
+- **Pas faits** : réglage d'un groupe, premier poste commun, pauses, aperçu détaillé de la publication.
+- **Non testé** : saisie dans la recherche, bouton de verrou, Refaire et Abandonner, tri, pastilles S1/S2, aperçu sur téléphone et iPad, cases déplacées et défilement de la Frise.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.

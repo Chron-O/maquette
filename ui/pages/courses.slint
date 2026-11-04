@@ -501,6 +501,7 @@ export component AlertPill inherits Rectangle {
 
 // The settings of the page, summed up. They open in a bubble. `compact`: the title alone.
 export component SummaryZone inherits Rectangle {
+    callback opened();
     in property <bool> compact;
     in property <string> title: Courses.zone-title;
     in property <[string]> chips: Courses.chips;
@@ -551,6 +552,7 @@ export component SummaryZone inherits Rectangle {
     zone := TouchArea {
         mouse-cursor: pointer;
         clicked => {
+            root.opened();
             Courses.bubble-left = root.absolute-position.x;
             Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
             Courses.open-bubble = root.bubble;
@@ -2053,8 +2055,10 @@ export component CoursesPage {
 
 // Stays at the bottom of the window, whatever the page scrolls to.
 export component PageBand {
+    callback publish();
     in property <string> summary;
     in property <bool> can-import;
+    in property <bool> can-publish;
     in property <LayoutMode> layout-mode;
     in property <length> left-margin;
     in property <length> right-margin;
@@ -2076,6 +2080,7 @@ export component PageBand {
                 if root.can-import: SecondaryButton { label: "Importer"; }
                 SecondaryButton { label: "Imprimer"; }
                 SecondaryButton { label: "Exporter"; }
+                if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
             }
         }
         if !root.narrow: HorizontalLayout {
@@ -2085,6 +2090,7 @@ export component PageBand {
             if root.can-import: SecondaryButton { label: "Importer"; }
             SecondaryButton { label: "Imprimer"; }
             SecondaryButton { label: "Exporter"; }
+            if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
         }
     }
 }
@@ -2256,7 +2262,7 @@ export component BubbleFrame {
     in property <length> margin;
 
     property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }

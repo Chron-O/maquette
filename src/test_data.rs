@@ -43,6 +43,7 @@ pub struct Course {
     pub distance: String,
     pub entrants: u32,
     pub controls: Vec<u32>,
+    pub start_point: u32,
 }
 
 // A control on the map, in a 600 × 360 drawing.
@@ -69,7 +70,20 @@ pub struct Runner {
     pub lent: bool,
     pub start: u32,
     pub started: bool,
+    pub locked: bool,
+    pub changed: bool,      // its start time moved since the publication
     pub runs: Vec<Run>,
+}
+
+pub struct Vacant {
+    pub course: usize,
+    pub time: u32,
+}
+
+pub struct StartGroup {
+    pub name: String,
+    pub rule: String,
+    pub members: Vec<usize>,
 }
 
 impl Runner {
@@ -108,6 +122,9 @@ pub struct Event {
     pub participants: String,
     pub station: u32,
     pub runners: Vec<Runner>,
+    pub vacants: Vec<Vacant>,
+    pub groups: Vec<StartGroup>,
+    pub published: Option<String>,
     pub courses: Vec<Course>,
     pub controls: Vec<Control>,
     pub label: Label,
@@ -147,6 +164,7 @@ pub struct Generated {
     pub club: ClubFigures,
     pub devices_asking: u32,
     pub screens: u32,
+    today: u32,
     clock_seconds: u32,
     random: Random,
 }
@@ -154,6 +172,9 @@ pub struct Generated {
 // Where courses start and finish, on the same 600 × 360 map as the controls.
 pub const START: (f32, f32) = (40.0, 330.0);
 pub const FINISH: (f32, f32) = (565.0, 335.0);
+
+// Two runners of a course start this many seconds apart.
+pub const START_STEP: u32 = 120;
 
 // The current event is always the first of the list.
 pub const CURRENT_EVENT: usize = 0;
@@ -285,6 +306,7 @@ fn new_courses(random: &mut Random, count: u32, controls: &[Control]) -> Vec<Cou
                 distance: format!("{},{} km · {} m D+", kilometers / 10, kilometers % 10, random.between(4, 22) * 10),
                 entrants: random.between(10, 80),
                 controls: chosen,
+                start_point: 1,
             }
         })
         .collect()
@@ -300,8 +322,7 @@ enum Moment {
 fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<Runner> {
     let count = random.between(30, 60) as usize;
     let mut runners: Vec<Runner> = Vec::new();
-    let first_start = random.between(9, 11) * 3600;
-    for n in 0..count {
+    for _ in 0..count {
         // Two different people: the same name only comes later, on purpose.
         let (mut family, mut first) = (random.pick(&FAMILY_NAMES), random.pick(&FIRST_NAMES));
         while runners.iter().any(|r| r.family == family && r.first == first) {
@@ -331,8 +352,10 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
             unknown_category: false,
             card: has_card.then(|| if lent { random.between(2_040_000, 2_049_999) } else { random.between(8_100_000, 8_199_999) }),
             lent,
-            start: first_start + n as u32 * 120,
+            start: 0,
             started,
+            locked: false,
+            changed: false,
             runs,
         });
     }
@@ -341,7 +364,6 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
         for _ in 0..random.below(3) {
             let original = random.below(runners.len() as u32) as usize;
             let (family, first) = (runners[original].family, runners[original].first);
-            let start = first_start + runners.len() as u32 * 120;
             let category = runners[original].category.clone();
             let course = runners[original].runs.first().map(|r| r.course);
             runners.push(Runner {
@@ -352,8 +374,10 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
                 unknown_category: false,
                 card: None,
                 lent: false,
-                start,
+                start: 0,
                 started: false,
+                locked: false,
+                changed: false,
                 runs: course.map(|course| Run { course, result: None }).into_iter().collect(),
             });
         }
@@ -366,6 +390,45 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
     runners
 }
 
+// Each course starts at the same time, one runner every step, then one vacant start.
+fn place_starts(random: &mut Random, runners: &mut [Runner], courses: usize, first_start: u32, published: bool) -> Vec<Vacant> {
+    let mut next = vec![first_start; courses];
+    let mut others = first_start;
+    for runner in runners.iter_mut() {
+        let slot = runner.runs.first().map_or(&mut others, |r| &mut next[r.course]);
+        runner.start = *slot;
+        *slot += START_STEP;
+        if !runner.started {
+            runner.locked = random.below(10) == 0;
+            runner.changed = published && random.below(10) == 0;
+        }
+    }
+    next.iter().enumerate().map(|(course, time)| Vacant { course, time: *time }).collect()
+}
+
+fn new_groups(random: &mut Random, runners: &[Runner], first_start: u32) -> Vec<StartGroup> {
+    let in_course: Vec<usize> = (0..runners.len()).filter(|i| !runners[*i].runs.is_empty()).collect();
+    if in_course.is_empty() {
+        return Vec::new();
+    }
+    let club = runners[random.pick(&in_course)].club;
+    let family = runners[random.pick(&in_course)].family;
+    let helpers = in_course.iter().copied().filter(|_| random.below(10) == 0).collect();
+    vec![
+        StartGroup {
+            name: club.to_string(),
+            rule: "Ensemble".into(),
+            members: in_course.iter().copied().filter(|i| runners[*i].club == club).collect(),
+        },
+        StartGroup {
+            name: format!("Famille {family}"),
+            rule: "Séparés de 10 min".into(),
+            members: in_course.iter().copied().filter(|i| runners[*i].family == family).collect(),
+        },
+        StartGroup { name: "Bénévoles".into(), rule: format!("Avant {}", format_clock(first_start + 3 * START_STEP)), members: helpers },
+    ]
+}
+
 fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Event {
     let past = moment == Moment::Past;
     let (weekday, day, month, month_short) = date(days);
@@ -373,7 +436,20 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
     let course_count = if !past && random.below(4) == 0 { 0 } else { random.between(3, 5) };
     let controls = if course_count == 0 { Vec::new() } else { new_controls(random) };
     let mut courses = new_courses(random, course_count, &controls);
-    let runners = new_runners(random, &courses, moment);
+    // Sometimes a second start, for the courses of the second half.
+    if random.below(2) == 0 {
+        let half = courses.len() / 2;
+        courses.iter_mut().skip(half).for_each(|c| c.start_point = 2);
+    }
+    let mut runners = new_runners(random, &courses, moment);
+    let first_start = random.between(9, 11) * 3600;
+    let published = past || random.below(2) == 0;
+    let vacants = place_starts(random, &mut runners, courses.len(), first_start, published && !past);
+    let groups = new_groups(random, &runners, first_start);
+    let published = published.then(|| {
+        let (_, day, _, month) = date(days.saturating_sub(3));
+        format!("Publiés le {day} {month}")
+    });
     for (i, course) in courses.iter_mut().enumerate() {
         course.entrants = runners.iter().filter(|r| r.runs.iter().any(|run| run.course == i)).count() as u32;
     }
@@ -395,6 +471,9 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
         participants: format!("{entered} {}", if past { "participants" } else { "inscrits" }),
         station: random.between(100_000, 999_999),
         runners,
+        vacants,
+        groups,
+        published,
         courses,
         controls,
         label,
@@ -448,6 +527,7 @@ impl Generated {
             club,
             devices_asking: random.below(2),
             screens: random.below(3),
+            today,
             clock_seconds: random.between(10, 14) * 3600,
             random,
         }
@@ -459,6 +539,31 @@ impl Generated {
 
     pub fn back(&self) -> u32 {
         self.events[CURRENT_EVENT].runners.iter().filter(|r| r.is_back()).count() as u32
+    }
+
+    // Draws again at random inside each course, without touching who is locked or already gone.
+    // Returns the proposed time of each runner: nothing changes until it is applied.
+    pub fn draw(&mut self, event: usize) -> Vec<u32> {
+        let random = &mut self.random;
+        let runners = &self.events[event].runners;
+        let mut times: Vec<u32> = runners.iter().map(|r| r.start).collect();
+        for course in 0..self.events[event].courses.len() {
+            let free: Vec<usize> = (0..runners.len())
+                .filter(|i| runners[*i].runs.first().is_some_and(|r| r.course == course) && !runners[*i].locked && !runners[*i].started)
+                .collect();
+            let mut left: Vec<u32> = free.iter().map(|i| times[*i]).collect();
+            for index in free {
+                times[index] = left.remove(random.below(left.len() as u32) as usize);
+            }
+        }
+        times
+    }
+
+    pub fn publish(&mut self, event: usize) {
+        let today = date(self.today);
+        let event = &mut self.events[event];
+        event.published = Some(format!("Publiés le {} {}", today.1, today.3));
+        event.runners.iter_mut().for_each(|r| r.changed = false);
     }
 
     // A runner out on a course comes back and reads their card. Now and then, a card nobody knows.
