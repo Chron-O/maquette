@@ -76,7 +76,9 @@ export global Participants {
 }
 
 // The reader, always first: what a card read here will do.
-component ReaderTile inherits Rectangle {
+export component ReaderTile inherits Rectangle {
+    in property <string> station: Participants.station;
+
     background: Theme.header;
     border-radius: Theme.card-radius;
     HorizontalLayout {
@@ -95,7 +97,7 @@ component ReaderTile inherits Rectangle {
             horizontal-stretch: 1;
             alignment: center;
             Text {
-                text: Participants.station;
+                text: root.station;
                 color: Theme.reader-detail;
                 font-size: Theme.text-help;
                 wrap: word-wrap;

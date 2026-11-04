@@ -75,6 +75,28 @@ pub struct Runner {
     pub runs: Vec<Run>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum StationState {
+    ToTakeOut,
+    ToProgram,
+    Missing,
+    Checked,
+    ClockGap(u32),
+    Read(u32),      // its memory is read, not yet added to the event
+    Back(u32),
+}
+
+// What the event needs: a control, a start, a finish, a clear or a check station.
+pub struct Station {
+    pub name: String,
+    pub code: String,
+    pub control: Option<u32>,
+    pub serial: Option<u32>,
+    pub park: &'static str,
+    pub low_battery: bool,
+    pub state: StationState,
+}
+
 pub struct Vacant {
     pub course: usize,
     pub time: u32,
@@ -122,6 +144,7 @@ pub struct Event {
     pub participants: String,
     pub station: u32,
     pub runners: Vec<Runner>,
+    pub stations: Vec<Station>,
     pub vacants: Vec<Vacant>,
     pub groups: Vec<StartGroup>,
     pub published: Option<String>,
@@ -406,6 +429,51 @@ fn place_starts(random: &mut Random, runners: &mut [Runner], courses: usize, fir
     next.iter().enumerate().map(|(course, time)| Vacant { course, time: *time }).collect()
 }
 
+fn new_stations(random: &mut Random, event_controls: &[Control], points: u32, moment: Moment) -> Vec<Station> {
+    let mut needs: Vec<(String, String, Option<u32>)> = Vec::new();
+    for point in 1..=points {
+        needs.push((format!("Départ S{point}"), format!("S{point}"), None));
+    }
+    needs.push(("Arrivée F1".into(), "F1".into(), None));
+    needs.extend(event_controls.iter().map(|c| (format!("Poste {}", c.code), c.code.to_string(), Some(c.code))));
+    needs.push(("Effacer E1".into(), "E1".into(), None));
+    needs.push(("Contrôler C1".into(), "C1".into(), None));
+
+    let count = needs.len() as u32;
+    // A few needs still to handle before leaving, on controls only.
+    let special = |random: &mut Random| random.between(points + 1, (count - 3).max(points + 1)) as usize;
+    let (program, missing, gap) = (special(random), special(random), special(random));
+    needs
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, code, control))| {
+            let mut state = match random.below(5) {
+                0 => StationState::ToTakeOut,
+                _ => StationState::Checked,
+            };
+            if moment == Moment::Past {
+                state = StationState::Back(random.between(20, 120));
+            } else if i == program {
+                state = StationState::ToProgram;
+            } else if i == missing {
+                state = StationState::Missing;
+            } else if i == gap {
+                state = StationState::ClockGap(random.between(3, 40));
+            }
+            let has_station = !matches!(state, StationState::Missing | StationState::ToProgram);
+            Station {
+                name,
+                code,
+                control,
+                serial: has_station.then(|| random.between(200_000, 209_999)),
+                park: if random.below(6) == 0 { "Secours" } else { "Club" },
+                low_battery: has_station && random.below(10) == 0,
+                state,
+            }
+        })
+        .collect()
+}
+
 fn new_groups(random: &mut Random, runners: &[Runner], first_start: u32) -> Vec<StartGroup> {
     let in_course: Vec<usize> = (0..runners.len()).filter(|i| !runners[*i].runs.is_empty()).collect();
     if in_course.is_empty() {
@@ -446,6 +514,8 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
     let published = past || random.below(2) == 0;
     let vacants = place_starts(random, &mut runners, courses.len(), first_start, published && !past);
     let groups = new_groups(random, &runners, first_start);
+    let points = courses.iter().map(|c| c.start_point).max().unwrap_or(1);
+    let stations = new_stations(random, &controls, points, moment);
     let published = published.then(|| {
         let (_, day, _, month) = date(days.saturating_sub(3));
         format!("Publiés le {day} {month}")
@@ -471,6 +541,7 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
         participants: format!("{entered} {}", if past { "participants" } else { "inscrits" }),
         station: random.between(100_000, 999_999),
         runners,
+        stations,
         vacants,
         groups,
         published,
@@ -557,6 +628,10 @@ impl Generated {
             }
         }
         times
+    }
+
+    pub fn random_punches(&mut self) -> u32 {
+        self.random.between(20, 120)
     }
 
     pub fn publish(&mut self, event: usize) {

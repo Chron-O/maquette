@@ -2262,7 +2262,7 @@ export component BubbleFrame {
     in property <length> margin;
 
     property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }

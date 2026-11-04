@@ -10,7 +10,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 | 2 | Course › Circuits | validé par Robin ; Mixte à maquetter, modification des circuits à faire plus tard |
 | 3 | Course › Participants | validé par Robin ; nouveau participant et attribution de puce à faire plus tard |
 | 4 | Course › Départs | validé par Robin ; réglage des groupes, vrai tirage et modifications à faire plus tard |
-| 5 | Course › Boîtiers | à faire |
+| 5 | Course › Boîtiers | validé par Robin ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
 | 6 | Course › Direct | à faire |
 | 7 | Course › Résultats | à faire |
 | 8 | Puces (stock de prêt) | à faire |
@@ -108,6 +108,22 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Générateur** : les heures de départ n'influencent pas qui rentre ; un coureur parti tard peut être arrivé avant un parti tôt.
 - **Pas faits** : réglage d'un groupe, premier poste commun, pauses, aperçu détaillé de la publication.
 - **Non testé** : saisie dans la recherche, bouton de verrou, Refaire et Abandonner, tri, pastilles S1/S2, aperçu sur téléphone et iPad, cases déplacées et défilement de la Frise.
+
+## 5 — Boîtiers
+- D'après le prototype, `mise-en-page-universelle.md` et `charte-ui.md` de chrono-swift : encart de lecture, Contrôler et Ramasser en colonne, jauge, tableau par besoin (postes, départs, arrivées), filtre, recherche, fiche, alerte et réglages en bulles.
+- Fonctionnent, sur les données de test seulement : lecture simulée (Démo › « Lire un boîtier », visible sur cet onglet), Oui en Contrôler, Ajouter à la course et Tout ajouter en Ramasser, Voir dans l'alerte. Le reste est visible, sans effet.
+- Captures : `05-stations-*` (tirage fixe, en Contrôler).
+
+### Écarts et points ouverts de l'écran 5
+- **Carte de lecture** : elle décale le tableau quand elle apparaît, contraire à « rien ne saute » de la spec, comme l'aperçu du tirage de Départs.
+- **« Voir » de l'alerte** : les trois filtrent sur tous les besoins à régler, pas sur leur seul type.
+- **Boutons de ligne sans effet** : Programmer, Choisir un boîtier, Corriger les temps. Ils deviennent « Régler » dans le tableau allégé et sur téléphone.
+- **En Ramasser** : les besoins encore « À sortir », « À programmer » ou « Manque » restent dans la liste, avec leur état. Filtre « Dehors » ajouté.
+- **Jauge en Ramasser** : la barre compte les boîtiers rentrés, le gros chiffre ceux qui restent dehors, comme le prototype.
+- **Téléphone** : n° de boîtier à côté du nom, état dessous, pour tenir à 320 px.
+- **Numéro du lecteur de l'encart** : inventé par la maquette.
+- **Référence** : les captures du prototype montrent l'ancien essai à sous-onglets ; le code du prototype fait foi ici.
+- **Non testé** : boutons Oui, Ajouter à la course, Tout ajouter et Voir ; recherche, tri ; bulle des réglages ; fiche d'un besoin sans boîtier ; Ramasser sur téléphone et iPad. Web et iPhone compilent, sans avoir été ouverts.
 
 ### Validations de Robin
 - Écran 1 : validé à l'œil le 03/11, sur Mac et iPhone, avant le passage du logo en Instrument Sans.
