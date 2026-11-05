@@ -5,17 +5,17 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 
 | # | Écran | Statut |
 |---|---|---|
-| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester au premier push |
+| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester à la première fusion sur `main` |
 | 1 | Accueil | validé par Robin |
-| 2 | Course › Circuits | validé par Robin ; Mixte à maquetter, modification des circuits à faire plus tard |
-| 3 | Course › Participants | validé par Robin ; nouveau participant et attribution de puce à faire plus tard |
-| 4 | Course › Départs | validé par Robin ; réglage des groupes, vrai tirage et modifications à faire plus tard |
-| 5 | Course › Boîtiers | validé par Robin ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
-| 6 | Course › Direct | validé par Robin ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
-| 7 | Course › Résultats | validé par Robin ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
-| 8 | Puces (stock de prêt) | validé par Robin ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
-| 9 | Boîtiers (inventaire du club) | validé par Robin ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
-| 10 | Coureurs et clubs (base fédérale) | validé par Robin ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
+| 2 | Course › Circuits | accepté par Robin sans relecture détaillée ; Mixte à maquetter, modification des circuits à faire plus tard |
+| 3 | Course › Participants | accepté par Robin sans relecture détaillée ; nouveau participant et attribution de puce à faire plus tard |
+| 4 | Course › Départs | accepté par Robin sans relecture détaillée ; réglage des groupes, vrai tirage et modifications à faire plus tard |
+| 5 | Course › Boîtiers | accepté par Robin sans relecture détaillée ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
+| 6 | Course › Direct | accepté par Robin sans relecture détaillée ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
+| 7 | Course › Résultats | accepté par Robin sans relecture détaillée ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
+| 8 | Puces (stock de prêt) | accepté par Robin sans relecture détaillée ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
+| 9 | Boîtiers (inventaire du club) | accepté par Robin sans relecture détaillée ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
+| 10 | Coureurs et clubs (base fédérale) | accepté par Robin sans relecture détaillée ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
 
 ## 0 — Mise en place
 - Ranger le prototype HTML dans `html/` (il reste en ligne à `…/maquette/html/`) ; mettre à jour le README.
