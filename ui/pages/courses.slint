@@ -1016,6 +1016,9 @@ export component ControlDetail inherits Rectangle {
     border-width: Theme.tag-outline;
     border-color: Theme.purple;
 
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.button-margin;
@@ -1872,6 +1875,9 @@ export component StopDetail inherits Rectangle {
     border-width: Theme.tag-outline;
     border-color: Theme.purple;
 
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.button-margin;
@@ -2116,14 +2122,12 @@ export component DetailOverlay {
             y: (parent.height - self.height) / 2;
             width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
             height: self.preferred-height;
-            TouchArea { }
         }
         if Courses.course-selected: StopDetail {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
             height: self.preferred-height;
-            TouchArea { }
         }
     }
 }

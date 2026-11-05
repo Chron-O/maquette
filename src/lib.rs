@@ -82,6 +82,24 @@ impl AppState {
     fn stop_test_data(&mut self) {
         self.data = None;
         self.navigator.leave_event();
+        self.reset_event_states();
+        self.reset_club_states();
+    }
+
+    // What the tabs remember belongs to one event: it must never reach another one.
+    fn reset_event_states(&mut self) {
+        self.courses = courses::CoursesState::default();
+        self.participants = participants::ParticipantsState::default();
+        self.starts = starts::StartsState::default();
+        self.stations = stations::StationsState::default();
+        self.live = live::LiveState::default();
+        self.results = results::ResultsState::default();
+    }
+
+    fn reset_club_states(&mut self) {
+        self.cards = cards::CardsState::default();
+        self.club_stations = club_stations::ClubStationsState::default();
+        self.runner_base = runner_base::RunnerBaseState::default();
     }
 }
 
@@ -136,12 +154,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
         move |i: i32| {
             let mut state = state.borrow_mut();
             state.navigator.open_event(i as usize);
-            state.courses = courses::CoursesState::default();
-            state.participants = participants::ParticipantsState::default();
-            state.starts = starts::StartsState::default();
-            state.stations = stations::StationsState::default();
-            state.live = live::LiveState::default();
-            state.results = results::ResultsState::default();
+            state.reset_event_states();
             if let Some(window) = weak.upgrade() {
                 state.show(&window);
             }
@@ -153,9 +166,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
     navigation.on_open_club_page(move |page| {
         let mut state = state_for_page.borrow_mut();
         state.navigator.open_club_page(page as usize);
-        state.cards = cards::CardsState::default();
-        state.club_stations = club_stations::ClubStationsState::default();
-        state.runner_base = runner_base::RunnerBaseState::default();
+        state.reset_club_states();
         if let Some(window) = weak.upgrade() {
             state.show(&window);
         }
@@ -171,10 +182,16 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
         }
     });
     // From the home page, « à traiter » opens the Direct with its alert open.
-    let open_direct = on_click(window, state, |n, _| n.open_direct(CURRENT_EVENT));
-    let weak = window.as_weak();
+    let (weak, state_for_direct) = (window.as_weak(), state.clone());
     navigation.on_open_direct(move || {
-        open_direct(0);
+        {
+            let mut state = state_for_direct.borrow_mut();
+            state.navigator.open_direct(CURRENT_EVENT);
+            state.reset_event_states();
+            if let Some(window) = weak.upgrade() {
+                state.show(&window);
+            }
+        }
         if let Some(window) = weak.upgrade() {
             let courses = window.global::<Courses>();
             let width = window.window().size().to_logical(window.window().scale_factor()).width;
@@ -609,6 +626,10 @@ fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>
     let (weak, state_for_switch, readings_for_switch) = (window.as_weak(), state.clone(), readings.clone());
     demo.on_select_test_data(move |i| {
         let Some(window) = weak.upgrade() else { return };
+        // Clicking the active choice must not draw new data over the current ones.
+        if window.global::<Demo>().get_active_test_data() == i {
+            return;
+        }
         window.global::<Demo>().set_active_test_data(i);
         if i == 1 {
             state_for_switch.borrow_mut().start_test_data(random_seed());

@@ -449,6 +449,9 @@ export component ParticipantDetail inherits Rectangle {
     border-width: Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.button-margin;
@@ -633,7 +636,6 @@ export component ParticipantOverlay {
             y: max(Theme.narrow-margin, (root.height - self.height) / 2);
             width: min(Theme.detail-overlay-width, root.width - 2 * Theme.narrow-margin);
             height: self.preferred-height;
-            TouchArea { }
         }
     }
 }
