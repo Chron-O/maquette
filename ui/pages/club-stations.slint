@@ -13,6 +13,7 @@ import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, Sm
 import { Cell } from "participants.slint";
 import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
 import { CardAction, CardEntry, CardParkItem, DetailLine, DetailTitle, ParkColumn } from "cards.slint";
+import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
 
 export struct ClubStationRow {
     serial: int,
@@ -54,13 +55,12 @@ export global ClubStations {
     in property <string> alert-count;
     in property <[BatteryDueItem]> batteries;
 
+    in property <bool> can-add;          // not in the park of the unknown stations
+
     in property <bool> has-reading;
-    in property <string> read-label;
     in property <string> read-code;
-    in property <string> read-detail;
-    in property <string> read-clock;
-    in property <string> read-battery;
-    in property <string> read-note;
+    in property <string> read-identity;
+    in property <string> read-verdict;
 
     in property <bool> detail-open;
     in property <string> detail-title;
@@ -76,6 +76,7 @@ export global ClubStations {
     in property <bool> detail-can-change-battery;
     in property <string> detail-clock;
     in property <string> detail-measured;
+    in property <string> detail-clock-limit;   // « À régler au-delà de 30 s »
     in property <string> detail-note;
     in property <[CardAction]> actions;
     in property <[CardEntry]> history;
@@ -94,29 +95,16 @@ export global ClubStations {
     callback change-battery();
 }
 
-// The last station read, or the wait for one.
-component ReadingBox inherits Rectangle {
-    background: Theme.card;
-    border-radius: Theme.card-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
-    VerticalLayout {
-        padding: Theme.space-medium;
-        spacing: Theme.space;
-        if !ClubStations.has-reading: Head { text: "Lecture d'un boîtier"; wrap: word-wrap; }
-        if !ClubStations.has-reading: SmallText { text: "Posez un boîtier sur la station"; }
-        if ClubStations.has-reading: SmallText { text: ClubStations.read-label; }
-        if ClubStations.has-reading: Text {
-            text: ClubStations.read-code;
-            color: Theme.text;
-            font-size: Theme.reading-code-size;
-            font-weight: Theme.weight-screen-title;
-        }
-        if ClubStations.has-reading: SmallText { text: ClubStations.read-detail; }
-        if ClubStations.has-reading: DetailLine { label: "Heure"; value: ClubStations.read-clock; }
-        if ClubStations.has-reading: DetailLine { label: "Pile"; value: ClubStations.read-battery; }
-        if ClubStations.has-reading && ClubStations.read-note != "": SmallText { text: ClubStations.read-note; }
-    }
+// The reader: the code read, one identity line, one verdict line. The rest is in the
+// detail of the station, which opens (encart-lecture.md § 8).
+component ReadingBox inherits ReaderTile {
+    reader: Readers.free;
+    with-result: true;
+    message: "Posez un boîtier sur la station";
+    state: ClubStations.has-reading ? ReaderState.read : ReaderState.waiting;
+    code: ClubStations.read-code;
+    identity: ClubStations.read-identity;
+    verdict: ClubStations.read-verdict;
 }
 
 // A measure: never by its color alone, its text says what is wrong.
@@ -286,11 +274,10 @@ component ClubStationsContent {
         HorizontalLayout {
             vertical-stretch: 0;
             padding-top: root.narrow ? 0 : Theme.space;
-            SecondaryButton {
-                label: "Ajouter des boîtiers…";
-                icon: Icons.plus;
-                has-icon: true;
-            }
+            // The screen's one orange button, outside the rows (lot1b-boitiers-serie.md § 7).
+            if ClubStations.can-add: PrimaryButton { label: "Ajouter des boîtiers…"; }
+            // Keeps the place of the button, so that the table does not move.
+            if !ClubStations.can-add: Rectangle { height: Theme.primary-button-height; }
             Rectangle { horizontal-stretch: 1; }
         }
         Rectangle {
@@ -471,10 +458,20 @@ export component ClubStationDetail inherits Rectangle {
         DetailTitle { text: "Heure"; }
         DetailLine { label: "Décalage"; value: ClubStations.detail-clock; }
         DetailLine { label: "Mesuré le"; value: ClubStations.detail-measured; }
+        SmallText { text: ClubStations.detail-clock-limit; }
 
         RowLine { }
         DetailTitle { text: "Note"; }
         SmallText { text: ClubStations.detail-note; }
+        // Quick labels under the note (encart-lecture.md § 10): no effect for now.
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space-small;
+            SecondaryButton { label: "Bip faible"; }
+            SecondaryButton { label: "Ne s'allume pas"; }
+        }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Numéro écrit différent"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Heure qui dérive"; } }
 
         RowLine { }
         DetailTitle { text: "Historique"; }
@@ -497,11 +494,12 @@ export component ClubStationsPage {
         spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
+            ReadingBox { compact: true; }
             HorizontalLayout {
                 spacing: Theme.space;
                 SummaryZone {
                     horizontal-stretch: 1;
-                    title: "Réglages";
+                    title: "";
                     chips: ClubStations.chips;
                     bubble: 17;
                     compact: true;
@@ -513,7 +511,6 @@ export component ClubStationsPage {
                     compact: true;
                 }
             }
-            ReadingBox { }
             ChipFlow {
                 items: ClubStations.park-chips;
                 active: ClubStations.active-park;
@@ -529,7 +526,7 @@ export component ClubStationsPage {
             vertical-stretch: 0;
             spacing: Theme.button-margin;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: ClubStations.chips;
                 bubble: 17;
                 compact: root.layout-mode == LayoutMode.medium;

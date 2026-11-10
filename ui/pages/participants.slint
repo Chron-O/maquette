@@ -5,8 +5,9 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
+import { ReaderTile, Readers } from "../components/reader-tile.slint";
 import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
-import { Tabs } from "../components/tabs.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SequenceStop, SmallText, SortMark, StopsFlow, SummaryZone, Switch } from "courses.slint";
@@ -19,8 +20,8 @@ export struct ParticipantRow {
     club: string,
     category: string,
     category-short: string,
-    tone: int,          // -1 when no course yet
-    card: string,
+    tones: [int],       // one per passage, in passage order; empty when no course yet
+    card: string,       // with « · prêtée » for a loan card
     no-card: bool,
     start: string,
     result: string,     // on a phone: the time when back, otherwise the start
@@ -54,7 +55,6 @@ export global Participants {
     in property <string> search-text;
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
-    in property <string> station;
     in property <string> lent-count;
     in property <string> lent-detail;
     in property <string> lent-name;
@@ -62,7 +62,7 @@ export global Participants {
     in property <bool> detail-open;
     in property <string> detail-name;
     in property <string> detail-category;
-    in property <int> detail-tone;
+    in property <[int]> detail-tones;
     in property <string> detail-club;
     in property <string> detail-card;
     in property <string> detail-start;
@@ -73,43 +73,6 @@ export global Participants {
     callback select-filter(int);
     callback search(string);
     callback close-detail();
-}
-
-// The reader, always first: what a card read here will do.
-export component ReaderTile inherits Rectangle {
-    in property <string> station: Participants.station;
-
-    background: Theme.header;
-    border-radius: Theme.card-radius;
-    HorizontalLayout {
-        padding: Theme.space-medium;
-        spacing: Theme.button-margin;
-        VerticalLayout {
-            alignment: center;
-            Image {
-                source: Icons.co-finish;
-                colorize: Theme.reader-ring;
-                width: Theme.reader-icon;
-                height: Theme.reader-icon;
-            }
-        }
-        VerticalLayout {
-            horizontal-stretch: 1;
-            alignment: center;
-            Text {
-                text: root.station;
-                color: Theme.reader-detail;
-                font-size: Theme.text-help;
-                wrap: word-wrap;
-            }
-            Text {
-                text: "Prêt";
-                color: Theme.header-text;
-                font-size: Theme.text-block-title;
-                font-weight: Theme.weight-block-title;
-            }
-        }
-    }
 }
 
 component LentCards inherits Rectangle {
@@ -152,7 +115,10 @@ export component Title inherits Rectangle {
     in property <bool> sorted;
     in property <bool> ascending;
 
-    TouchArea {
+    // Hover: a light background (charte-ui.md, Tableaux).
+    background: zone.has-hover ? Theme.column-title-hover : transparent;
+    animate background { duration: Theme.tint-duration; }
+    zone := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
@@ -196,17 +162,23 @@ export component NameCell {
     }
 }
 
+// One chip per passage, in passage order (`tones`), or a single one (`tone`), then the text.
 export component CategoryCell {
     in property <string> category;
-    in property <int> tone;
+    in property <int> tone: -1;
+    in property <[int]> tones;
 
     HorizontalLayout {
         padding-left: Theme.space;
         alignment: start;
         spacing: Theme.space-small;
-        if root.tone >= 0: VerticalLayout {
+        if root.tones.length == 0 && root.tone >= 0: VerticalLayout {
             alignment: center;
             CourseChip { tone: root.tone; }
+        }
+        for item in root.tones: VerticalLayout {
+            alignment: center;
+            CourseChip { tone: item; }
         }
         Cell { text: root.category; }
     }
@@ -219,8 +191,12 @@ component ParticipantsTable {
     // Light when the room is short, whatever the device: next to an open detail, on a small tablet.
     property <bool> wide: root.available-width >= Theme.participant-full-width;
     property <length> category-width: root.wide ? Theme.participant-category-width : Theme.participant-light-category-width;
-    property <length> card-width: root.wide ? Theme.participant-card-width : Theme.participant-light-card-width;
-    property <length> fixed: Theme.participant-state-width + root.category-width + root.card-width
+    // The Action column when there is room for it (prototype: tabParts); otherwise the button takes the card's place.
+    property <bool> with-action: root.available-width >= Theme.participant-action-full-width;
+    property <length> card-width: root.with-action ? Theme.participant-card-width
+        : root.wide ? Theme.participant-card-button-width : Theme.participant-light-card-width;
+    property <length> action-width: root.with-action ? Theme.participant-action-width : 0px;
+    property <length> fixed: Theme.participant-state-width + root.category-width + root.card-width + root.action-width
         + (root.wide ? Theme.participant-club-width + Theme.participant-start-width : 0px);
     property <length> table-width: max(root.width, root.fixed + Theme.participant-name-width);
     property <length> name-width: root.table-width - root.fixed;
@@ -244,6 +220,7 @@ component ParticipantsTable {
                 Title { width: root.category-width; label: "Catégorie"; sorted: Participants.sort-column == 3; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(3); } }
                 Title { width: root.card-width; label: "Puce"; sorted: Participants.sort-column == 4; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(4); } }
                 if root.wide: Title { width: Theme.participant-start-width; label: "Départ"; sorted: Participants.sort-column == 5; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(5); } }
+                if root.with-action: Title { width: root.action-width; label: "Action"; }
             }
             RowLine { vertical-stretch: 0; }
             Flickable {
@@ -276,12 +253,12 @@ component ParticipantsTable {
                                     padding-left: Theme.space;
                                     Cell { text: row.club; }
                                 }
-                                CategoryCell { width: root.category-width; category: root.wide ? row.category : row.category-short; tone: row.tone; }
+                                CategoryCell { width: root.category-width; category: root.wide ? row.category : row.category-short; tones: row.tones; }
                                 HorizontalLayout {
                                     width: root.card-width;
                                     padding-left: Theme.space;
-                                    if !row.no-card: Cell { text: row.card; }
-                                    if row.no-card: HorizontalLayout {
+                                    if root.with-action || !row.no-card: Cell { text: row.card; wrap: word-wrap; }
+                                    if !root.with-action && row.no-card: HorizontalLayout {
                                         alignment: start;
                                         PrimaryButton { label: root.wide ? "Attribuer une puce" : "Attribuer"; in-row: true; }
                                     }
@@ -290,6 +267,16 @@ component ParticipantsTable {
                                     width: Theme.participant-start-width;
                                     padding-left: Theme.space;
                                     Cell { text: row.start; }
+                                }
+                                if root.with-action: HorizontalLayout {
+                                    width: root.action-width;
+                                    padding-left: Theme.space;
+                                    padding-right: Theme.space;
+                                    alignment: start;
+                                    if row.no-card: VerticalLayout {
+                                        alignment: center;
+                                        PrimaryButton { label: "Attribuer une puce"; in-row: true; }
+                                    }
                                 }
                             }
                         }
@@ -324,17 +311,19 @@ component ParticipantsList {
                         Text {
                             text: row.family + " " + row.first;
                             color: Theme.text;
-                            font-size: Theme.text-help;
+                            font-size: Theme.text-block-title;
                             font-weight: Theme.weight-block-title;
                             wrap: word-wrap;
                         }
-                        CategoryCell { category: row.category; tone: row.tone; }
+                        CategoryCell { category: row.category; tones: row.tones; }
                     }
                     VerticalLayout {
                         alignment: center;
                         if !row.no-card: Cell {
                             text: row.result;
-                            font-weight: Theme.weight-block-title;
+                            font-size: Theme.text-screen-title;
+                            font-weight: Theme.weight-screen-title;
+                            horizontal-alignment: right;
                         }
                         if row.no-card: PrimaryButton { label: "Attribuer"; in-row: true; }
                     }
@@ -468,7 +457,7 @@ export component ParticipantDetail inherits Rectangle {
                     font-weight: Theme.weight-screen-title;
                     wrap: word-wrap;
                 }
-                CategoryCell { category: Participants.detail-category; tone: Participants.detail-tone; }
+                CategoryCell { category: Participants.detail-category; tones: Participants.detail-tones; }
             }
             Rectangle {
                 width: Theme.zone;
@@ -506,13 +495,13 @@ export component ParticipantDetail inherits Rectangle {
             spacing: Theme.space;
             RowLine { }
             HorizontalLayout {
-                alignment: start;
                 spacing: Theme.space-small;
                 VerticalLayout {
                     alignment: center;
                     CourseChip { tone: passage.tone; }
                 }
-                BubbleLabel { text: passage.course; wrap: no-wrap; }
+                BubbleLabel { horizontal-stretch: 1; text: passage.course; }
+                SecondaryButton { label: "Retirer"; }
             }
             StopsFlow {
                 stops: passage.stops;
@@ -533,6 +522,10 @@ export component ParticipantDetail inherits Rectangle {
         HorizontalLayout { alignment: start; SecondaryButton { label: "Modifier…"; } }
         HorizontalLayout { alignment: start; SecondaryButton { label: "Arrivée manuelle…"; } }
         HorizontalLayout { alignment: start; SecondaryButton { label: "Historique"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Prêter une puce…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Non partant"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Abandon"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Retirer ce participant…"; danger: true; } }
     }
 }
 
@@ -548,12 +541,15 @@ export component ParticipantsPage {
         spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
-            ReaderTile { }
+            ReaderTile {
+                reader: Readers.entry;
+                compact: true;
+            }
             HorizontalLayout {
                 spacing: Theme.space;
                 SummaryZone {
                     horizontal-stretch: 1;
-                    title: "Réglages";
+                    title: "";
                     chips: Participants.chips;
                     bubble: 5;
                     compact: true;
@@ -574,7 +570,7 @@ export component ParticipantsPage {
             vertical-stretch: 0;
             spacing: Theme.button-margin;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: Participants.chips;
                 bubble: 5;
                 compact: root.layout-mode == LayoutMode.medium;
@@ -593,7 +589,7 @@ export component ParticipantsPage {
                 width: Theme.course-list-width;
                 alignment: start;
                 spacing: Theme.space;
-                ReaderTile { }
+                ReaderTile { reader: Readers.entry; }
                 LentCards { }
             }
             ParticipantsContent {
@@ -647,8 +643,9 @@ component SettingsContent {
         HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: "Inscription"; }
-            Tabs {
-                tabs: [{ label: "Par catégorie" }, { label: "Par circuit" }];
+            // A setting, not a view (departs-tirage-v2.md § A).
+            ChoiceSegments {
+                choices: ["Par catégorie", "Par circuit"];
                 active: 0;
             }
         }

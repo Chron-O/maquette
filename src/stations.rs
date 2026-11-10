@@ -2,11 +2,14 @@
 // from the Démo panel, on the test data only.
 
 use crate::home::badge;
-use crate::test_data::{Event, Kind, Label, Station, StationState};
-use crate::{App, CourseMark, StationProblem, StationRow, Stations, TabItem, model};
+use crate::test_data::{Event, Kind, Label, Station, StationState, missed_control, punches_not_in_event};
+use crate::{App, CourseMark, StationProblem, StationRow, Stations, TabItem, UsefulStation, model};
 use slint::{ComponentHandle, SharedString};
+use std::cmp::Ordering;
 
-const MODES: [&str; 2] = ["Contrôler", "Ramasser"];
+// The words of the prototype's sub-tabs (22/10), kept as one segment in the column.
+const MODES: [&str; 2] = ["Contrôle", "Ramassage"];
+const SPARE_PARK: &str = "Secours";
 
 fn plural(count: usize, noun: &str) -> String {
     format!("{count} {noun}{}", if count > 1 { "s" } else { "" })
@@ -14,6 +17,25 @@ fn plural(count: usize, noun: &str) -> String {
 
 fn word(label: &str) -> TabItem {
     TabItem { label: label.into(), icon: Default::default() }
+}
+
+// French alphabetical order: accents and capitals do not count (charte-ui.md, Tableaux).
+fn french_key(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .flat_map(|c| match c {
+            'à' | 'â' | 'ä' | 'á' => vec!['a'],
+            'é' | 'è' | 'ê' | 'ë' => vec!['e'],
+            'î' | 'ï' | 'í' => vec!['i'],
+            'ô' | 'ö' | 'ó' => vec!['o'],
+            'ù' | 'û' | 'ü' | 'ú' => vec!['u'],
+            'ç' => vec!['c'],
+            'ÿ' => vec!['y'],
+            'œ' => vec!['o', 'e'],
+            'æ' => vec!['a', 'e'],
+            other => vec![other],
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -32,6 +54,9 @@ pub struct StationsState {
     search: String,
     selected: Option<usize>,
     reading: Option<usize>,
+    // Settings « À la lecture » (prototype 22/10, bxSettings): no effect for now.
+    check_clock: bool,
+    check_battery: bool,
 }
 
 impl Default for StationsState {
@@ -44,6 +69,8 @@ impl Default for StationsState {
             search: String::new(),
             selected: None,
             reading: None,
+            check_clock: true,
+            check_battery: true,
         }
     }
 }
@@ -116,10 +143,10 @@ impl StationsState {
     }
 
     pub fn add_to_event(&mut self, event: &mut Event, index: usize) {
-        if let Some(station) = event.stations.get_mut(index) {
-            if let StationState::Read(punches) = station.state {
-                station.state = StationState::Back(punches);
-            }
+        if let Some(station) = event.stations.get_mut(index)
+            && let StationState::Read(punches) = station.state
+        {
+            station.state = StationState::Back(punches);
         }
         if self.reading == Some(index) {
             self.reading = None;
@@ -137,7 +164,7 @@ impl StationsState {
         }
     }
 
-    fn state_label(&self, station: &Station) -> Label {
+    pub fn state_label(&self, station: &Station) -> Label {
         match station.state {
             StationState::ToTakeOut => Label::new("À sortir", Kind::Inactive),
             StationState::ToProgram => Label::new("À programmer", Kind::ToCheck),
@@ -164,20 +191,64 @@ impl StationsState {
         filtered && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
+    // The order of the states: what needs a hand first, then the way a station goes.
+    fn state_rank(&self, station: &Station) -> u8 {
+        match station.state {
+            StationState::Missing => 0,
+            StationState::ToProgram => 1,
+            StationState::ClockGap(_) if !self.collecting => 2,
+            StationState::ToTakeOut => 3,
+            StationState::Checked | StationState::ClockGap(_) => 4,
+            StationState::Read(_) => 5,
+            StationState::Back(_) => 6,
+        }
+    }
+
+    fn battery_text(station: &Station) -> Option<&'static str> {
+        match (station.serial, station.low_battery) {
+            (None, _) => None,
+            (_, true) => Some("Pile faible"),
+            _ => Some("OK"),
+        }
+    }
+
+    // Empty cells stay at the end, whichever way the column is sorted; at a tie, the order of the needs.
     fn sorted(&self, event: &Event) -> Vec<usize> {
         let mut rows: Vec<usize> = (0..event.stations.len()).filter(|i| self.in_filter(&event.stations[*i])).collect();
-        rows.sort_by_key(|i| {
+        let compare = |a: &usize, b: &usize| -> Option<Ordering> {
+            let (x, y) = (&event.stations[*a], &event.stations[*b]);
+            match self.sort {
+                SortKey::Need => Some(a.cmp(b)),
+                SortKey::State => Some(self.state_rank(x).cmp(&self.state_rank(y))),
+                SortKey::Serial => match (x.serial, y.serial) {
+                    (Some(p), Some(q)) => Some(p.cmp(&q)),
+                    _ => None,
+                },
+                SortKey::Battery => match (Self::battery_text(x), Self::battery_text(y)) {
+                    (Some(p), Some(q)) => Some(french_key(p).cmp(&french_key(q))),
+                    _ => None,
+                },
+            }
+        };
+        let is_empty = |i: &usize| {
             let station = &event.stations[*i];
             match self.sort {
-                SortKey::Need => String::new(),
-                SortKey::Serial => station.serial.map_or(String::new(), |s| s.to_string()),
-                SortKey::State => self.state_label(station).word,
-                SortKey::Battery => (station.low_battery as u8).to_string(),
+                SortKey::Serial | SortKey::Battery => station.serial.is_none(),
+                _ => false,
             }
+        };
+        rows.sort_by(|a, b| {
+            let order = match (is_empty(a), is_empty(b)) {
+                (false, true) => Ordering::Less,
+                (true, false) => Ordering::Greater,
+                (true, true) => Ordering::Equal,
+                (false, false) => {
+                    let order = compare(a, b).unwrap_or(Ordering::Equal);
+                    if self.ascending { order } else { order.reverse() }
+                }
+            };
+            order.then_with(|| a.cmp(b))
         });
-        if !self.ascending {
-            rows.reverse();
-        }
         rows
     }
 
@@ -186,7 +257,7 @@ impl StationsState {
         let (action, short) = match station.state {
             StationState::ToProgram if !self.collecting => ("Programmer…", "Régler"),
             StationState::Missing if !self.collecting => ("Choisir un boîtier…", "Régler"),
-            StationState::ClockGap(_) if !self.collecting => ("Corriger les temps…", "Régler"),
+            StationState::ClockGap(_) if !self.collecting => ("Corriger les temps…", "Corriger"),
             StationState::Read(_) => ("Ajouter à la course", "Ajouter"),
             _ => ("", ""),
         };
@@ -206,11 +277,7 @@ impl StationsState {
             serial: station.serial.map_or("—".into(), |s| s.to_string().into()),
             serial_long: station.serial.map_or("—".into(), |s| format!("n° {s} · {}", station.park).into()),
             badge: badge(&self.state_label(station)),
-            battery: match (station.serial, station.low_battery) {
-                (None, _) => "—".into(),
-                (_, true) => "Pile faible".into(),
-                _ => "OK".into(),
-            },
+            battery: Self::battery_text(station).unwrap_or("—").into(),
             low_battery: station.low_battery,
             action: action.into(),
             action_short: short.into(),
@@ -220,14 +287,98 @@ impl StationsState {
         }
     }
 
+    // The settings of the event's stations, from the stations themselves.
+    fn settings(event: &Event) -> (usize, Vec<&str>, Vec<&str>) {
+        let with_station = || event.stations.iter().filter(|s| s.serial.is_some());
+        let spares = with_station().filter(|s| s.park == SPARE_PARK).count();
+        let mut parks: Vec<&str> = Vec::new();
+        for station in with_station() {
+            if !parks.contains(&station.park) {
+                parks.push(station.park);
+            }
+        }
+        let specials: Vec<&str> = event
+            .stations
+            .iter()
+            .filter(|s| s.control.is_none() && !s.name.starts_with("Départ") && !s.name.starts_with("Arrivée"))
+            .map(|s| s.name.as_str())
+            .collect();
+        (spares, parks, specials)
+    }
+
+    // The stations worth reading to settle a doubt (lot1-securite.md § 2): the finish and the
+    // starts while runners are out, the controls missing on cards read. Ticked once read.
+    fn useful(event: &Event) -> Vec<UsefulStation> {
+        let read = |station: &Station| matches!(station.state, StationState::Read(_) | StationState::Back(_));
+        let line = |station: &Station, detail: String| UsefulStation {
+            label: station.name.as_str().into(),
+            detail: detail.into(),
+            done: read(station),
+        };
+        let racing = |point: Option<u32>| {
+            event
+                .runners
+                .iter()
+                .filter(|r| r.is_racing())
+                .filter(|r| {
+                    point.is_none_or(|p| {
+                        r.runs.iter().any(|run| run.result.is_none() && event.courses.get(run.course).is_some_and(|c| c.start_point == p))
+                    })
+                })
+                .count()
+        };
+        let out = |count: usize| format!("{} encore en course", plural(count, "coureur"));
+        let mut lines = Vec::new();
+        for station in event.stations.iter().filter(|s| s.code.starts_with('F')) {
+            let count = racing(None);
+            if count > 0 {
+                lines.push(line(station, out(count)));
+            }
+        }
+        for station in event.stations.iter().filter(|s| s.code.starts_with('S')) {
+            let count = station.code[1..].parse().ok().map_or(0, |point| racing(Some(point)));
+            if count > 0 {
+                lines.push(line(station, out(count)));
+            }
+        }
+        // The missing controls, in the order of the needs.
+        let mut missing: Vec<(u32, Vec<String>)> = Vec::new();
+        for runner in &event.runners {
+            for run in &runner.runs {
+                let (Some((seconds, false)), Some(course)) = (run.result, event.courses.get(run.course)) else { continue };
+                let Some(code) = course.controls.get(missed_control(seconds, course.controls.len())) else { continue };
+                match missing.iter_mut().find(|(c, _)| c == code) {
+                    Some((_, names)) => names.push(runner.name()),
+                    None => missing.push((*code, vec![runner.name()])),
+                }
+            }
+        }
+        for station in &event.stations {
+            let Some((_, names)) = station.control.and_then(|code| missing.iter().find(|(c, _)| *c == code)) else { continue };
+            let who = if names.len() == 1 { names[0].clone() } else { plural(names.len(), "coureur") };
+            lines.push(line(station, format!("manquant pour {who}")));
+        }
+        lines
+    }
+
     pub fn show(&self, window: &App, event: Option<&Event>) {
         let page = window.global::<Stations>();
         let Some(event) = event else { return };
         let stations = &event.stations;
         let count = |test: &dyn Fn(&Station) -> bool| stations.iter().filter(|s| test(s)).count();
 
-        page.set_station(format!("Boîtiers · n° {}", event.station + 1).into());
-        page.set_chips(model(vec!["2 secours".into(), "Parcs : Club, Secours".into()]));
+        let (spares, parks, specials) = Self::settings(event);
+        let spares_text = if spares == 0 { "Aucun secours".to_string() } else { format!("{spares} secours") };
+        let mut chips: Vec<SharedString> = vec![spares_text.into(), format!("Parcs : {}", parks.join(", ")).into()];
+        if self.check_clock {
+            chips.push("Heure vérifiée".into());
+        }
+        page.set_chips(model(chips));
+        page.set_settings_spares(spares.to_string().into());
+        page.set_settings_parks(model(parks.iter().map(|p| SharedString::from(*p)).collect()));
+        page.set_settings_specials(model(specials.iter().map(|p| SharedString::from(*p)).collect()));
+        page.set_settings_check_clock(self.check_clock);
+        page.set_settings_check_battery(self.check_battery);
         page.set_modes(model(MODES.iter().map(|m| word(m)).collect()));
         page.set_active_mode(self.collecting as i32);
         page.set_search_text(self.search.as_str().into());
@@ -261,6 +412,7 @@ impl StationsState {
             page.set_gauge_total(format!("/ {} posés", out + back).into());
             page.set_gauge_share(if out + back == 0 { 0.0 } else { back as f32 / (out + back) as f32 });
             page.set_gauge_detail(SharedString::new());
+            page.set_useful(model(Self::useful(event)));
         } else {
             let to_handle = to_program + missing + gaps;
             page.set_filters(model(vec![word("Tous"), word(&format!("À régler · {to_handle}"))]));
@@ -269,6 +421,7 @@ impl StationsState {
             page.set_gauge_total(format!("/ {} contrôlés", stations.len()).into());
             page.set_gauge_share(if stations.is_empty() { 0.0 } else { checked as f32 / stations.len() as f32 });
             page.set_gauge_detail(if to_take_out > 0 { format!("{to_take_out} encore à sortir").into() } else { SharedString::new() });
+            page.set_useful(model(Vec::new()));
         }
         page.set_active_filter(self.only_to_handle as i32);
 
@@ -298,6 +451,7 @@ impl StationsState {
 
         page.set_rows(model(self.sorted(event).into_iter().map(|i| self.row(event, i)).collect()));
 
+        // What was read, in big, in its own card above the table (prototype: bxBig).
         let reading = self.reading.and_then(|i| stations.get(i));
         page.set_reading(reading.is_some());
         if let Some(station) = reading {
@@ -306,14 +460,21 @@ impl StationsState {
             if let StationState::Read(punches) = station.state {
                 page.set_reading_label("Rentré".into());
                 page.set_reading_question(format!("Mémoire lue : {}", plural(punches as usize, "poinçon")).into());
-                page.set_reading_detail(format!("Boîtier n° {serial}").into());
+                let missing = punches_not_in_event(punches);
+                let detail = format!("{} ne {} pas encore dans la course", plural(missing, "poinçon"), if missing > 1 { "sont" } else { "est" });
+                page.set_reading_detail(format!("Boîtier n° {serial} · {detail}").into());
+                page.set_reading_detail_short(detail.into());
                 page.set_reading_button("Ajouter à la course".into());
+                page.set_reading_button_short("Ajouter à la course".into());
                 page.set_reading_can_refuse(false);
             } else {
                 page.set_reading_label("Code lu".into());
                 page.set_reading_question(format!("Le numéro écrit sur le boîtier est-il {} ?", station.code).into());
-                page.set_reading_detail(format!("Boîtier n° {serial} · heure 0 s · mémoire vide").into());
-                page.set_reading_button("Oui".into());
+                let battery = if station.low_battery { "pile faible" } else { "pile OK" };
+                page.set_reading_detail(format!("Boîtier n° {serial} · heure 0 s · {battery} · mémoire vide").into());
+                page.set_reading_detail_short(format!("Boîtier n° {serial}").into());
+                page.set_reading_button("Oui (Entrée)".into());
+                page.set_reading_button_short("Oui".into());
                 page.set_reading_can_refuse(true);
             }
         }
@@ -321,19 +482,20 @@ impl StationsState {
         let selected = self.selected.and_then(|i| stations.get(i));
         page.set_detail_open(selected.is_some());
         if let Some(station) = selected {
+            page.set_detail_index(self.selected.unwrap_or_default() as i32);
             page.set_detail_name(station.name.as_str().into());
             page.set_detail_subtitle(badge(&self.state_label(station)).word);
             page.set_detail_has_station(station.serial.is_some());
             page.set_detail_serial(station.serial.map_or(SharedString::new(), |s| format!("n° {s}").into()));
             page.set_detail_park(station.park.into());
-            page.set_detail_battery(if station.low_battery { "Faible" } else { "OK" }.into());
+            page.set_detail_low_battery(station.low_battery);
             page.set_detail_gap(match station.state {
-                StationState::ClockGap(gap) => format!("+{gap} s").into(),
+                StationState::ClockGap(gap) => format!("+{gap} s · à corriger").into(),
                 StationState::ToTakeOut => "—".into(),
                 _ => "0 s".into(),
             });
             page.set_detail_punches(match station.state {
-                StationState::Read(punches) | StationState::Back(punches) => punches.to_string().into(),
+                StationState::Read(punches) | StationState::Back(punches) => plural(punches as usize, "poinçon").into(),
                 _ => "aucun".into(),
             });
         }

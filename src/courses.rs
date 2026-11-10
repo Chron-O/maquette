@@ -1,10 +1,12 @@
 // The Circuits tab: what is chosen, and the rows it shows.
 // Everything is display only for now: nothing here changes a course.
 
-use crate::test_data::{Control, Course, Event, FINISH, Format, START};
+use crate::home::badge;
+use crate::stations::StationsState;
+use crate::test_data::{Control, Course, Event, FINISH, Format, Kind, Label, START};
 use crate::{
     App, ColumnTitle, ControlRow, CourseItem, CourseLine, CourseMarker, CourseStop, Courses, DetailCourse, LegendItem, MapMarker, ReserveItem,
-    SequenceStop, TabItem, model,
+    SequenceStop, TabItem, TracedCourse, model,
 };
 use slint::{ComponentHandle, SharedString};
 
@@ -12,6 +14,7 @@ const VIEWS: [&str; 3] = ["Tableau", "Lignes", "Carte"];
 const COURSE_VIEWS: [&str; 3] = ["Liste", "Métro", "Géographique"];
 const COURSE_VIEWS_NARROW: [&str; 3] = ["Liste", "Métro", "Géo"];
 const GEOGRAPHIC_VIEW: usize = 2;
+const MAP_VIEW: usize = 2;
 const MAP_WIDTH: f32 = 600.0;
 const MAP_HEIGHT: f32 = 360.0;
 
@@ -107,6 +110,10 @@ fn trace(event: &Event, course: &Course) -> String {
         }
     }
     commands + &format!(" L{} {}", FINISH.0, FINISH.1)
+}
+
+fn traced(event: &Event, course: &Course, tone: usize) -> TracedCourse {
+    TracedCourse { trace: trace(event, course).into(), tone: tone as i32 }
 }
 
 impl CoursesState {
@@ -216,7 +223,7 @@ impl CoursesState {
         codes
     }
 
-    pub fn show(&self, window: &App, event: Option<&Event>) {
+    pub fn show(&self, window: &App, event: Option<&Event>, stations: &StationsState) {
         let courses = window.global::<Courses>();
         let Some(event) = event else { return };
 
@@ -225,6 +232,8 @@ impl CoursesState {
         courses.set_views(model(VIEWS.iter().map(|v| word(v)).collect()));
         courses.set_views_narrow(model(VIEWS[..2].iter().map(|v| word(v)).collect()));
         courses.set_active_view(self.view as i32);
+        // The phone has no map: it shows the table as a list instead.
+        courses.set_active_view_narrow(if self.view == MAP_VIEW { 0 } else { self.view as i32 });
         courses.set_code_search_text(self.code_search.as_str().into());
         courses.set_course_search_text(self.course_search.as_str().into());
 
@@ -252,7 +261,6 @@ impl CoursesState {
                 .collect(),
         ));
         courses.set_all_summary(format!("{} · {}", plural(event.controls.len(), "poste"), plural(shared, "partagé")).into());
-        courses.set_all_trace("".into());
 
         let (active, selected_course) = match self.selection {
             Selection::Course(i) => (i as i32, event.courses.get(i)),
@@ -341,7 +349,6 @@ impl CoursesState {
                                 .map(|(n, code)| SequenceStop {
                                     code: code.to_string().into(),
                                     rank: if c.format == Format::Imposed { n as i32 + 1 } else { -1 },
-                                    selected: self.control == Some(*code),
                                 })
                                 .collect(),
                         ),
@@ -352,21 +359,21 @@ impl CoursesState {
         courses.set_unused_codes(model(unused.iter().map(|c| SharedString::from(c.to_string())).collect()));
 
         // Map: a course is traced when highlighted, or when it goes through the chosen control.
-        let traced: Vec<&Course> = event
-            .courses
-            .iter()
-            .enumerate()
-            .filter(|(i, c)| {
-                if self.highlight > 0 {
-                    self.highlight - 1 == *i
-                } else {
-                    self.control.is_some_and(|code| c.controls.contains(&code))
-                }
-            })
-            .map(|(_, c)| c)
-            .collect();
         courses.set_traces(model(
-            traced.iter().map(|c| trace(event, c)).filter(|t| !t.is_empty()).map(SharedString::from).collect(),
+            event
+                .courses
+                .iter()
+                .enumerate()
+                .filter(|(i, c)| {
+                    if self.highlight > 0 {
+                        self.highlight - 1 == *i
+                    } else {
+                        self.control.is_some_and(|code| c.controls.contains(&code))
+                    }
+                })
+                .map(|(i, c)| traced(event, c, i))
+                .filter(|t| !t.trace.is_empty())
+                .collect(),
         ));
         courses.set_markers(model(
             event
@@ -388,7 +395,7 @@ impl CoursesState {
         courses.set_finish_y(FINISH.1 / MAP_HEIGHT);
 
         if let Some(course) = selected_course {
-            self.show_course(&courses, event, course, active as usize);
+            self.show_course(&courses, event, course, active as usize, stations);
         }
 
         // Detail
@@ -399,8 +406,18 @@ impl CoursesState {
             let using: Vec<(usize, &Course)> =
                 event.courses.iter().enumerate().filter(|(_, c)| c.controls.contains(&code)).collect();
             courses.set_detail_code(code.to_string().into());
+            courses.set_detail_unused(using.is_empty());
             courses.set_detail_subtitle(
                 if using.is_empty() { "dans aucun circuit".to_string() } else { plural(using.len(), "circuit") }.into(),
+            );
+            // A new code applies wherever the control is used (prototype: tFiche).
+            courses.set_detail_code_scope(
+                match using.len() {
+                    0 => String::new(),
+                    1 => "change dans tous les circuits".to_string(),
+                    n => format!("change dans les {n} circuits"),
+                }
+                .into(),
             );
             courses.set_detail_courses(model(
                 using
@@ -413,19 +430,26 @@ impl CoursesState {
                             tone: *tone as i32,
                             ordered,
                             rank: if ordered { rank_text(n).into() } else { "libre".into() },
-                            before: if n == 0 { "D".into() } else { c.controls[n - 1].to_string().into() },
-                            after: c.controls.get(n + 1).map_or("A".into(), |x| x.to_string().into()),
+                            // Empty: the start or the finish, drawn with its symbol.
+                            before: if n == 0 { SharedString::new() } else { c.controls[n - 1].to_string().into() },
+                            after: c.controls.get(n + 1).map_or(SharedString::new(), |x| x.to_string().into()),
                         }
                     })
                     .collect(),
             ));
             let entrants: u32 = using.iter().map(|(_, c)| c.entrants).sum();
-            courses.set_detail_entrants(format!("{entrants} inscrits passent par ce poste").into());
+            let entrants = match entrants {
+                0 => "Aucun coureur inscrit ne passe par ce poste".to_string(),
+                1 => "1 coureur inscrit passe par ce poste".to_string(),
+                n => format!("{n} coureurs inscrits passent par ce poste"),
+            };
+            courses.set_detail_entrants(entrants.into());
         }
     }
 
-    fn show_course(&self, courses: &Courses<'_>, event: &Event, course: &Course, index: usize) {
+    fn show_course(&self, courses: &Courses<'_>, event: &Event, course: &Course, index: usize, stations: &StationsState) {
         courses.set_course_name(course.name.as_str().into());
+        courses.set_course_map(course.map.unwrap_or("—").into());
         courses.set_course_categories(course.categories.into());
         let ordered = course.format == Format::Imposed;
         let scored = course.format == Format::Score;
@@ -496,7 +520,8 @@ impl CoursesState {
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| self.show_others && *i != index)
-                .map(|(_, c)| SharedString::from(trace(event, c)))
+                .map(|(i, c)| traced(event, c, i))
+                .filter(|t| !t.trace.is_empty())
                 .collect(),
         ));
         courses.set_course_markers(model(
@@ -523,15 +548,16 @@ impl CoursesState {
             legend.push((5, "Poste obligatoire"));
         }
         if self.show_others {
-            legend.push((4, if self.course_view == GEOGRAPHIC_VIEW { "Tracé d'un autre circuit" } else { "Dans un autre circuit" }));
+            legend.push(if self.course_view == GEOGRAPHIC_VIEW { (6, "Tracé d'un autre circuit") } else { (4, "Dans un autre circuit") });
         }
         courses.set_legend(model(legend.into_iter().map(|(kind, label)| LegendItem { kind, label: label.into() }).collect()));
 
         if let (Some(n), Some(code)) = (self.stop, selected) {
             courses.set_stop_points(format!("{} pts", course.points[n]).into());
             courses.set_stop_mandatory(course.mandatory[n]);
-            let before = if n == 0 { "D".to_string() } else { course.controls[n - 1].to_string() };
-            let after = course.controls.get(n + 1).map_or("A".to_string(), u32::to_string);
+            // Empty: the start or the finish, drawn with its symbol in the mini-trace.
+            let before = if n == 0 { String::new() } else { course.controls[n - 1].to_string() };
+            let after = course.controls.get(n + 1).map_or(String::new(), u32::to_string);
             courses.set_stop_code(code.to_string().into());
             courses.set_stop_subtitle(
                 if ordered {
@@ -543,7 +569,30 @@ impl CoursesState {
             );
             courses.set_stop_before(before.into());
             courses.set_stop_after(after.as_str().into());
-            courses.set_stop_section(format!("Tronçon {code} → {after} non compté pour ce circuit").into());
+            let next = if after.is_empty() { "Arrivée" } else { after.as_str() };
+            courses.set_stop_section(format!("Tronçon {code} → {next} non compté pour ce circuit").into());
+            let station = event.stations.iter().find(|s| s.control == Some(code));
+            courses.set_stop_station(badge(&station.map_or(Label::new("Pas de boîtier", Kind::Inactive), |s| stations.state_label(s))));
+            courses.set_stop_others(model(
+                event
+                    .courses
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| *i != index)
+                    .filter_map(|(i, c)| c.controls.iter().position(|x| *x == code).map(|n| (i, c, n)))
+                    .map(|(i, c, n)| {
+                        let ordered = c.format == Format::Imposed;
+                        DetailCourse {
+                            name: c.name.clone().into(),
+                            tone: i as i32,
+                            ordered,
+                            rank: if ordered { format!("{} poste", rank_text(n)).into() } else { "libre".into() },
+                            before: SharedString::new(),
+                            after: SharedString::new(),
+                        }
+                    })
+                    .collect(),
+            ));
         }
     }
 }

@@ -5,8 +5,11 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { Icons } from "../components/icons.slint";
 import { InputField } from "../components/field.slint";
-import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
 
 export struct CourseItem {
     index: int,
@@ -33,7 +36,6 @@ export struct ControlRow {
 export struct SequenceStop {
     code: string,
     rank: int,
-    selected: bool,
 }
 
 export struct CourseLine {
@@ -50,8 +52,14 @@ export struct MapMarker {
     x: float,
     y: float,
     unused: bool,
-    selected: bool,
+    selected: bool,     // a thin ring around it: its circle never changes
     dimmed: bool,
+}
+
+// A course drawn on a map, in its own colour.
+export struct TracedCourse {
+    trace: string,
+    tone: int,
 }
 
 export struct DetailCourse {
@@ -88,7 +96,8 @@ export struct CourseMarker {
 }
 
 export struct LegendItem {
-    kind: int,          // 0 start, 1 finish, 2 control, 3 control outside the course, 4 other course, 5 mandatory
+    kind: int,          // 0 start, 1 finish, 2 control, 3 control outside the course, 4 other course (mark),
+                        // 5 mandatory, 6 other course (faint line, on the map)
     label: string,
 }
 
@@ -113,18 +122,21 @@ export global Courses {
     in property <[ReserveItem]> reserve;
     in property <[CourseMarker]> course-markers;
     in property <string> course-trace;
-    in property <[string]> other-traces;
+    in property <[TracedCourse]> other-traces;
     in property <[LegendItem]> legend;
     in property <string> stop-code;
     in property <string> stop-subtitle;
     in property <string> stop-before;
     in property <string> stop-after;
     in property <string> stop-section;
+    in property <Badge> stop-station;           // the state of its station, for this event
+    in property <[DetailCourse]> stop-others;   // the other courses going through it
+    in property <string> course-map;            // the map file of the course, or « — »
+    in property <int> palette-size: 5;          // how many course colours there are
     in property <string> code-search-text;
     in property <string> course-search-text;
     in property <[CourseItem]> items;
     in property <string> all-summary;
-    in property <string> all-trace;
 
     in property <[string]> chips;
     in property <string> alert-title;
@@ -135,6 +147,7 @@ export global Courses {
     in property <[TabItem]> views;
     in property <[TabItem]> views-narrow;
     in property <int> active-view;
+    in property <int> active-view-narrow;   // the map is not offered on a phone: its list instead
     in property <[TabItem]> highlights;
     in property <int> active-highlight;
     in property <int> active-course: -1;
@@ -146,7 +159,7 @@ export global Courses {
     in property <[ControlRow]> rows;
     in property <[CourseLine]> lines;
     in property <[string]> unused-codes;
-    in property <[string]> traces;
+    in property <[TracedCourse]> traces;
     in property <[MapMarker]> markers;
     in property <float> start-x;
     in property <float> start-y;
@@ -156,14 +169,30 @@ export global Courses {
     in property <bool> detail-open;
     in property <string> detail-code;
     in property <string> detail-subtitle;
+    in property <string> detail-code-scope;     // where a new code would apply
     in property <[DetailCourse]> detail-courses;
     in property <string> detail-entrants;
+    in property <bool> detail-unused;       // in no course: it can be deleted
 
-    // The open bubble is only a display matter: 0 none, 1 settings, 2 alert, 4 settings of the course.
+    // The open bubble is only a display matter: 0 none, 1 settings, 2 alert, 4 settings of the course,
+    // 22 the « ⋯ » menu of the course.
     in-out property <int> open-bubble;
-    in-out property <length> bubble-left;
-    in-out property <length> bubble-right;
-    in-out property <length> bubble-top;
+    // What opened the bubble, in the window: the bubble is joined to it (prototype: popPlace).
+    in-out property <length> anchor-x;
+    in-out property <length> anchor-y;
+    in-out property <length> anchor-width;
+    in-out property <length> anchor-height;
+    in-out property <bool> bubble-down: true;   // set by the bubble: under its opener, or above
+    // Where a bubble must stop, in the window (the top of the band and Direct bar); 0: the window's end.
+    in-out property <length> bubble-floor;
+
+    public function open-at(bubble: int, x: length, y: length, width: length, height: length) {
+        root.anchor-x = x;
+        root.anchor-y = y;
+        root.anchor-width = width;
+        root.anchor-height = height;
+        root.open-bubble = bubble;
+    }
 
     callback select-course(int);            // -1 all controls, -2 back to the list
     callback select-view(int);
@@ -205,11 +234,12 @@ export component CourseChip inherits Rectangle {
     background: Courses.tone-color(root.tone);
 }
 
+// A control in the table and the lines. Being chosen never changes it: the row is tinted.
 component ControlTag {
     callback clicked();
     in property <string> code;
     in property <bool> unused;
-    in property <bool> selected;
+    in property <bool> shared;      // in two courses or more: pale purple
 
     min-width: max(Theme.tag-min-width, label.preferred-width + 2 * Theme.space-small);
     height: Theme.tag-height;
@@ -217,13 +247,55 @@ component ControlTag {
         border-radius: Theme.tag-radius;
         border-width: Theme.tag-outline;
         border-color: root.unused ? Theme.tag-unused : Theme.purple;
-        background: root.selected ? Theme.tag-selected-background : Theme.tag-background;
+        background: root.shared ? Theme.tag-shared-background : Theme.tag-background;
     }
     label := Text {
         text: root.code;
         color: root.unused ? Theme.tag-unused : Theme.purple;
         font-size: Theme.text-help;
         font-weight: Theme.weight-screen-title;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A control: its code in a purple circle. Being chosen never changes the circle
+// (tous-les-postes.md § 5): `ring` draws a thin ring around it, on a map or a plan.
+component StationDot {
+    callback clicked();
+    in property <string> code;
+    in property <bool> in-course: true;
+    in property <bool> filled;      // in the reserve: pale when in the course
+    in property <bool> mandatory;
+    in property <bool> ring;
+    in property <length> size: Theme.station-size;
+
+    property <color> ink: root.mandatory ? Theme.mandatory-blue : Theme.purple;
+
+    width: root.size;
+    height: root.size;
+    if root.ring: Rectangle {
+        x: -Theme.station-ring-gap - Theme.station-ring-width;
+        y: self.x;
+        width: root.width - 2 * self.x;
+        height: self.width;
+        border-radius: self.width / 2;
+        border-width: Theme.station-ring-width;
+        border-color: root.ink;
+    }
+    Rectangle {
+        border-radius: self.width / 2;
+        border-width: root.in-course ? Theme.tag-outline : Theme.thin-outline-width;
+        border-color: root.in-course ? root.ink : Theme.tag-unused;
+        background: root.filled ? Theme.tag-selected-background : Theme.tag-background;
+        Text {
+            text: root.code;
+            color: root.in-course ? root.ink : Theme.tag-unused;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-screen-title;
+        }
     }
     TouchArea {
         mouse-cursor: pointer;
@@ -253,7 +325,7 @@ component RankDot {
         width: Theme.no-rank-dot;
         height: Theme.no-rank-dot;
         border-radius: self.width / 2;
-        background: Theme.thin-outline;
+        background: Theme.no-rank-dot-color;
     }
 }
 
@@ -287,6 +359,28 @@ component MiniMap inherits Rectangle {
     }
 }
 
+// "Tous les postes" in the list: three controls on pale purple, instead of an empty map.
+component AllControlsThumbnail inherits Rectangle {
+    width: Theme.mini-map-width;
+    height: Theme.mini-map-height;
+    border-radius: Theme.tag-radius;
+    background: Theme.tag-shared-background;
+    HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space-small;
+        for i in 3: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.mini-control;
+                height: Theme.mini-control;
+                border-radius: self.width / 2;
+                border-width: Theme.tag-outline;
+                border-color: Theme.purple;
+            }
+        }
+    }
+}
+
 component CourseListItem inherits Rectangle {
     callback clicked();
     in property <string> name;
@@ -294,6 +388,7 @@ component CourseListItem inherits Rectangle {
     in property <string> trace;
     in property <bool> active;
     in property <int> tone: -1;
+    in property <bool> all-controls;
 
     border-radius: Theme.field-radius;
     background: root.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
@@ -308,7 +403,8 @@ component CourseListItem inherits Rectangle {
         min-height: Theme.zone;
         VerticalLayout {
             alignment: center;
-            MiniMap { trace: root.trace; }
+            if root.all-controls: AllControlsThumbnail { }
+            if !root.all-controls: MiniMap { trace: root.trace; }
         }
         VerticalLayout {
             horizontal-stretch: 1;
@@ -379,7 +475,7 @@ component CourseRows {
         CourseListItem {
             name: "Tous les postes";
             summary: Courses.all-summary;
-            trace: Courses.all-trace;
+            all-controls: true;
             active: Courses.active-course < 0 && !(root.narrow && Courses.list-only);
             clicked => { Courses.select-course(-1); }
         }
@@ -461,11 +557,18 @@ export component AlertPill inherits Rectangle {
     in property <string> count: Courses.alert-count;
     in property <int> bubble: 2;
 
+    // Open: white, joined to its bubble by a square side.
+    property <bool> open: Courses.open-bubble == root.bubble;
+    property <length> radius: self.height / 2;
+
     height: Theme.zone;
-    border-radius: self.height / 2;
+    border-top-left-radius: root.open && !Courses.bubble-down ? 0px : root.radius;
+    border-top-right-radius: self.border-top-left-radius;
+    border-bottom-left-radius: root.open && Courses.bubble-down ? 0px : root.radius;
+    border-bottom-right-radius: self.border-bottom-left-radius;
     border-width: Theme.attention-outline;
     border-color: Theme.to-handle-outline;
-    background: zone.has-hover ? Theme.tab-hover : Theme.card;
+    background: !root.open && zone.has-hover ? Theme.tab-hover : Theme.card;
     accessible-role: button;
     accessible-label: root.title;
     HorizontalLayout {
@@ -492,9 +595,7 @@ export component AlertPill inherits Rectangle {
     zone := TouchArea {
         mouse-cursor: pointer;
         clicked => {
-            Courses.bubble-right = root.absolute-position.x + root.width;
-            Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
-            Courses.open-bubble = root.bubble;
+            Courses.open-at(root.bubble, root.absolute-position.x, root.absolute-position.y, root.width, root.height);
         }
     }
 }
@@ -507,17 +608,33 @@ export component SummaryZone inherits Rectangle {
     in property <[string]> chips: Courses.chips;
     in property <int> bubble: 1;
     in property <int> tone: -1;
+    in property <string> subtitle;     // compact, under the title: what the chips would say
 
-    height: Theme.zone;
-    border-radius: Theme.field-radius;
+    // Open: white, joined to its bubble by a square side.
+    property <bool> open: Courses.open-bubble == root.bubble;
+
+    // A phone has no room for the chips: they are said in one text, which wraps (prototype: mZone).
+    property <string> summary: root.chips.length == 0 ? ""
+        : root.chips.length == 1 ? root.chips[0]
+        : root.chips.length == 2 ? root.chips[0] + " · " + root.chips[1]
+        : root.chips.length == 3 ? root.chips[0] + " · " + root.chips[1] + " · " + root.chips[2]
+        : root.chips[0] + " · " + root.chips[1] + " · " + root.chips[2] + " · " + root.chips[3];
+
+    min-height: Theme.zone;
+    border-top-left-radius: root.open && !Courses.bubble-down ? 0px : Theme.field-radius;
+    border-top-right-radius: self.border-top-left-radius;
+    border-bottom-left-radius: root.open && Courses.bubble-down ? 0px : Theme.field-radius;
+    border-bottom-right-radius: self.border-bottom-left-radius;
     border-width: Theme.thin-outline-width;
     border-color: Theme.thin-outline;
-    background: zone.has-hover ? Theme.tab-hover : transparent;
+    background: root.open ? Theme.card : zone.has-hover ? Theme.tab-hover : transparent;
     accessible-role: button;
     accessible-label: "Réglages";
     HorizontalLayout {
         padding-left: Theme.space;
         padding-right: Theme.space;
+        padding-top: Theme.space-small;
+        padding-bottom: Theme.space-small;
         spacing: Theme.space;
         VerticalLayout {
             alignment: center;
@@ -532,13 +649,27 @@ export component SummaryZone inherits Rectangle {
             alignment: center;
             CourseChip { tone: root.tone; }
         }
-        Text {
+        // A settings zone has no title (prototype: zone('pg', null, …)); a course has its name.
+        if root.title != "": VerticalLayout {
             horizontal-stretch: root.compact ? 1 : 0;
-            text: root.title;
-            color: Theme.text;
-            font-size: Theme.text-block-title;
-            font-weight: Theme.weight-block-title;
+            alignment: center;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Theme.text-block-title;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+            if root.compact && root.subtitle != "": SmallText { text: root.subtitle; }
+        }
+        if root.compact && root.title == "": Text {
+            horizontal-stretch: 1;
+            text: root.summary;
+            color: Theme.text-secondary;
+            font-size: Theme.text-help;
             vertical-alignment: center;
+            wrap: word-wrap;
         }
         if !root.compact: HorizontalLayout {
             spacing: Theme.space;
@@ -553,9 +684,7 @@ export component SummaryZone inherits Rectangle {
         mouse-cursor: pointer;
         clicked => {
             root.opened();
-            Courses.bubble-left = root.absolute-position.x;
-            Courses.bubble-top = root.absolute-position.y + root.height + Theme.space-small;
-            Courses.open-bubble = root.bubble;
+            Courses.open-at(root.bubble, root.absolute-position.x, root.absolute-position.y, root.width, root.height);
         }
     }
 }
@@ -571,7 +700,7 @@ export component SortMark {
         viewbox-width: 10;
         viewbox-height: 10;
         commands: root.ascending ? "M5 1 L9 9 L1 9 Z" : "M5 9 L9 1 L1 1 Z";
-        fill: Theme.text-secondary;
+        fill: Theme.sort-mark-fill;
     }
 }
 
@@ -582,7 +711,10 @@ component TableTitle inherits Rectangle {
     in property <int> tone: -1;
     in property <bool> centered;
 
-    TouchArea {
+    // Hover: a light background (charte-ui.md, Tableaux).
+    background: zone.has-hover ? Theme.column-title-hover : transparent;
+    animate background { duration: Theme.tint-duration; }
+    zone := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
@@ -609,6 +741,7 @@ component TableTitle inherits Rectangle {
 }
 
 component FixedRow {
+    in property <image> icon;
     in property <string> label;
     in property <string> usage;
     in property <length> extra;
@@ -621,11 +754,21 @@ component FixedRow {
             HorizontalLayout {
                 padding-left: Theme.space;
                 spacing: Theme.space-small;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: root.icon;
+                        colorize: Theme.purple;
+                        width: Theme.button-icon;
+                        height: Theme.button-icon;
+                    }
+                }
                 Text {
                     text: root.label;
                     color: Theme.text;
                     font-size: Theme.text-help;
                     font-weight: Theme.weight-block-title;
+                    vertical-alignment: center;
                 }
             }
         }
@@ -703,6 +846,7 @@ component ControlsTable {
                 lines := VerticalLayout {
                     width: root.table-width;
                     FixedRow {
+                        icon: Icons.co-start;
                         label: "Départ";
                         extra: root.extra;
                         usage: Courses.all-courses-usage;
@@ -726,7 +870,7 @@ component ControlsTable {
                                         ControlTag {
                                             code: entry.code;
                                             unused: entry.unused;
-                                            selected: entry.selected;
+                                            shared: entry.shared;
                                             clicked => { Courses.select-control(entry.code); }
                                         }
                                     }
@@ -753,6 +897,7 @@ component ControlsTable {
                     }
                     RowLine { }
                     FixedRow {
+                        icon: Icons.co-finish;
                         label: "Arrivée";
                         extra: root.extra;
                         usage: Courses.all-courses-usage;
@@ -783,7 +928,7 @@ component ControlsList {
                         ControlTag {
                             code: entry.code;
                             unused: entry.unused;
-                            selected: entry.selected;
+                            shared: entry.shared;
                             clicked => { Courses.select-control(entry.code); }
                         }
                     }
@@ -812,28 +957,50 @@ component ControlsList {
 }
 
 // The stops of a course, going to the next row instead of scrolling sideways.
+// `ends`: the start before the first control and the finish after the last.
 export component StopsFlow {
     in property <[SequenceStop]> stops;
     in property <bool> ordered;
     in property <int> tone;
+    in property <bool> ends;
 
     property <length> step: Theme.tag-min-width + Theme.sequence-link;
     property <length> row-height: Theme.rank-size + Theme.space-small + Theme.tag-height + Theme.space;
     property <int> per-row: max(1, floor((root.width + Theme.sequence-link) / root.step));
+    property <int> offset: root.ends ? 1 : 0;
+    property <int> count: root.stops.length + 2 * root.offset;
 
-    height: ceil(root.stops.length / root.per-row) * root.row-height - Theme.space;
+    pure function cell-x(k: int) -> length {
+        return mod(k, root.per-row) * root.step;
+    }
+    pure function cell-y(k: int) -> length {
+        return floor(k / root.per-row) * root.row-height;
+    }
+
+    height: ceil(root.count / root.per-row) * root.row-height - Theme.space;
+    // The links first, in the colour of the course: what is drawn next sits on them.
+    for k in root.ordered ? root.count : 0: Rectangle {
+        visible: mod(k, root.per-row) > 0;
+        // From the edge of the previous rank to the edge of this one.
+        x: root.cell-x(k) - root.step + (Theme.tag-min-width + Theme.rank-size) / 2;
+        y: root.cell-y(k) + (Theme.rank-size - Theme.map-trace) / 2;
+        width: root.step - Theme.rank-size;
+        height: Theme.map-trace;
+        background: Courses.tone-color(root.tone);
+    }
+    if root.ends: Image {
+        x: root.cell-x(0) + (Theme.tag-min-width - self.width) / 2;
+        y: root.cell-y(0);
+        width: Theme.rank-size;
+        height: Theme.rank-size;
+        source: Icons.co-start;
+        colorize: Theme.purple;
+    }
     for stop[i] in root.stops: Rectangle {
-        x: mod(i, root.per-row) * root.step;
-        y: floor(i / root.per-row) * root.row-height;
+        x: root.cell-x(i + root.offset);
+        y: root.cell-y(i + root.offset);
         width: Theme.tag-min-width;
         height: root.row-height - Theme.space;
-        if root.ordered && mod(i, root.per-row) > 0: Rectangle {
-            x: -Theme.sequence-link;
-            y: (Theme.rank-size - Theme.map-trace) / 2;
-            width: Theme.sequence-link;
-            height: Theme.map-trace;
-            background: Theme.purple;
-        }
         RankDot {
             x: (parent.width - self.width) / 2;
             y: 0;
@@ -845,9 +1012,16 @@ export component StopsFlow {
             y: Theme.rank-size + Theme.space-small;
             width: parent.width;
             code: stop.code;
-            selected: stop.selected;
             clicked => { Courses.select-control(stop.code); }
         }
+    }
+    if root.ends: Image {
+        x: root.cell-x(root.count - 1) + (Theme.tag-min-width - self.width) / 2;
+        y: root.cell-y(root.count - 1);
+        width: Theme.rank-size;
+        height: Theme.rank-size;
+        source: Icons.co-finish;
+        colorize: Theme.purple;
     }
 }
 
@@ -894,6 +1068,7 @@ component ControlsLines {
                 stops: line.stops;
                 ordered: line.ordered;
                 tone: line.tone;
+                ends: true;
             }
         }
         if Courses.unused-codes.length > 0: VerticalLayout {
@@ -904,6 +1079,7 @@ component ControlsLines {
     }
 }
 
+// The number inside the circle, as on the map of a course.
 component MapMarkerView {
     in property <MapMarker> marker;
 
@@ -912,26 +1088,13 @@ component MapMarkerView {
     width: 0;
     height: 0;
     opacity: root.marker.dimmed ? Theme.dimmed-opacity : 1;
-    Rectangle {
-        x: -Theme.map-marker / 2;
-        y: -Theme.map-marker / 2;
-        width: Theme.map-marker;
-        height: Theme.map-marker;
-        border-radius: self.width / 2;
-        border-width: Theme.tag-outline;
-        border-color: root.marker.unused ? Theme.tag-unused : Theme.purple;
-        background: root.marker.selected ? Theme.tag-selected-background : transparent;
-        TouchArea {
-            mouse-cursor: pointer;
-            clicked => { Courses.select-control(root.marker.code); }
-        }
-    }
-    ControlTag {
-        x: Theme.map-marker / 2;
-        y: -Theme.map-marker;
+    StationDot {
+        x: -self.width / 2;
+        y: -self.height / 2;
+        size: Theme.map-marker;
         code: root.marker.code;
-        unused: root.marker.unused;
-        selected: root.marker.selected;
+        in-course: !root.marker.unused;
+        ring: root.marker.selected;
         clicked => { Courses.select-control(root.marker.code); }
     }
 }
@@ -977,13 +1140,13 @@ component ControlsMap inherits Rectangle {
         height: 100%;
         image-fit: fill;
     }
-    for trace in Courses.traces: Path {
+    for course in Courses.traces: Path {
         width: 100%;
         height: 100%;
         viewbox-width: 600;
         viewbox-height: 360;
-        commands: trace;
-        stroke: Theme.purple;
+        commands: course.trace;
+        stroke: Courses.tone-color(course.tone);
         stroke-width: Theme.map-trace;
     }
     MapEnds { width: 100%; height: 100%; }
@@ -1010,6 +1173,59 @@ export component Switch inherits Rectangle {
     }
 }
 
+// One end of a mini-trace: a control, or the start or finish symbol when `code` is empty.
+component TraceStep {
+    in property <string> code;
+    in property <image> end;
+    in property <bool> stations;
+
+    // A layout, so that the step takes the size of what it shows.
+    VerticalLayout {
+        alignment: center;
+        if root.code != "" && root.stations: StationDot { code: root.code; }
+        if root.code != "" && !root.stations: ControlTag { code: root.code; }
+        if root.code == "": Image {
+            width: root.stations ? Theme.station-size : Theme.tag-height;
+            height: self.width;
+            source: root.end;
+            colorize: Theme.purple;
+        }
+    }
+}
+
+component TraceLink {
+    in property <int> tone;
+    in property <length> length;
+
+    VerticalLayout {
+        alignment: center;
+        Rectangle {
+            width: root.length;
+            height: Theme.metro-trace;
+            background: Courses.tone-color(root.tone);
+        }
+    }
+}
+
+// Before, the control, after: three identical marks linked in the colour of the course.
+component MiniTrace {
+    in property <string> before;
+    in property <string> code;
+    in property <string> after;
+    in property <int> tone;
+    in property <bool> stations;    // circles, as in a course; tags otherwise
+    in property <length> link: root.stations ? Theme.metro-link : Theme.sequence-link;
+
+    HorizontalLayout {
+        alignment: start;
+        TraceStep { code: root.before; end: Icons.co-start; stations: root.stations; }
+        TraceLink { tone: root.tone; length: root.link; }
+        TraceStep { code: root.code; stations: root.stations; }
+        TraceLink { tone: root.tone; length: root.link; }
+        TraceStep { code: root.after; end: Icons.co-finish; stations: root.stations; }
+    }
+}
+
 export component ControlDetail inherits Rectangle {
     background: Theme.card;
     border-radius: Theme.card-radius;
@@ -1027,7 +1243,7 @@ export component ControlDetail inherits Rectangle {
             spacing: Theme.space;
             VerticalLayout {
                 alignment: center;
-                ControlTag { code: Courses.detail-code; selected: true; }
+                ControlTag { code: Courses.detail-code; shared: Courses.detail-courses.length > 1; }
             }
             VerticalLayout {
                 horizontal-stretch: 1;
@@ -1039,6 +1255,7 @@ export component ControlDetail inherits Rectangle {
                     font-weight: Theme.weight-screen-title;
                 }
                 SmallText { text: Courses.detail-subtitle; }
+                if Courses.detail-code-scope != "": SmallText { text: Courses.detail-code-scope; }
             }
             Rectangle {
                 width: Theme.zone;
@@ -1072,11 +1289,14 @@ export component ControlDetail inherits Rectangle {
                 wrap: word-wrap;
             }
             SmallText { text: course.rank; wrap: no-wrap; vertical-alignment: center; }
-            if course.ordered: HorizontalLayout {
-                spacing: Theme.space-small;
-                ControlTag { code: course.before; }
-                ControlTag { code: Courses.detail-code; selected: true; }
-                ControlTag { code: course.after; }
+            if course.ordered: VerticalLayout {
+                alignment: center;
+                MiniTrace {
+                    before: course.before;
+                    code: Courses.detail-code;
+                    after: course.after;
+                    tone: course.tone;
+                }
             }
         }
         Text {
@@ -1105,6 +1325,10 @@ export component ControlDetail inherits Rectangle {
             alignment: start;
             SecondaryButton { label: "Neutraliser…"; danger: true; }
         }
+        if Courses.detail-unused: HorizontalLayout {
+            alignment: start;
+            SecondaryButton { label: "Supprimer le poste"; danger: true; }
+        }
     }
 }
 
@@ -1116,7 +1340,7 @@ component TopRow {
         spacing: Theme.button-margin;
         SummaryZone { compact: root.compact; }
         Rectangle { horizontal-stretch: 1; }
-        if Courses.alert-title != "": AlertPill { }
+        if Courses.alert-title != "" && !Courses.course-selected: AlertPill { }
     }
 }
 
@@ -1132,7 +1356,7 @@ component NarrowTop {
             horizontal-stretch: 1;
             compact: true;
         }
-        if Courses.alert-title != "": AlertPill { compact: true; }
+        if Courses.alert-title != "" && !Courses.course-selected: AlertPill { compact: true; }
     }
 }
 
@@ -1204,7 +1428,7 @@ component ViewRow {
             spacing: Theme.space;
             Tabs {
                 tabs: root.narrow ? Courses.views-narrow : Courses.views;
-                active: Courses.active-view;
+                active: root.narrow ? Courses.active-view-narrow : Courses.active-view;
                 clicked(i) => { Courses.select-view(i); }
             }
             Rectangle { horizontal-stretch: 1; }
@@ -1312,38 +1536,6 @@ component AllControls {
     }
 }
 
-// A control of the course: its code in a purple circle.
-component StationDot {
-    callback clicked();
-    in property <string> code;
-    in property <bool> in-course: true;
-    in property <bool> filled;      // in the reserve: pale when in the course
-    in property <bool> mandatory;
-    in property <bool> selected;
-    in property <length> size: Theme.station-size;
-
-    property <color> ink: root.mandatory ? Theme.mandatory-blue : Theme.purple;
-
-    width: root.size;
-    height: root.size;
-    Rectangle {
-        border-radius: self.width / 2;
-        border-width: root.in-course ? Theme.tag-outline : Theme.thin-outline-width;
-        border-color: root.in-course ? root.ink : Theme.tag-unused;
-        background: root.selected ? root.ink : root.filled ? Theme.tag-selected-background : Theme.tag-background;
-        Text {
-            text: root.code;
-            color: root.selected ? Theme.tag-background : root.in-course ? root.ink : Theme.tag-unused;
-            font-size: Theme.text-help;
-            font-weight: Theme.weight-screen-title;
-        }
-    }
-    TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-}
-
 component OtherMarks {
     in property <[int]> tones;
 
@@ -1405,7 +1597,6 @@ component StopsList {
                         StationDot {
                             code: stop.code;
                             mandatory: stop.mandatory;
-                            selected: stop.selected;
                             clicked => { Courses.select-stop(i); }
                         }
                     }
@@ -1495,7 +1686,7 @@ component MetroLine {
         }
         StationDot {
             code: stop.code;
-            selected: stop.selected;
+            ring: stop.selected;
             clicked => { Courses.select-stop(i); }
         }
         if Courses.show-others: VerticalLayout {
@@ -1539,7 +1730,7 @@ component FreeStops {
             StationDot {
                 code: stop.code;
                 mandatory: stop.mandatory;
-                selected: stop.selected;
+                ring: stop.selected;
                 clicked => { Courses.select-stop(i); }
             }
         }
@@ -1593,13 +1784,13 @@ component CourseMap inherits Rectangle {
         height: 100%;
         image-fit: fill;
     }
-    for trace in Courses.other-traces: Path {
+    for course in Courses.other-traces: Path {
         width: 100%;
         height: 100%;
         viewbox-width: 600;
         viewbox-height: 360;
-        commands: trace;
-        stroke: Theme.purple;
+        commands: course.trace;
+        stroke: Courses.tone-color(course.tone);
         stroke-width: Theme.map-trace;
         opacity: Theme.others-opacity;
     }
@@ -1620,7 +1811,7 @@ component CourseMap inherits Rectangle {
         code: marker.code;
         in-course: marker.in-course;
         mandatory: marker.mandatory;
-        selected: marker.selected;
+        ring: marker.selected;
         clicked => { Courses.select-reserve(marker.code); }
     }
 }
@@ -1650,6 +1841,12 @@ component LegendMark {
         background: Courses.tone-color(0);
         opacity: Theme.others-opacity;
     }
+    // Each other course keeps its own colour on the map: the mark is a faint line, of no course.
+    if root.kind == 6: Rectangle {
+        height: Theme.map-trace;
+        background: Theme.text;
+        opacity: Theme.others-opacity;
+    }
 }
 
 component Legend {
@@ -1668,13 +1865,8 @@ component Legend {
             }
             HorizontalLayout {
                 alignment: start;
-                spacing: Theme.space;
-                VerticalLayout {
-                    alignment: center;
-                    SortMark { ascending: root.open; }
-                }
                 Text {
-                    text: "Légende";
+                    text: root.open ? "Masquer la légende" : "Légende";
                     color: Theme.text-secondary;
                     font-size: Theme.text-help;
                     font-weight: Theme.weight-block-title;
@@ -1726,7 +1918,7 @@ component Reserve {
                 code: item.code;
                 in-course: item.in-course;
                 filled: item.in-course;
-                selected: item.selected;
+                ring: item.selected;
                 clicked => { Courses.select-reserve(item.code); }
             }
         }
@@ -1793,6 +1985,27 @@ component OthersSwitch {
     }
 }
 
+// The « ⋯ » of the course (prototype: cdots): a small menu, joined to it. No effect yet.
+component CourseMenuButton {
+    property <bool> open: Courses.open-bubble == 22;
+
+    min-width: Theme.small-button-width;
+    horizontal-stretch: 0;
+    accessible-role: button;
+    accessible-label: "Plus d'actions";
+    MoreButton {
+        width: 100%;
+        height: 100%;
+        open: root.open;
+        down: Courses.bubble-down;
+        clicked => {
+            Courses.open-at(22, self.absolute-position.x + (self.width - Theme.small-button-width) / 2,
+                self.absolute-position.y + (self.height - Theme.small-button-height) / 2,
+                Theme.small-button-width, Theme.small-button-height);
+        }
+    }
+}
+
 component OneCourse {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -1836,6 +2049,7 @@ component OneCourse {
                             horizontal-stretch: root.narrow ? 1 : 0;
                         }
                         if !root.narrow: Rectangle { horizontal-stretch: 1; }
+                        CourseMenuButton { }
                     }
                     HorizontalLayout {
                         spacing: Theme.space;
@@ -1886,7 +2100,7 @@ export component StopDetail inherits Rectangle {
             spacing: Theme.space;
             VerticalLayout {
                 alignment: center;
-                StationDot { code: Courses.stop-code; selected: true; }
+                StationDot { code: Courses.stop-code; }
             }
             VerticalLayout {
                 horizontal-stretch: 1;
@@ -1916,27 +2130,12 @@ export component StopDetail inherits Rectangle {
                 }
             }
         }
-        if Courses.course-ordered: HorizontalLayout {
-            alignment: start;
-            StationDot { code: Courses.stop-before; }
-            VerticalLayout {
-                alignment: center;
-                Rectangle {
-                    width: Theme.metro-link;
-                    height: Theme.metro-trace;
-                    background: Courses.tone-color(Courses.active-course);
-                }
-            }
-            StationDot { code: Courses.stop-code; selected: true; }
-            VerticalLayout {
-                alignment: center;
-                Rectangle {
-                    width: Theme.metro-link;
-                    height: Theme.metro-trace;
-                    background: Courses.tone-color(Courses.active-course);
-                }
-            }
-            StationDot { code: Courses.stop-after; }
+        if Courses.course-ordered: MiniTrace {
+            before: Courses.stop-before;
+            code: Courses.stop-code;
+            after: Courses.stop-after;
+            tone: Courses.active-course;
+            stations: true;
         }
         if Courses.course-ordered: HorizontalLayout {
             spacing: Theme.space;
@@ -1977,6 +2176,41 @@ export component StopDetail inherits Rectangle {
                 horizontal-stretch: 1;
                 text: "Obligatoire (manquant = PM)";
                 vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            spacing: Theme.space-small;
+            SmallText { text: "Boîtier"; }
+            HorizontalLayout {
+                alignment: start;
+                StatusBadge { status: Home.status-of(Courses.stop-station); }
+            }
+        }
+        VerticalLayout {
+            spacing: Theme.space-small;
+            SmallText { text: "Utilisé aussi par"; }
+            if Courses.stop-others.length == 0: Text {
+                text: "aucun autre circuit";
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+            for course in Courses.stop-others: HorizontalLayout {
+                spacing: Theme.space;
+                VerticalLayout {
+                    alignment: center;
+                    CourseChip { tone: course.tone; }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: course.name;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-block-title;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                SmallText { text: course.rank; wrap: no-wrap; vertical-alignment: center; }
             }
         }
         HorizontalLayout {
@@ -2062,13 +2296,19 @@ export component CoursesPage {
 // Stays at the bottom of the window, whatever the page scrolls to.
 export component PageBand {
     callback publish();
+    callback first-clicked();
     in property <string> summary;
     in property <string> first-action;
+    in property <bool> first-primary;   // the screen's one orange button
+    in property <bool> first-alone;     // on a phone, on its own row: the band keeps its height
     in property <bool> can-import;
     in property <string> import-label: "Importer";
     in property <bool> can-print: true;
     in property <bool> has-actions: true;
     in property <bool> can-publish;
+    in property <string> publish-label: "Publier";
+    in property <bool> publish-enabled: true;
+    in property <bool> phone-publish-only;   // on a phone, Publier alone (prototype: MBAND)
     in property <LayoutMode> layout-mode;
     in property <length> left-margin;
     in property <length> right-margin;
@@ -2083,29 +2323,45 @@ export component PageBand {
         RowLine { }
         if root.narrow: VerticalLayout {
             padding-top: Theme.space;
-            HorizontalLayout {
+            if root.first-action != "" && !root.first-alone: HorizontalLayout {
                 spacing: Theme.space;
                 BandSummary { horizontal-stretch: 1; text: root.summary; }
-                if root.first-action != "": SecondaryButton { label: root.first-action; }
+                SecondaryButton { label: root.first-action; clicked => { root.first-clicked(); } }
+            }
+            // Alone in its row, a long summary is measured at its real width: a layout would
+            // count it on one line and cut its end (LECONS-SLINT.md, 3).
+            if root.first-action == "" || root.first-alone: Rectangle {
+                height: alone-summary.preferred-height;
+                alone-summary := BandSummary {
+                    width: parent.width;
+                    text: root.summary;
+                }
+            }
+            // Too wide beside the figures, and beside the other actions on a small phone: alone.
+            if root.first-action != "" && root.first-alone: HorizontalLayout {
+                alignment: end;
+                if !root.first-primary: SecondaryButton { label: root.first-action; clicked => { root.first-clicked(); } }
+                if root.first-primary: PrimaryButton { label: root.first-action; in-row: true; clicked => { root.first-clicked(); } }
             }
             HorizontalLayout {
                 spacing: Theme.space;
                 alignment: end;
                 if root.can-import: SecondaryButton { label: root.import-label; }
-                if root.has-actions && root.can-print: SecondaryButton { label: "Imprimer"; }
-                if root.has-actions: SecondaryButton { label: "Exporter"; }
-                if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
+                if root.has-actions && root.can-print && !root.phone-publish-only: SecondaryButton { label: "Imprimer"; }
+                if root.has-actions && !root.phone-publish-only: SecondaryButton { label: "Exporter"; }
+                if root.can-publish: SecondaryButton { label: root.publish-label; enabled: root.publish-enabled; clicked => { root.publish(); } }
             }
         }
         if !root.narrow: HorizontalLayout {
             padding-top: Theme.space-small;
             spacing: Theme.space;
             BandSummary { horizontal-stretch: 1; text: root.summary; }
-            if root.first-action != "": SecondaryButton { label: root.first-action; }
+            if root.first-action != "" && !root.first-primary: SecondaryButton { label: root.first-action; clicked => { root.first-clicked(); } }
+            if root.first-action != "" && root.first-primary: PrimaryButton { label: root.first-action; clicked => { root.first-clicked(); } }
             if root.can-import: SecondaryButton { label: root.import-label; }
             if root.has-actions && root.can-print: SecondaryButton { label: "Imprimer"; }
             if root.has-actions: SecondaryButton { label: "Exporter"; }
-            if root.can-publish: SecondaryButton { label: "Publier"; clicked => { root.publish(); } }
+            if root.can-publish: SecondaryButton { label: root.publish-label; enabled: root.publish-enabled; clicked => { root.publish(); } }
         }
     }
 }
@@ -2184,8 +2440,8 @@ component AllCoursesBubble {
         HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: "Ordre des postes"; }
-            Tabs {
-                tabs: [{ label: "Imposé" }, { label: "Libre" }];
+            ChoiceSegments {
+                choices: ["Imposé", "Libre"];
                 active: 0;
             }
         }
@@ -2197,6 +2453,26 @@ component AllCoursesBubble {
     }
 }
 
+// A course colour to choose (no effect yet): the current one carries a check, not only its colour.
+component ColourSwatch inherits Rectangle {
+    in property <int> tone;
+    in property <bool> current;
+
+    width: Theme.swatch-size;
+    height: Theme.swatch-size;
+    border-radius: self.height / 2;
+    background: Courses.tone-color(root.tone);
+    border-width: root.current ? Theme.tag-outline : 0px;
+    border-color: Theme.text;
+    if root.current: Image {
+        source: Icons.check;
+        colorize: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
+        width: Theme.swatch-icon;
+        height: Theme.swatch-icon;
+    }
+}
+
+// The settings of one course (prototype: tabCircuits, S.rg).
 component CourseBubble {
     VerticalLayout {
         padding: Theme.space-medium;
@@ -2204,24 +2480,30 @@ component CourseBubble {
         HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: "Couleur"; }
-            VerticalLayout {
-                alignment: center;
-                CourseChip { tone: Courses.active-course; }
+            HorizontalLayout {
+                spacing: Theme.space-small;
+                for tone in Courses.palette-size: VerticalLayout {
+                    alignment: center;
+                    ColourSwatch {
+                        tone: tone;
+                        current: tone == min(Courses.active-course, Courses.palette-size - 1);
+                    }
+                }
             }
         }
         HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: "Type"; }
-            Tabs {
-                tabs: [{ label: "Classique" }, { label: "Score" }];
+            ChoiceSegments {
+                choices: ["Classique", "Score"];
                 active: Courses.course-scored ? 1 : 0;
             }
         }
         HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: "Ordre"; }
-            Tabs {
-                tabs: [{ label: "Imposé" }, { label: "Libre" }];
+            ChoiceSegments {
+                choices: ["Comme tous : imposé", "Libre"];
                 active: Courses.course-ordered ? 0 : 1;
             }
         }
@@ -2233,7 +2515,34 @@ component CourseBubble {
         HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: "Carte"; }
-            SecondaryButton { label: "Changer"; }
+            BubbleLabel { text: Courses.course-map; }
+            SecondaryButton { label: "Changer ▾"; }
+        }
+    }
+}
+
+// One choice of a small menu. `danger`: in red, with its word saying what it does.
+export component MenuItem inherits Rectangle {
+    in property <string> text;
+    in property <bool> danger;
+
+    min-height: Theme.zone;
+    background: zone.has-hover ? Theme.column-title-hover : transparent;
+    accessible-role: button;
+    accessible-label: root.text;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Courses.open-bubble = 0; }
+    }
+    HorizontalLayout {
+        padding-left: Theme.space-medium;
+        padding-right: Theme.space-medium;
+        Text {
+            text: root.text;
+            color: root.danger ? Theme.problem.badge-text : Theme.text;
+            font-size: Theme.text-help;
+            vertical-alignment: center;
+            wrap: word-wrap;
         }
     }
 }
@@ -2270,31 +2579,70 @@ component AlertBubble {
     }
 }
 
-// A bubble opens under what was clicked, and closes when clicking anywhere else.
+// A bubble (prototype: popPlace, « Bulles, variante B »): no arrow, the button that opened it
+// turns white and is joined to it, the touching corner square. It opens under the button, or
+// above when there is more room there, aligned on the button's side nearest to the window's
+// edge, and its content scrolls when it is too tall for the room.
 export component BubbleFrame {
     in property <length> margin;
+    in property <length> wanted-width: Theme.bubble-width;
 
-    property <length> bubble-width: min(Theme.bubble-width, root.width - 2 * root.margin);
-    property <length> wanted-x: Courses.open-bubble == 2 || Courses.open-bubble == 6 || Courses.open-bubble == 8 || Courses.open-bubble == 11 || Courses.open-bubble == 13 || Courses.open-bubble == 16 || Courses.open-bubble == 18 || Courses.open-bubble == 20 ? Courses.bubble-right - root.bubble-width : Courses.bubble-left;
+    property <length> bubble-width: min(max(root.wanted-width, Courses.anchor-width + Theme.bubble-extra), root.width - 2 * root.margin);
+    property <length> wanted-height: content.preferred-height;
+    property <length> floor: Courses.bubble-floor > 0 ? min(root.height - root.margin, Courses.bubble-floor - Theme.bubble-gap)
+        : root.height - root.margin;
+    property <length> below: root.floor - Courses.anchor-y - Courses.anchor-height - Theme.bubble-gap;
+    property <length> above: Courses.anchor-y - Theme.bubble-gap - root.margin;
+    property <bool> down: root.below >= root.wanted-height || root.below >= root.above;
+    property <length> bubble-height: min(root.wanted-height, root.down ? root.below : root.above);
+    property <bool> from-right: Courses.anchor-x + Courses.anchor-width / 2 > root.width / 2;
+    property <length> wanted-x: root.from-right ? Courses.anchor-x + Courses.anchor-width - root.bubble-width : Courses.anchor-x;
+    property <length> bubble-x: clamp(root.wanted-x, root.margin, root.width - root.bubble-width - root.margin);
+    property <length> bubble-y: root.down ? Courses.anchor-y + Courses.anchor-height + Theme.bubble-gap
+        : Courses.anchor-y - Theme.bubble-gap - root.bubble-height;
+    // The corner touching the button is square, when the bubble is aligned on it.
+    property <bool> aligned: root.bubble-x == root.wanted-x;
+
+    init => { Courses.bubble-down = root.down; }
+    changed down => { Courses.bubble-down = root.down; }
 
     TouchArea {
         clicked => { Courses.open-bubble = 0; }
     }
-    Rectangle {
-        x: clamp(root.wanted-x, root.margin, root.width - root.bubble-width - root.margin);
-        y: Courses.bubble-top;
+    bubble := Rectangle {
+        x: root.bubble-x;
+        y: root.bubble-y;
         width: root.bubble-width;
-        height: content.preferred-height;
+        height: root.bubble-height;
         background: Theme.card;
-        border-radius: Theme.card-radius;
+        border-top-left-radius: root.aligned && root.down && !root.from-right ? 0px : Theme.card-radius;
+        border-top-right-radius: root.aligned && root.down && root.from-right ? 0px : Theme.card-radius;
+        border-bottom-left-radius: root.aligned && !root.down && !root.from-right ? 0px : Theme.card-radius;
+        border-bottom-right-radius: root.aligned && !root.down && root.from-right ? 0px : Theme.card-radius;
         border-width: Theme.thin-outline-width;
         border-color: Theme.thin-outline;
         drop-shadow-blur: Theme.demo-shadow;
         drop-shadow-color: Theme.bubble-shadow;
+        clip: true;
         TouchArea { }
-        content := VerticalLayout {
-            @children
+        Flickable {
+            width: parent.width;
+            height: parent.height;
+            content-height: root.wanted-height;
+            content := VerticalLayout {
+                width: parent.width;
+                @children
+            }
         }
+    }
+    // The joint: as wide as the button, white, over the gap and the two outlines it crosses.
+    Rectangle {
+        x: Courses.anchor-x + Theme.thin-outline-width;
+        y: root.down ? Courses.anchor-y + Courses.anchor-height - Theme.bubble-joint
+            : root.bubble-y + root.bubble-height - Theme.thin-outline-width;
+        width: Courses.anchor-width - 2 * Theme.thin-outline-width;
+        height: Theme.bubble-gap + Theme.bubble-joint + Theme.thin-outline-width;
+        background: Theme.card;
     }
 }
 
@@ -2305,9 +2653,18 @@ export component BubbleOverlay {
         width: 100%;
         height: 100%;
         margin: root.margin;
+        wanted-width: Courses.open-bubble == 22 ? Theme.menu-bubble-width : Theme.bubble-width;
         if Courses.open-bubble == 1 && !Courses.course-selected: SettingsBubble { }
         if Courses.open-bubble == 1 && Courses.course-selected: AllCoursesBubble { }
         if Courses.open-bubble == 4: CourseBubble { }
         if Courses.open-bubble == 2: AlertBubble { }
+        if Courses.open-bubble == 22: VerticalLayout {
+            padding-top: Theme.space-small;
+            padding-bottom: Theme.space-small;
+            MenuItem { text: "Renommer"; }
+            MenuItem { text: "Dupliquer"; }
+            MenuItem { text: "Imprimer la carte"; }
+            MenuItem { text: "Supprimer le circuit"; danger: true; }
+        }
     }
 }

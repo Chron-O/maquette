@@ -5,12 +5,13 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { Tabs, TabItem } from "../components/tabs.slint";
-import { StatusBadge } from "../components/status.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
+import { MoreButton } from "../components/buttons.slint";
+import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
-import { BubbleFrame, BubbleLabel, CourseChip, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
+import { BubbleFrame, BubbleLabel, CourseChip, Courses, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
 import { Cell, NameCell } from "participants.slint";
-import { ChipFlow, Head, Live, LiveDetail, LiveFilter, RowCell, TimeText } from "live.slint";
+import { ChipFlow, Head, Live, LiveDetail, LiveFilter, MenuHead, RowCell, TimeText } from "live.slint";
 
 export struct ResultRanking {
     index: int,
@@ -22,6 +23,7 @@ export struct ResultRanking {
 export struct ResultRow {
     runner: int,
     place: string,
+    place-note: string,   // the place as said under the time on a phone (« 3e »)
     family: string,
     first: string,
     club: string,
@@ -41,7 +43,7 @@ export global Results {
     in property <[LiveFilter]> category-chips;
     in property <int> active-category;
     in property <[string]> chips;
-    in property <[TabItem]> modes;
+    in property <[string]> modes;
     in property <int> active-mode;
     in property <bool> by-course;
     in property <string> title;
@@ -52,6 +54,7 @@ export global Results {
     in property <string> summary-short;
     in property <string> search-text;
     in property <string> ranking-search-text;
+    in-out property <int> menu-row: -1;   // the row whose « ⋯ » menu is open
 
     callback select-mode(int);
     callback select-ranking(int);
@@ -144,13 +147,38 @@ component RankingColumn inherits Rectangle {
     }
 }
 
-// The titles stay at the top: only the rows scroll.
+// The « ⋯ » of a row: a small menu, joined to it (prototype: rDots). No effect yet.
+component ResultMenuButton {
+    in property <int> runner;
+
+    property <bool> open: Courses.open-bubble == 24 && Results.menu-row == root.runner;
+
+    min-width: Theme.small-button-width;
+    accessible-role: button;
+    accessible-label: "Plus d'actions";
+    MoreButton {
+        width: 100%;
+        height: 100%;
+        open: root.open;
+        down: Courses.bubble-down;
+        clicked => {
+            Results.menu-row = root.runner;
+            // The menu is joined to the drawn button, not to its touch zone.
+            Courses.open-at(24, self.absolute-position.x + (self.width - Theme.small-button-width) / 2,
+                self.absolute-position.y + (self.height - Theme.small-button-height) / 2,
+                Theme.small-button-width, Theme.small-button-height);
+        }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. The columns of the prototype (tabResultats),
+// plain titles: Cat. only in a course ranking; without the room, Club and Écart go under.
 component ResultsTable {
     in property <length> available-width;
 
     property <bool> wide: root.available-width >= Theme.result-full-width;
     property <bool> has-category: root.wide && Results.by-course;
-    property <length> fixed: Theme.result-place-width + Theme.result-state-width + Theme.result-time-width
+    property <length> fixed: Theme.result-place-width + Theme.result-state-width + Theme.result-time-width + Theme.result-action-width
         + (root.wide ? Theme.result-club-width + Theme.result-gap-width : 0px)
         + (root.has-category ? Theme.result-category-width : 0px);
     property <length> name-width: max(Theme.live-name-width, root.available-width - root.fixed);
@@ -166,6 +194,7 @@ component ResultsTable {
             RowCell { width: Theme.result-time-width; Head { text: "Temps"; } }
             if root.wide: RowCell { width: Theme.result-gap-width; Head { text: "Écart"; } }
             RowCell { width: Theme.result-state-width; Head { text: "État"; } }
+            MenuHead { width: Theme.result-action-width; text: "Action"; right: true; }
         }
         RowLine { vertical-stretch: 0; }
         if Results.empty != "": Text {
@@ -202,9 +231,9 @@ component ResultsTable {
                                 width: root.name-width;
                                 alignment: center;
                                 NameCell { family: row.family; first: row.first; }
-                                RowCell { SmallText { text: Results.by-course ? row.club + " · " + row.category : row.club; wrap: no-wrap; } }
+                                RowCell { SmallText { text: Results.by-course ? row.club + " · " + row.category : row.club; } }
                             }
-                            if root.wide: RowCell { width: Theme.result-club-width; Cell { text: row.club; } }
+                            if root.wide: RowCell { width: Theme.result-club-width; Cell { text: row.club; wrap: word-wrap; } }
                             if root.has-category: RowCell { width: Theme.result-category-width; Cell { text: row.category; } }
                             if root.wide: RowCell {
                                 width: Theme.result-time-width;
@@ -224,6 +253,12 @@ component ResultsTable {
                                     StatusBadge { status: Home.status-of(row.badge); }
                                 }
                             }
+                            HorizontalLayout {
+                                width: Theme.result-action-width;
+                                alignment: end;
+                                padding-right: Theme.space;
+                                ResultMenuButton { runner: row.runner; }
+                            }
                         }
                     }
                 }
@@ -232,7 +267,7 @@ component ResultsTable {
     }
 }
 
-// On a phone: place › who › time.
+// On a phone, the charte's list row (Listes, 03/11): status › who › time, its place under it.
 component ResultsList {
     VerticalLayout {
         if Results.empty != "": Text {
@@ -254,11 +289,9 @@ component ResultsList {
                 HorizontalLayout {
                     padding: Theme.space;
                     spacing: Theme.space;
-                    Cell {
-                        width: Theme.result-narrow-place-width;
-                        text: row.place;
-                        font-size: Theme.text-body;
-                        font-weight: Theme.weight-screen-title;
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBlock { status: Home.status-of(row.badge); }
                     }
                     VerticalLayout {
                         horizontal-stretch: 1;
@@ -266,8 +299,8 @@ component ResultsList {
                         Text {
                             text: row.family + " " + row.first;
                             color: Theme.text;
-                            font-size: Theme.text-help;
-                            font-weight: Theme.weight-screen-title;
+                            font-size: Theme.text-block-title;
+                            font-weight: Theme.weight-block-title;
                             wrap: word-wrap;
                         }
                         SmallText { text: Results.by-course ? row.club + " · " + row.category : row.club; }
@@ -276,15 +309,17 @@ component ResultsList {
                         alignment: center;
                         HorizontalLayout {
                             alignment: end;
-                            TimeText { time: row.time; crossed: row.crossed; weight: Theme.weight-screen-title; }
+                            TimeText {
+                                time: row.time;
+                                crossed: row.crossed;
+                                size: Theme.text-screen-title;
+                                weight: Theme.weight-screen-title;
+                                strike: Theme.time-strike-large;
+                            }
                         }
-                        if row.gap != "": HorizontalLayout {
+                        if row.place-note != "": HorizontalLayout {
                             alignment: end;
-                            SmallText { text: row.gap; wrap: no-wrap; }
-                        }
-                        if row.crossed: HorizontalLayout {
-                            alignment: end;
-                            StatusBadge { status: Home.status-of(row.badge); }
+                            SmallText { text: row.place-note; wrap: no-wrap; }
                         }
                     }
                 }
@@ -391,7 +426,7 @@ export component ResultsPage {
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: Results.chips;
                 bubble: 14;
                 compact: true;
@@ -410,7 +445,7 @@ export component ResultsPage {
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
             vertical-stretch: 0;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: Results.chips;
                 bubble: 14;
                 compact: root.layout-mode == LayoutMode.medium;
@@ -447,14 +482,25 @@ export component ResultsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        VerticalLayout {
+        wanted-width: Courses.open-bubble == 24 ? Theme.menu-bubble-width : Theme.bubble-width;
+        // The « ⋯ » of a row (prototype: rDots): no effect yet.
+        if Courses.open-bubble == 24: VerticalLayout {
+            padding-top: Theme.space-small;
+            padding-bottom: Theme.space-small;
+            MenuItem { text: "Voir la fiche du coureur"; }
+            MenuItem { text: "Arrivée manuelle…"; }
+            MenuItem { text: "Changer le statut…"; }
+            MenuItem { text: "Historique"; }
+        }
+        if Courses.open-bubble == 14: VerticalLayout {
             padding: Theme.space-medium;
             spacing: Theme.button-margin;
             HorizontalLayout {
                 spacing: Theme.space;
                 BubbleLabel { horizontal-stretch: 1; text: "Classer"; }
-                Tabs {
-                    tabs: Results.modes;
+                // A setting, not a view (departs-tirage-v2.md § A).
+                ChoiceSegments {
+                    choices: Results.modes;
                     active: Results.active-mode;
                     clicked(i) => { Results.select-mode(i); }
                 }

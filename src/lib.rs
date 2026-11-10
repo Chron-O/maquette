@@ -12,6 +12,7 @@ mod home;
 mod live;
 mod navigation;
 mod participants;
+mod readers;
 mod results;
 mod runner_base;
 mod starts;
@@ -26,12 +27,6 @@ use std::rc::Rc;
 use std::time::Duration;
 use test_data::{CURRENT_EVENT, Generated};
 
-const SECONDS_BETWEEN_READINGS: u64 = 3;
-const NARROW_WIDTH: f32 = 600.0;
-// Just under the alert of the Direct, opened from the home page before it is laid out.
-const BUBBLE_TOP: f32 = 164.0;
-const BUBBLE_TOP_TOUCH: f32 = 200.0;
-const BUBBLE_TOP_NARROW: f32 = 237.0;
 
 fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(rows))
@@ -61,8 +56,9 @@ impl AppState {
     fn show(&self, window: &App) {
         self.navigator.show(window, self.data.as_ref());
         home::show(window, self.data.as_ref());
+        readers::show(window, self.data.as_ref());
         let event = self.navigator.event().and_then(|e| self.data.as_ref().map(|d| &d.events[e]));
-        self.courses.show(window, event);
+        self.courses.show(window, event, &self.stations);
         let cards_free = self.data.as_ref().map_or(0, Generated::cards_free);
         self.participants.show(window, event, cards_free);
         self.starts.show(window, event);
@@ -123,7 +119,6 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
         icons.get_users(),
         icons.get_co_start(),
         icons.get_co_station(),
-        icons.get_radio(),
         icons.get_trophy(),
     ];
     navigation.set_tabs(model(
@@ -148,7 +143,7 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
             }
         }
     }
-    // Opening an event starts its Circuits tab from the beginning.
+    // Opening an event starts it from the beginning, on its Participants.
     let open_event = {
         let (weak, state) = (window.as_weak(), state.clone());
         move |i: i32| {
@@ -176,34 +171,30 @@ fn connect_navigation(window: &App, state: &Rc<RefCell<AppState>>) {
     navigation.on_select_tab(move |tab| {
         let mut state = state_for_tab.borrow_mut();
         state.navigator.select_tab(tab as usize);
-        state.live.close_detail();
+        state.live.leave();
         if let Some(window) = weak.upgrade() {
             state.show(&window);
         }
     });
-    // From the home page, « à traiter » opens the Direct with its alert open.
+    // The Direct and the Résultats share their detail: it closes with the drawer too.
+    let (weak, state_for_live) = (window.as_weak(), state.clone());
+    navigation.on_toggle_live(move || {
+        let mut state = state_for_live.borrow_mut();
+        state.navigator.toggle_live();
+        state.live.leave();
+        if let Some(window) = weak.upgrade() {
+            state.show(&window);
+        }
+    });
+    // From the home page, « à traiter » opens the Direct on what is to handle (prototype: openEv(2)).
     let (weak, state_for_direct) = (window.as_weak(), state.clone());
     navigation.on_open_direct(move || {
-        {
-            let mut state = state_for_direct.borrow_mut();
-            state.navigator.open_direct(CURRENT_EVENT);
-            state.reset_event_states();
-            if let Some(window) = weak.upgrade() {
-                state.show(&window);
-            }
-        }
+        let mut state = state_for_direct.borrow_mut();
+        state.navigator.open_direct(CURRENT_EVENT);
+        state.reset_event_states();
+        state.live.show_to_handle();
         if let Some(window) = weak.upgrade() {
-            let courses = window.global::<Courses>();
-            let width = window.window().size().to_logical(window.window().scale_factor()).width;
-            courses.set_bubble_right(width);
-            courses.set_bubble_top(if width < NARROW_WIDTH {
-                BUBBLE_TOP_NARROW
-            } else if window.global::<Theme>().get_touch() {
-                BUBBLE_TOP_TOUCH
-            } else {
-                BUBBLE_TOP
-            });
-            courses.set_open_bubble(live::LiveState::ALERT_BUBBLE);
+            state.show(&window);
         }
     });
     let go_back = on_click(window, state, |n, _| n.go_home());
@@ -433,6 +424,10 @@ fn connect_live(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_search(on_click(window, state, |l, text: slint::SharedString| l.set_search(&text)));
     let close = on_click(window, state, |l, _: ()| l.close_detail());
     page.on_close_detail(move || close(()));
+    let to_handle = on_click(window, state, |l, _: ()| l.toggle_to_handle());
+    page.on_toggle_to_handle(move || to_handle(()));
+    let only_to_handle = on_click(window, state, |l, _: ()| l.show_to_handle());
+    page.on_show_to_handle(move || only_to_handle(()));
     page.on_select_runner(on_data_click(window, state, |l, event, _, i: i32| l.select_runner(event, i as usize)));
     page.on_give_to(on_data_click(window, state, |l, event, clock, i: i32| l.give_to(event, i as usize, clock)));
     let keep = on_data_click(window, state, |l, event, clock, _: ()| l.keep_first(event, clock));
@@ -515,6 +510,9 @@ fn connect_cards(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_act(on_data_click(window, state, |c, data, id: i32| c.act(data, id)));
     let confirm = on_data_click(window, state, |c, data, _: ()| c.confirm(data));
     page.on_confirm(move || confirm(()));
+    // The Démo panel puts a card of the stock on the reader.
+    let read = on_data_click(window, state, |c, data, _: ()| c.read(data));
+    window.global::<Demo>().on_read_card(move || read(()));
 }
 
 fn connect_club_stations(window: &App, state: &Rc<RefCell<AppState>>) {
@@ -607,6 +605,28 @@ fn connect_runner_base(window: &App, state: &Rc<RefCell<AppState>>) {
     });
 }
 
+fn connect_readers(window: &App, state: &Rc<RefCell<AppState>>) {
+    // Changes a reader of the test data, then refreshes the screen.
+    fn on_reader(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: impl Fn(&mut Generated, usize) + 'static,
+    ) -> impl Fn(i32) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |reader| {
+            if let Some(data) = state.borrow_mut().data.as_mut() {
+                action(data, reader as usize);
+            }
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    window.global::<Readers>().on_toggle_pin(on_reader(window, state, Generated::toggle_pin));
+    let unplug = on_reader(window, state, Generated::toggle_unplugged);
+    window.global::<Demo>().on_toggle_unplugged(move || unplug(0));
+}
+
 fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>>, Rc<Timer>) {
     let choice = Rc::new(Cell::new(Device::Auto));
     let demo = window.global::<Demo>();
@@ -634,10 +654,11 @@ fn connect_demo(window: &App, state: &Rc<RefCell<AppState>>) -> (Rc<Cell<Device>
         if i == 1 {
             state_for_switch.borrow_mut().start_test_data(random_seed());
             let (weak, state) = (window.as_weak(), state_for_switch.clone());
-            readings_for_switch.start(TimerMode::Repeated, Duration::from_secs(SECONDS_BETWEEN_READINGS), move || {
+            // The race clock goes on second by second; cards come now and then.
+            readings_for_switch.start(TimerMode::Repeated, Duration::from_secs(1), move || {
                 let mut state = state.borrow_mut();
                 if let Some(data) = state.data.as_mut() {
-                    data.read_a_card();
+                    data.tick();
                 }
                 if let Some(window) = weak.upgrade() {
                     state.show(&window);
@@ -664,6 +685,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     connect_cards(&window, &state);
     connect_club_stations(&window, &state);
     connect_runner_base(&window, &state);
+    connect_readers(&window, &state);
     let (choice, _readings) = connect_demo(&window, &state);
     state.borrow().show(&window);
 

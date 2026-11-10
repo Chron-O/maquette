@@ -10,7 +10,8 @@ import { Tabs, TabItem } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
-import { Cell, ReaderTile, Title } from "participants.slint";
+import { Cell, Title } from "participants.slint";
+import { ReaderTile, Readers } from "../components/reader-tile.slint";
 
 export struct CourseMark {
     letter: string,
@@ -37,6 +38,13 @@ export struct StationProblem {
     label: string,
 }
 
+// A station worth reading to settle a doubt, ticked once read.
+export struct UsefulStation {
+    label: string,
+    detail: string,
+    done: bool,
+}
+
 export global Stations {
     in property <[StationRow]> rows;
     in property <[string]> chips;
@@ -52,7 +60,6 @@ export global Stations {
     in property <string> search-text;
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
-    in property <string> station;
 
     in property <string> gauge-title;
     in property <string> gauge-count;
@@ -60,21 +67,32 @@ export global Stations {
     in property <float> gauge-share;
     in property <string> gauge-detail;
 
+    in property <[UsefulStation]> useful;
+    in property <string> settings-spares;
+    in property <[string]> settings-parks;
+    in property <[string]> settings-specials;
+    in property <bool> settings-check-clock;
+    in property <bool> settings-check-battery;
+
+    // What was read, in its own card above the table (prototype: bxBig).
     in property <bool> reading;
-    in property <string> reading-label;
     in property <string> reading-code;
+    in property <string> reading-label;      // over the code: « Code lu », « Rentré »
     in property <string> reading-question;
     in property <string> reading-detail;
+    in property <string> reading-detail-short;   // on a phone
     in property <string> reading-button;
+    in property <string> reading-button-short;
     in property <bool> reading-can-refuse;
 
     in property <bool> detail-open;
+    in property <int> detail-index;
     in property <string> detail-name;
     in property <string> detail-subtitle;
     in property <bool> detail-has-station;
     in property <string> detail-serial;
     in property <string> detail-park;
-    in property <string> detail-battery;
+    in property <bool> detail-low-battery;
     in property <string> detail-gap;
     in property <string> detail-punches;
 
@@ -228,10 +246,17 @@ component StationsTable {
                                 HorizontalLayout {
                                     width: root.state-width;
                                     padding-left: Theme.space;
+                                    padding-top: Theme.space-small;
+                                    padding-bottom: Theme.space-small;
                                     alignment: start;
                                     VerticalLayout {
                                         alignment: center;
+                                        spacing: Theme.space-small;
                                         StatusBadge { status: Home.status-of(row.badge); }
+                                        // Without the Pile column, the weak battery goes under the state.
+                                        if !root.wide && row.low-battery: StatusBadge {
+                                            status: Home.status-of({ word: row.battery, kind: to-check });
+                                        }
                                     }
                                 }
                                 if root.wide: BatteryCell { width: Theme.station-battery-width; entry: row; }
@@ -282,7 +307,9 @@ component StationsList {
                         }
                         HorizontalLayout {
                             alignment: start;
+                            spacing: Theme.space-small;
                             StatusBadge { status: Home.status-of(row.badge); }
+                            if row.low-battery: StatusBadge { status: Home.status-of({ word: row.battery, kind: to-check }); }
                         }
                     }
                     VerticalLayout {
@@ -299,8 +326,10 @@ component StationsList {
     }
 }
 
-// What the reader just read, in big: answered before the next station.
+// What the reader just read, in big, outlined in green: answered before the next station
+// (prototype: bxBig, and mBoitiers on a phone).
 component ReadingCard inherits Rectangle {
+    in property <bool> stacked;   // the buttons under the question, when the row is too narrow
     in property <bool> narrow;
 
     background: Theme.card;
@@ -314,7 +343,7 @@ component ReadingCard inherits Rectangle {
             spacing: Theme.space-medium;
             VerticalLayout {
                 alignment: center;
-                SmallText {
+                if !root.narrow: SmallText {
                     text: Stations.reading-label;
                     wrap: no-wrap;
                     horizontal-alignment: center;
@@ -338,26 +367,26 @@ component ReadingCard inherits Rectangle {
                     font-weight: Theme.weight-screen-title;
                     wrap: word-wrap;
                 }
-                SmallText { text: Stations.reading-detail; }
+                SmallText { text: root.narrow ? Stations.reading-detail-short : Stations.reading-detail; }
             }
-            if !root.narrow: VerticalLayout {
+            if !root.stacked: VerticalLayout {
                 alignment: center;
                 PrimaryButton {
                     label: Stations.reading-button;
                     clicked => { Stations.confirm-reading(); }
                 }
             }
-            if !root.narrow && Stations.reading-can-refuse: VerticalLayout {
+            if !root.stacked && Stations.reading-can-refuse: VerticalLayout {
                 alignment: center;
-                SecondaryButton { label: "Non, un autre numéro…"; }
+                SecondaryButton { label: "Non, c'est un autre numéro…"; }
             }
         }
-        if root.narrow: HorizontalLayout {
+        if root.stacked: HorizontalLayout {
             spacing: Theme.space;
             alignment: end;
-            if Stations.reading-can-refuse: SecondaryButton { label: "Non, un autre…"; }
+            if Stations.reading-can-refuse: SecondaryButton { label: root.narrow ? "Non, un autre…" : "Non, c'est un autre numéro…"; }
             PrimaryButton {
-                label: Stations.reading-button;
+                label: root.narrow ? Stations.reading-button-short : Stations.reading-button;
                 clicked => { Stations.confirm-reading(); }
             }
         }
@@ -373,10 +402,6 @@ component StationsContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
-        if Stations.reading: ReadingCard {
-            vertical-stretch: 0;
-            narrow: root.narrow;
-        }
         HorizontalLayout {
             vertical-stretch: 0;
             padding-top: root.narrow ? 0 : Theme.space;
@@ -386,6 +411,11 @@ component StationsContent {
                 has-icon: true;
             }
             Rectangle { horizontal-stretch: 1; }
+        }
+        if Stations.reading: ReadingCard {
+            vertical-stretch: 0;
+            narrow: root.narrow;
+            stacked: root.available-width < Theme.reading-card-row-width;
         }
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
@@ -491,6 +521,60 @@ component GaugeCard inherits Rectangle {
     }
 }
 
+// The reader of the tab: its two lines only. What it reads goes in the reading card,
+// above the table (prototype: tile(3) and bxBig).
+component StationsReader inherits ReaderTile {
+    reader: Readers.free;
+}
+
+// While collecting: the stations worth reading to settle a doubt, ticked once read.
+component UsefulCard inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: "Utiles pour lever un doute";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            wrap: word-wrap;
+        }
+        for item in Stations.useful: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: item.label;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: item.detail; }
+            }
+            // Never by its color alone: the tick and its word.
+            if item.done: HorizontalLayout {
+                spacing: Theme.space-small;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: Icons.check;
+                        colorize: Theme.valid.badge-text;
+                        width: Theme.button-icon;
+                        height: Theme.button-icon;
+                    }
+                }
+                SmallText { text: "lu"; wrap: no-wrap; vertical-alignment: center; }
+            }
+        }
+    }
+}
+
 export component StationDetail inherits Rectangle {
     background: Theme.card;
     border-radius: Theme.card-radius;
@@ -550,8 +634,12 @@ export component StationDetail inherits Rectangle {
             }
             HorizontalLayout {
                 spacing: Theme.space;
-                SmallText { horizontal-stretch: 1; text: "Pile"; }
-                BubbleLabel { text: Stations.detail-battery; wrap: no-wrap; }
+                SmallText { horizontal-stretch: 1; text: "Pile"; vertical-alignment: center; }
+                if !Stations.detail-low-battery: BubbleLabel { text: "OK"; wrap: no-wrap; }
+                if Stations.detail-low-battery: VerticalLayout {
+                    alignment: center;
+                    StatusBadge { status: Home.status-of({ word: "Pile faible", kind: to-check }); }
+                }
             }
             HorizontalLayout {
                 spacing: Theme.space;
@@ -583,7 +671,7 @@ export component StationsPage {
         spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
-            ReaderTile { station: Stations.station; }
+            StationsReader { compact: true; }
             Tabs {
                 tabs: Stations.modes;
                 active: Stations.active-mode;
@@ -593,7 +681,7 @@ export component StationsPage {
                 spacing: Theme.space;
                 SummaryZone {
                     horizontal-stretch: 1;
-                    title: "Réglages";
+                    title: "";
                     chips: Stations.chips;
                     bubble: 10;
                     compact: true;
@@ -609,12 +697,13 @@ export component StationsPage {
                 layout-mode: root.layout-mode;
                 available-width: root.available-width;
             }
+            if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
         }
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
             vertical-stretch: 0;
             spacing: Theme.button-margin;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: Stations.chips;
                 bubble: 10;
                 compact: root.layout-mode == LayoutMode.medium;
@@ -633,13 +722,14 @@ export component StationsPage {
                 width: Theme.course-list-width;
                 alignment: start;
                 spacing: Theme.space;
-                ReaderTile { station: Stations.station; }
+                StationsReader { }
                 Tabs {
                     tabs: Stations.modes;
                     active: Stations.active-mode;
                     clicked(i) => { Stations.select-mode(i); }
                 }
                 GaugeCard { }
+                if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
             }
             StationsContent {
                 horizontal-stretch: 1;
@@ -676,42 +766,158 @@ export component StationOverlay {
     }
 }
 
+// A value of a setting (prototype: .val): a small framed box, unlike the filter pills.
+component ValueTag inherits Rectangle {
+    in property <string> label;
+    in property <bool> removable;
+
+    height: Theme.zone;
+    accessible-role: text;
+    accessible-label: root.label;
+    Rectangle {
+        height: Theme.highlight-chip-height;
+        border-radius: Theme.value-tag-radius;
+        background: Theme.surface;
+        HorizontalLayout {
+            padding-left: Theme.space;
+            padding-right: Theme.space;
+            spacing: Theme.space-small;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+            if root.removable: VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text;
+                    width: Theme.badge-icon;
+                    height: Theme.badge-icon;
+                    accessible-role: button;
+                    accessible-label: "Retirer";
+                }
+            }
+        }
+    }
+}
+
+// One setting: its name and its short description, its value on the right.
+component SettingLine {
+    in property <string> label;
+    in property <string> description;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            BubbleLabel { text: root.label; }
+            SmallText { text: root.description; }
+        }
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: Theme.space-small;
+            @children
+        }
+    }
+}
+
+// The same on a phone, when the value is long: the value under the name.
+component SettingBlock {
+    in property <string> label;
+    in property <string> description;
+
+    VerticalLayout {
+        spacing: Theme.space-small;
+        BubbleLabel { text: root.label; }
+        SmallText { text: root.description; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-small;
+            @children
+        }
+    }
+}
+
+component SectionTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-label;
+    font-weight: Theme.weight-screen-title;
+    wrap: word-wrap;
+}
+
+// The settings of the event's stations (prototype 22/10: bxSettings), in two sections.
+// Values from Rust; the buttons have no effect for now.
 component SettingsContent {
+    in property <bool> narrow;
+
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.button-margin;
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Boîtiers de secours"; }
-            BubbleLabel { text: "2"; wrap: no-wrap; }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Pris dans les parcs : Club, Secours"; }
-            SecondaryButton {
-                label: "Parc";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Boîtiers spéciaux : Effacer 1, Contrôler 1"; }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Vérifier l'heure du boîtier"; }
+        SectionTitle { text: "Boîtiers de la course"; }
+        SettingLine {
+            label: "Boîtiers de secours";
+            description: "Sortis en plus des besoins, au cas où.";
+            SecondaryButton { label: "−"; }
             VerticalLayout {
                 alignment: center;
-                Switch { on: true; }
+                Text {
+                    min-width: Theme.stepper-value-width;
+                    text: Stations.settings-spares;
+                    color: Theme.text;
+                    font-size: Theme.text-label;
+                    font-weight: Theme.weight-screen-title;
+                    horizontal-alignment: center;
+                }
             }
+            SecondaryButton { label: "+"; }
         }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Vérifier la pile"; }
+        RowLine { }
+        if !root.narrow: SettingLine {
+            label: "Pris dans les parcs";
+            description: "Parcs où l'on prend les boîtiers de cette course.";
+            for park in Stations.settings-parks: ValueTag { label: park; removable: true; }
+            SecondaryButton { label: "+ Parc"; }
+        }
+        if root.narrow: SettingBlock {
+            label: "Pris dans les parcs";
+            description: "Parcs où l'on prend les boîtiers de cette course.";
+            for park in Stations.settings-parks: ValueTag { label: park; removable: true; }
+            SecondaryButton { label: "+ Parc"; }
+        }
+        RowLine { }
+        if !root.narrow: SettingLine {
+            label: "Boîtiers spéciaux";
+            description: "Hors postes : effacer, contrôler les puces.";
+            for special in Stations.settings-specials: ValueTag { label: special; }
+            SecondaryButton { label: "+ Boîtier spécial"; }
+        }
+        if root.narrow: SettingBlock {
+            label: "Boîtiers spéciaux";
+            description: "Hors postes : effacer, contrôler les puces.";
+            for special in Stations.settings-specials: ValueTag { label: special; }
+            SecondaryButton { label: "+ Boîtier spécial"; }
+        }
+        Rectangle { height: Theme.space; }
+        SectionTitle { text: "À la lecture"; }
+        SettingLine {
+            label: "Vérifier l'heure du boîtier";
+            description: "Signale un boîtier dont l'heure est décalée.";
             VerticalLayout {
                 alignment: center;
-                Switch { on: true; }
+                Switch { on: Stations.settings-check-clock; }
+            }
+        }
+        RowLine { }
+        SettingLine {
+            label: "Vérifier la pile";
+            description: "Signale une pile faible.";
+            VerticalLayout {
+                alignment: center;
+                Switch { on: Stations.settings-check-battery; }
             }
         }
     }
@@ -746,12 +952,14 @@ component ProblemsContent {
 
 export component StationsBubble {
     in property <length> margin;
+    in property <bool> narrow;
 
     BubbleFrame {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        if Courses.open-bubble == 10: SettingsContent { }
+        wanted-width: Courses.open-bubble == 10 ? Theme.station-settings-width : Theme.bubble-width;
+        if Courses.open-bubble == 10: SettingsContent { narrow: root.narrow; }
         if Courses.open-bubble == 11: ProblemsContent { }
     }
 }

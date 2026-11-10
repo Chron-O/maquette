@@ -16,6 +16,9 @@ export component InputField {
     in property <bool> show-editing: false;
     in property <InputType> input-kind: InputType.text;   // picks the phone keyboard
 
+    // What the field needs to show its placeholder whole: a field can be made at least this wide.
+    out property <length> placeholder-width: hint.preferred-width + 2 * Theme.button-margin + 2 * Theme.field-outline-width;
+
     property <bool> has-error: error != "";
     property <bool> editing: input.has-focus || show-editing;
 
@@ -42,7 +45,8 @@ export component InputField {
                 padding-left: Theme.button-margin;
                 padding-right: Theme.button-margin;
                 Rectangle {
-                    if input.text == "": Text {
+                    hint := Text {
+                        visible: input.text == "";
                         width: parent.width;
                         height: parent.height;
                         text: root.placeholder;

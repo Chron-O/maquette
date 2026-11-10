@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Saves one screen's 8 captures in captures/: 4 formats, light and dark.
 #
-#   scripts/captures.sh NAME [club|tab] [INDEX]
+#   scripts/captures.sh NAME [club|tab|live] [INDEX]
 #   scripts/captures.sh 00-event tab 1
 #   CAPTURE_TEST_DATA=1 scripts/captures.sh 01-home-test-data
 #

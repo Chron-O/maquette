@@ -5,11 +5,12 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
-import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
 import { Cell, Title } from "participants.slint";
 
 export struct StartRow {
@@ -32,6 +33,7 @@ export struct StartSection {
     name: string,
     tone: int,
     chips: [string],
+    detail: string,     // on a phone, under its name: the chips that matter there
     rows: [StartRow],
 }
 
@@ -44,6 +46,14 @@ export struct StartPoint {
     label: string,
 }
 
+// The settings of one start point (departs-arrivees-numerotes.md), already written by Rust.
+export struct StartPointSetting {
+    name: string,
+    first-start: string,
+    step: string,
+    limit: string,
+}
+
 export struct FriseCell {
     index: int,         // -1 when no runner
     label: string,
@@ -54,6 +64,7 @@ export struct FriseCell {
 }
 
 export struct FriseRow {
+    point: string,      // on the first row of a start point, when there are several
     name: string,
     tone: int,
     cells: [FriseCell],
@@ -81,21 +92,27 @@ export global Starts {
     in property <string> search-text;
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
-    in property <string> first-start;
+    in property <[StartPointSetting]> point-settings;
     in property <[string]> frise-times;
     in property <[FriseRow]> frise-rows;
 
     in property <bool> preview;
     in property <string> preview-detail;
+    in property <string> publish-label: "Publier";
+    in property <bool> publish-enabled: true;
 
     in property <bool> detail-open;
     in property <string> detail-name;
     in property <string> detail-subtitle;
     in property <string> detail-time;
+    in property <string> detail-old-time;   // in a draw preview, when the time moves
     in property <string> detail-point;
+    in property <string> detail-club;
+    in property <string> detail-card;
+    in property <string> detail-groups;
     in property <bool> detail-locked;
 
-    in-out property <int> bubble-section;
+    in-out property <int> bubble-section;   // the course whose settings or « ⋯ » menu are open
 
     callback select-row(int);
     callback sort-by(int);
@@ -191,6 +208,30 @@ component StateCell {
     }
 }
 
+// The « ⋯ » of a course (prototype: grpDots): a small menu, joined to it. No effect yet.
+component SectionMenuButton {
+    in property <int> section;
+
+    property <bool> open: Courses.open-bubble == 23 && Starts.bubble-section == root.section;
+
+    min-width: Theme.small-button-width;
+    horizontal-stretch: 0;
+    accessible-role: button;
+    accessible-label: "Plus d'actions";
+    MoreButton {
+        width: 100%;
+        height: 100%;
+        open: root.open;
+        down: Courses.bubble-down;
+        clicked => {
+            Starts.bubble-section = root.section;
+            Courses.open-at(23, self.absolute-position.x + (self.width - Theme.small-button-width) / 2,
+                self.absolute-position.y + (self.height - Theme.small-button-height) / 2,
+                Theme.small-button-width, Theme.small-button-height);
+        }
+    }
+}
+
 component SectionHead inherits Rectangle {
     in property <StartSection> section;
     in property <bool> compact;
@@ -198,15 +239,19 @@ component SectionHead inherits Rectangle {
     background: Theme.page-background;
     HorizontalLayout {
         padding: Theme.space-small;
-        alignment: start;
+        spacing: Theme.space;
         SummaryZone {
+            horizontal-stretch: root.compact ? 1 : 0;
             title: root.section.name;
             chips: root.section.chips;
+            subtitle: root.section.detail;
             tone: root.section.tone;
             bubble: 9;
             compact: root.compact;
             opened => { Starts.bubble-section = root.section.index; }
         }
+        if !root.compact: Rectangle { horizontal-stretch: 1; }
+        SectionMenuButton { section: root.section.index; }
     }
 }
 
@@ -395,17 +440,22 @@ component FriseBox inherits Rectangle {
     background: root.cell.index >= 0 ? Courses.tone-color(root.tone) : root.cell.vacant ? transparent : Theme.surface;
     border-width: root.cell.moved ? Theme.tag-outline : root.cell.vacant ? Theme.thin-outline-width : 0;
     border-color: root.cell.moved ? Theme.primary-button : Theme.thin-outline;
-    Text {
-        text: root.cell.label;
-        color: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
-        font-size: Theme.text-help;
-        font-weight: Theme.weight-screen-title;
+    property <color> ink: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.cell.label;
+            color: root.ink;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-screen-title;
+            horizontal-alignment: center;
+        }
     }
     if root.cell.locked: Image {
         x: parent.width - self.width - Theme.space-small / 2;
         y: Theme.space-small / 2;
         source: Icons.lock;
-        colorize: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
+        colorize: root.ink;
         width: Theme.frise-lock;
         height: Theme.frise-lock;
     }
@@ -415,7 +465,7 @@ component FriseBox inherits Rectangle {
     }
 }
 
-// One row per course, one column per start. It scrolls sideways when it does not fit.
+// One row per course, sorted by start point, one column per minute. It scrolls sideways when it does not fit.
 component StartsFrise {
     property <length> frise-width: lines.preferred-width;
 
@@ -442,23 +492,32 @@ component StartsFrise {
                     horizontal-alignment: center;
                 }
             }
-            for row in Starts.frise-rows: HorizontalLayout {
-                alignment: start;
+            for row in Starts.frise-rows: VerticalLayout {
                 spacing: Theme.space-small;
+                if row.point != "": Text {
+                    text: row.point;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-screen-title;
+                }
                 HorizontalLayout {
-                    width: Theme.frise-name-width;
                     alignment: start;
                     spacing: Theme.space-small;
-                    VerticalLayout {
-                        alignment: center;
-                        CourseChip { tone: row.tone; }
+                    HorizontalLayout {
+                        width: Theme.frise-name-width;
+                        alignment: start;
+                        spacing: Theme.space-small;
+                        VerticalLayout {
+                            alignment: center;
+                            CourseChip { tone: row.tone; }
+                        }
+                        Cell {
+                            text: row.name;
+                            font-weight: Theme.weight-block-title;
+                        }
                     }
-                    Cell {
-                        text: row.name;
-                        font-weight: Theme.weight-block-title;
-                    }
+                    for cell in row.cells: FriseBox { cell: cell; tone: row.tone; }
                 }
-                for cell in row.cells: FriseBox { cell: cell; tone: row.tone; }
             }
         }
     }
@@ -513,10 +572,50 @@ component DrawPreview inherits Rectangle {
             }
             if root.narrow: Rectangle { horizontal-stretch: 1; }
             QuietButton { label: "Abandonner"; clicked => { Starts.abandon(); } }
-            SecondaryButton { label: "Refaire"; clicked => { Starts.draw(); } }
+            SecondaryButton { label: "Refaire (nouvel ordre)"; clicked => { Starts.draw(); } }
             PrimaryButton { label: "Appliquer"; in-row: true; clicked => { Starts.apply(); } }
         }
         if root.narrow: SmallText { text: Starts.preview-detail; }
+    }
+}
+
+// The chosen group, as a filter: « ✕ » shows everyone again (prototype: tabDeparts, S.dfg).
+component GroupChip inherits Rectangle {
+    property <string> label: "Groupe : " + Starts.groups[Starts.active-group].name;
+
+    height: Theme.zone;
+    horizontal-stretch: 0;
+    accessible-role: button;
+    accessible-label: root.label;
+    Rectangle {
+        height: Theme.highlight-chip-height;
+        border-radius: self.height / 2;
+        background: zone.has-hover ? Theme.tab-hover : Theme.surface;
+        HorizontalLayout {
+            padding-left: Theme.space;
+            padding-right: Theme.space;
+            spacing: Theme.space-small;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text;
+                    width: Theme.badge-icon;
+                    height: Theme.badge-icon;
+                }
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Starts.select-group(Starts.active-group); }
     }
 }
 
@@ -532,15 +631,6 @@ component StartsContent {
         if Starts.preview: DrawPreview {
             vertical-stretch: 0;
             narrow: root.narrow;
-        }
-        if !Starts.preview: HorizontalLayout {
-            vertical-stretch: 0;
-            padding-top: root.narrow ? 0 : Theme.space;
-            SecondaryButton {
-                label: "Tirer les horaires";
-                clicked => { Starts.draw(); }
-            }
-            Rectangle { horizontal-stretch: 1; }
         }
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
@@ -581,12 +671,17 @@ component StartsContent {
                                 edited(text) => { Starts.search(text); }
                             }
                         }
+                        if !root.narrow && Starts.active-group >= 0: GroupChip { }
                     }
                     if root.narrow && root.search-open: InputField {
                         placeholder: "Nom ou club…";
                         text: Starts.search-text;
                         init => { self.take-focus(); }
                         edited(text) => { Starts.search(text); }
+                    }
+                    if root.narrow && Starts.active-group >= 0: HorizontalLayout {
+                        alignment: start;
+                        GroupChip { }
                     }
                     if !root.narrow && Starts.points.length > 0: PointChips { }
                 }
@@ -711,9 +806,22 @@ export component StartDetail inherits Rectangle {
                 }
             }
         }
+        if Starts.detail-locked: HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space-small;
+            VerticalLayout {
+                alignment: center;
+                LockMark { }
+            }
+            BubbleLabel { text: "Verrouillée"; wrap: no-wrap; }
+        }
         HorizontalLayout {
             spacing: Theme.space;
             SmallText { horizontal-stretch: 1; text: "Heure de départ"; }
+            if Starts.detail-old-time != "": VerticalLayout {
+                alignment: center;
+                OldTime { time: Starts.detail-old-time; }
+            }
             BubbleLabel { text: Starts.detail-time; wrap: no-wrap; }
         }
         HorizontalLayout {
@@ -721,7 +829,23 @@ export component StartDetail inherits Rectangle {
             SmallText { horizontal-stretch: 1; text: "Départ"; }
             BubbleLabel { text: Starts.detail-point; wrap: no-wrap; }
         }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Club"; }
+            BubbleLabel { text: Starts.detail-club; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Puce"; }
+            BubbleLabel { text: Starts.detail-card; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { text: "Groupes"; }
+            BubbleLabel { horizontal-stretch: 1; text: Starts.detail-groups; horizontal-alignment: right; }
+        }
         RowLine { }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Échanger avec…"; } }
         HorizontalLayout {
             alignment: start;
             SecondaryButton {
@@ -731,10 +855,12 @@ export component StartDetail inherits Rectangle {
                 clicked => { Starts.toggle-lock(); }
             }
         }
-        HorizontalLayout { alignment: start; SecondaryButton { label: "Échanger avec…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Placer au premier créneau libre"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Ajouter à un groupe…"; } }
         HorizontalLayout { alignment: start; SecondaryButton { label: "Demande : partir tôt"; } }
         HorizontalLayout { alignment: start; SecondaryButton { label: "Demande : partir tard"; } }
         HorizontalLayout { alignment: start; SecondaryButton { label: "Changer de départ…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Mettre un vacant à sa place…"; danger: true; } }
     }
 }
 
@@ -754,7 +880,7 @@ export component StartsPage {
                 spacing: Theme.space;
                 SummaryZone {
                     horizontal-stretch: 1;
-                    title: "Réglages";
+                    title: "";
                     chips: Starts.chips;
                     bubble: 7;
                     compact: true;
@@ -775,7 +901,7 @@ export component StartsPage {
             vertical-stretch: 0;
             spacing: Theme.button-margin;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: Starts.chips;
                 bubble: 7;
                 compact: root.layout-mode == LayoutMode.medium;
@@ -812,15 +938,23 @@ export component StartsPage {
 
 // On medium and narrow layouts, the detail opens over the page.
 export component StartOverlay {
-    TouchArea {
-        clicked => { Starts.close-detail(); }
-    }
-    Rectangle {
-        background: Theme.overlay-veil;
-        StartDetail {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
+    Rectangle { background: Theme.overlay-veil; }
+    // A long detail scrolls instead of leaving the screen.
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-height: max(root.height, detail.preferred-height + 2 * Theme.narrow-margin);
+        TouchArea {
+            width: root.width;
+            height: parent.height;
+            clicked => { Starts.close-detail(); }
+        }
+        detail := StartDetail {
+            x: (root.width - self.width) / 2;
+            y: max(Theme.narrow-margin, (root.height - self.height) / 2);
+            width: min(Theme.detail-overlay-width, root.width - 2 * Theme.narrow-margin);
             height: self.preferred-height;
         }
     }
@@ -841,22 +975,43 @@ component SettingsContent {
         padding: Theme.space-medium;
         spacing: Theme.button-margin;
         BubbleLabel { text: "Comment partent les coureurs"; }
-        Tabs {
-            tabs: [{ label: "Libre" }, { label: "Avec horaires" }, { label: "En masse" }];
-            active: 1;
+        HorizontalLayout {
+            alignment: start;
+            ChoiceSegments {
+                choices: ["Libre", "Avec horaires", "En masse"];
+                active: 1;
+            }
         }
-        SettingRow {
-            label: "Premier départ";
-            BubbleLabel { text: Starts.first-start; wrap: no-wrap; }
+        // One block per start point, each with its own settings (lot4-departs.md § 2).
+        for point in Starts.point-settings: VerticalLayout {
+            spacing: Theme.space-small;
+            RowLine { }
+            Text {
+                text: point.name;
+                color: Theme.text;
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-screen-title;
+                wrap: word-wrap;
+            }
+            SettingRow {
+                label: "Premier départ";
+                BubbleLabel { text: point.first-start; wrap: no-wrap; }
+            }
+            BubbleLabel { text: point.step; }
+            BubbleLabel { text: point.limit; }
         }
+        RowLine { }
         SettingRow {
             label: "Écart dans un circuit";
             BubbleLabel { text: "2 min"; wrap: no-wrap; }
         }
         BubbleLabel { text: "Ordre"; }
-        Tabs {
-            tabs: [{ label: "Au hasard" }, { label: "Classement" }, { label: "Inversé" }];
-            active: 0;
+        HorizontalLayout {
+            alignment: start;
+            ChoiceSegments {
+                choices: ["Au hasard", "Classement", "Classement inversé"];
+                active: 0;
+            }
         }
         SettingRow {
             label: "Séparer les clubs";
@@ -888,14 +1043,27 @@ component SectionContent {
             BubbleLabel { text: "Comme tous : 2 min"; wrap: no-wrap; }
         }
         BubbleLabel { text: "Catégories"; }
-        Tabs {
-            tabs: [{ label: "Mêlées" }, { label: "Alternées" }, { label: "À la suite" }];
-            active: 0;
+        HorizontalLayout {
+            alignment: start;
+            ChoiceSegments {
+                choices: ["Mêlées", "Alternées", "À la suite"];
+                active: 0;
+            }
         }
         SettingRow {
             label: "Ordre";
             BubbleLabel { text: "Comme tous : au hasard"; wrap: no-wrap; }
         }
+        SettingRow {
+            label: "Pas avant";
+            BubbleLabel { text: "—"; wrap: no-wrap; }
+            SecondaryButton {
+                label: "Catégorie";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+        }
+        RowLine { }
         HorizontalLayout {
             alignment: start;
             SecondaryButton { label: "Refaire le tirage de ce circuit"; }
@@ -940,8 +1108,16 @@ export component StartsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
+        wanted-width: Courses.open-bubble == 23 ? Theme.menu-bubble-width : Theme.bubble-width;
         if Courses.open-bubble == 7: SettingsContent { }
         if Courses.open-bubble == 8: ChangesContent { }
         if Courses.open-bubble == 9: SectionContent { }
+        if Courses.open-bubble == 23: VerticalLayout {
+            padding-top: Theme.space-small;
+            padding-bottom: Theme.space-small;
+            MenuItem { text: "Refaire le tirage de ce circuit"; }
+            MenuItem { text: "Ajouter un vacant"; }
+            MenuItem { text: "Imprimer ce circuit"; }
+        }
     }
 }

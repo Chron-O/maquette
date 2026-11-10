@@ -63,7 +63,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - **Lignes** : les postes passent à la ligne au lieu de défiler de côté, à toutes les tailles.
 - **Tri** : petit triangle dessiné, ▲ n'étant pas dans la police.
 - **Poste dans aucun circuit** : contour plus clair au lieu de pointillés, que Slint ne dessine pas.
-- **Fiche, avant et après** : « D » et « A » écrits pour Départ et Arrivée, au lieu de leurs symboles.
+- **Fiche, avant et après** : Départ et Arrivée dessinés avec leurs symboles de la charte (`co-start`, `co-finish`).
 - **« 1 tronçon non compté »** : pas dans le résumé, le générateur ne produit pas cette donnée.
 
 - **Vue d'un circuit, écarts avec la spec** : pas de poignée ni de corbeille (rien ne se modifie encore, et ces icônes ne sont pas dans la charte) ; pas de « + » entre les postes ; pas de phrase « Cliquez un poste… » ; pas de fiche vide en pointillés. Bouton « + Poste » au-dessus de la carte, repris du prototype. Sur iPad en portrait, le résumé de « Tous les circuits » reste dans la bulle.

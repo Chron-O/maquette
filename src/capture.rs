@@ -1,5 +1,6 @@
 // Capture mode, used by scripts/captures.sh:
-//   maquette --capture FILE light|dark WIDTH HEIGHT touch|mouse [club|tab] [INDEX]
+//   maquette --capture FILE light|dark WIDTH HEIGHT touch|mouse [club|tab|live] [INDEX]
+// « live » opens the Direct drawer over the tab INDEX.
 // With CAPTURE_TEST_DATA set, the test data comes from a fixed seed, so images stay comparable.
 // CAPTURE_COURSE and CAPTURE_COURSE_VIEW open a course and one of its views.
 // CAPTURE_CLICKS="x,y;x,y" clicks these points first, to test the navigation without a mouse.
@@ -16,6 +17,7 @@ use std::time::Duration;
 const WAIT: Duration = Duration::from_millis(1200);
 const TEST_DATA_SEED: u64 = 42;
 const READINGS: usize = 3;
+const LIVE_AGE: u32 = 4;
 
 pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Device>>) {
     let args: Vec<String> = std::env::args().collect();
@@ -39,13 +41,18 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
             for _ in 0..READINGS {
                 data.read_a_card();
             }
+            // A few seconds after the last reading: still live, the reader ready again.
+            data.wait(LIVE_AGE);
         }
     }
     let index: usize = args.get(8).map_or(0, |i| i.parse().expect("index"));
     match args.get(7).map(String::as_str) {
-        Some("tab") => {
+        Some(kind @ ("tab" | "live")) => {
             state_now.navigator.open_event(0);
             state_now.navigator.select_tab(index);
+            if kind == "live" {
+                state_now.navigator.toggle_live();
+            }
             state_now.courses.select_course(-1);
             if let Ok(view) = std::env::var("CAPTURE_COURSES_VIEW") {
                 state_now.courses.select_view(view.parse().expect("view"));

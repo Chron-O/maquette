@@ -11,6 +11,7 @@ import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
 import { Cell } from "participants.slint";
 import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
+import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
 
 export struct CardParkItem {
     index: int,
@@ -66,6 +67,12 @@ export global Cards {
     in property <string> alert-title;
     in property <string> alert-count;
     in property <[OverdueCard]> overdue;
+
+    in property <bool> has-reading;
+    in property <string> read-code;
+    in property <string> read-identity;
+    in property <string> read-verdict;
+    in property <bool> read-unknown;     // in none of the parks: the tile asks what to do
 
     in property <bool> detail-open;
     in property <string> detail-number;
@@ -347,11 +354,10 @@ component CardsContent {
         HorizontalLayout {
             vertical-stretch: 0;
             padding-top: root.narrow ? 0 : Theme.space;
-            SecondaryButton {
-                label: "Ajouter des puces…";
-                icon: Icons.plus;
-                has-icon: true;
-            }
+            // The screen's one orange button, outside the rows, as « Ajouter des boîtiers… »;
+            // white while the reader asks about an unknown card.
+            if !Cards.read-unknown: PrimaryButton { label: "Ajouter des puces…"; }
+            if Cards.read-unknown: SecondaryButton { label: "Ajouter des puces…"; }
             Rectangle { horizontal-stretch: 1; }
         }
         Rectangle {
@@ -555,6 +561,21 @@ export component CardDetail inherits Rectangle {
     }
 }
 
+// The reader: the number read, the card, its state. The rest is in its detail, which opens.
+component CardReader inherits ReaderTile {
+    reader: Readers.free;
+    with-result: true;
+    // An unknown card asks a question (encart-lecture.md § 5, § 9): its row is kept.
+    with-buttons: true;
+    message: "Posez une puce sur la station";
+    state: !Cards.has-reading ? ReaderState.waiting : Cards.read-unknown ? ReaderState.unknown : ReaderState.read;
+    primary-label: Cards.read-unknown ? "Ajouter à un parc ▾" : "";
+    secondary-label: Cards.read-unknown ? "Ignorer" : "";
+    code: Cards.read-code;
+    identity: Cards.read-identity;
+    verdict: Cards.read-verdict;
+}
+
 export component CardsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -567,11 +588,12 @@ export component CardsPage {
         spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
+            CardReader { compact: true; }
             HorizontalLayout {
                 spacing: Theme.space;
                 SummaryZone {
                     horizontal-stretch: 1;
-                    title: "Réglages";
+                    title: "";
                     chips: Cards.chips;
                     bubble: 15;
                     compact: true;
@@ -598,7 +620,7 @@ export component CardsPage {
             vertical-stretch: 0;
             spacing: Theme.button-margin;
             SummaryZone {
-                title: "Réglages";
+                title: "";
                 chips: Cards.chips;
                 bubble: 15;
                 compact: root.layout-mode == LayoutMode.medium;
@@ -613,11 +635,16 @@ export component CardsPage {
         if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
             vertical-stretch: 1;
             spacing: Theme.button-margin;
-            ParkColumn {
+            VerticalLayout {
                 width: Theme.course-list-width;
-                parks: Cards.parks;
-                active: Cards.active-park;
-                selected(i) => { Cards.select-park(i); }
+                spacing: Theme.space;
+                CardReader { vertical-stretch: 0; }
+                ParkColumn {
+                    vertical-stretch: 1;
+                    parks: Cards.parks;
+                    active: Cards.active-park;
+                    selected(i) => { Cards.select-park(i); }
+                }
             }
             CardsContent {
                 horizontal-stretch: 1;

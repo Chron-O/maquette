@@ -1,0 +1,300 @@
+// The reader tile (prototype: tile, .tile): one dark green tile wherever a reader is shown.
+// Line 1 names the reader and its serial number, with its pin; line 2 says what it does now.
+// Where a page shows what was read, a result zone of fixed height comes under the two lines:
+// the tile never changes height with its state (encart-lecture.md § 11).
+
+import { Theme } from "../theme.slint";
+import { Icons } from "icons.slint";
+import { ReaderRings } from "dot.slint";
+import { PrimaryButton, SecondaryButton } from "buttons.slint";
+
+// What a reader is doing. `none`: no reader there (no test data).
+export enum ReaderMode { none, ready, reading, unplugged }
+
+export struct ReaderInfo {
+    index: int,        // to pin it
+    name: string,
+    serial: string,    // "n° 539154"
+    pinned: bool,      // a window waiting for a card does not take it by itself
+    mode: ReaderMode,
+}
+
+// The readers of this device, given by Rust.
+export global Readers {
+    in property <[ReaderInfo]> finish;   // the event's finish readers (Direct)
+    in property <ReaderInfo> entry;      // the entry desk (Participants)
+    in property <ReaderInfo> free;       // a free reader (Boîtiers, club pages)
+    callback toggle-pin(int);
+
+    public pure function state-word(reader: ReaderInfo) -> string {
+        if reader.mode == ReaderMode.unplugged {
+            return "Débranché : rebranchez le câble USB";
+        }
+        if reader.mode == ReaderMode.reading {
+            return "Lecture en cours…";
+        }
+        if reader.mode == ReaderMode.ready {
+            return "Prêt";
+        }
+        return "Aucun lecteur branché";
+    }
+}
+
+// What was read, in the result zone.
+export enum ReaderState {
+    waiting,   // nothing read yet: the message
+    read,      // the number in big, the identity and the verdict
+    unknown,   // the same in amber: "à ranger"
+}
+
+// The pin of a reader: pinned in full, not pinned faint, so that it stays findable.
+component PinToggle {
+    in property <ReaderInfo> reader;
+    in property <color> tone;
+
+    width: Theme.reader-pin-icon;
+    height: Theme.reader-pin-icon;
+    accessible-role: button;
+    accessible-checkable: true;
+    accessible-checked: root.reader.pinned;
+    accessible-label: root.reader.pinned ? "Épinglé : une fenêtre ne le prend pas toute seule" : "Non épinglé";
+    accessible-action-default => { Readers.toggle-pin(root.reader.index); }
+    Image {
+        source: root.reader.pinned ? Icons.pin : Icons.pin-off;
+        colorize: root.tone;
+        opacity: root.reader.pinned ? 1 : Theme.reader-pin-off-opacity;
+        width: 100%;
+        height: 100%;
+    }
+    TouchArea {
+        x: -Theme.reader-pin-hit;
+        y: -Theme.reader-pin-hit;
+        width: root.width + 2 * Theme.reader-pin-hit;
+        height: root.height + 2 * Theme.reader-pin-hit;
+        mouse-cursor: pointer;
+        clicked => { Readers.toggle-pin(root.reader.index); }
+    }
+}
+
+// The two lines of a reader: its name and number with its pin, then what it does now.
+component ReaderLines inherits VerticalLayout {
+    in property <ReaderInfo> reader;
+
+    alignment: center;
+    spacing: Theme.reader-line-gap;
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space-small;
+        Text {
+            text: root.reader.name == "" ? "" : root.reader.name + " · " + root.reader.serial;
+            color: Theme.reader-detail;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+        if root.reader.name != "": VerticalLayout {
+            alignment: center;
+            PinToggle {
+                reader: root.reader;
+                tone: Theme.reader-detail;
+            }
+        }
+    }
+    Text {
+        text: Readers.state-word(root.reader);
+        color: root.reader.mode == ReaderMode.unplugged ? Theme.reader-error : Theme.header-text;
+        font-size: Theme.text-label;
+        font-weight: Theme.weight-screen-title;
+        wrap: word-wrap;
+    }
+}
+
+export component ReaderTile inherits Rectangle {
+    callback primary-clicked();
+    callback secondary-clicked();
+
+    in property <ReaderInfo> reader;
+    in property <bool> compact;          // the Direct, phones
+    in property <bool> with-result;      // the page shows what was read, under the two lines
+    in property <bool> with-buttons;     // a question may come with what was read: its row is kept
+    in property <ReaderState> state: ReaderState.waiting;
+    in property <string> message;        // waiting: what to do
+    in property <string> code;           // read, unknown: the number, in big
+    in property <string> identity;       // one line: who or what it is
+    in property <string> verdict;        // one line, in the state's color
+    in property <string> primary-label;  // a question to settle now: two buttons at most
+    in property <string> secondary-label;
+
+    property <bool> unplugged: root.reader.mode == ReaderMode.unplugged;
+    property <bool> has-buttons: root.primary-label != "" || root.secondary-label != "";
+    property <bool> shows-result: root.state != ReaderState.waiting;
+    property <color> accent: root.unplugged ? Theme.reader-error : Theme.reader-ring;
+    property <length> result-height: root.compact ? Theme.reader-compact-result-height : Theme.reader-result-height;
+    property <length> body-height: root.result-height + (root.with-buttons ? Theme.space + Theme.zone : 0px);
+    property <length> code-size: root.has-buttons || root.compact ? Theme.reader-code-small-size : Theme.reader-code-size;
+    animate code-size { duration: Theme.reader-shift-duration; }
+
+    background: root.unplugged ? Theme.reader-error-background : Theme.header;
+    border-radius: Theme.card-radius;
+    // Light: a clear shadow all around, no outline. Dark: the light green outline.
+    border-width: Theme.reader-outline-width;
+    border-color: root.accent;
+    drop-shadow-blur: Theme.reader-shadow-blur;
+    drop-shadow-color: Theme.reader-shadow;
+    accessible-role: groupbox;
+    accessible-label: root.reader.name;
+
+    VerticalLayout {
+        padding-left: root.compact ? Theme.reader-compact-padding-x : Theme.reader-padding;
+        padding-right: self.padding-left;
+        padding-top: root.compact ? Theme.reader-compact-padding-y : Theme.reader-padding-y;
+        padding-bottom: self.padding-top;
+        spacing: Theme.space;
+        HorizontalLayout {
+            spacing: Theme.button-margin;
+            // Not clipped: the waves leave the target.
+            VerticalLayout {
+                alignment: center;
+                ReaderRings {
+                    size: root.compact ? Theme.reader-line-icon : Theme.reader-icon;
+                    tone: root.accent;
+                    period: root.reader.mode == ReaderMode.reading ? Theme.reader-reading-period : Theme.reader-wave-period;
+                    still: root.reader.mode != ReaderMode.ready && root.reader.mode != ReaderMode.reading;
+                    crossed: root.unplugged;
+                }
+            }
+            ReaderLines {
+                horizontal-stretch: 1;
+                reader: root.reader;
+            }
+        }
+        if root.with-result: body := Rectangle {
+            height: root.body-height;
+            HorizontalLayout {
+                x: 0;
+                y: 0;
+                width: body.width;
+                height: root.has-buttons ? root.result-height : root.body-height;
+                animate height { duration: Theme.reader-shift-duration; }
+                if !root.shows-result: Text {
+                    text: root.message;
+                    color: Theme.reader-detail;
+                    font-size: Theme.text-label;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+                // Three lines (§ 8). Never cut (CLAUDE.md): a long line goes on to the next one,
+                // inside the result zone, which is kept for two lines of identity and of verdict.
+                if root.shows-result: VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: root.code;
+                        color: root.state == ReaderState.unknown ? Theme.reader-unknown : Theme.header-text;
+                        font-size: root.code-size;
+                        font-weight: Theme.weight-screen-title;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.identity;
+                        color: Theme.reader-detail;
+                        font-size: Theme.text-help;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.verdict;
+                        color: root.state == ReaderState.unknown ? Theme.reader-unknown : Theme.reader-ring;
+                        font-size: Theme.text-help;
+                        font-weight: Theme.weight-block-title;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            if root.with-buttons: HorizontalLayout {
+                x: 0;
+                y: root.result-height + Theme.space;
+                opacity: root.has-buttons ? 1 : 0;
+                animate opacity { duration: Theme.reader-shift-duration; }
+                width: body.width;
+                height: Theme.zone;
+                alignment: start;
+                spacing: Theme.space;
+                if root.primary-label != "": PrimaryButton {
+                    in-row: true;
+                    label: root.primary-label;
+                    clicked => { root.primary-clicked(); }
+                }
+                if root.secondary-label != "": SecondaryButton {
+                    label: root.secondary-label;
+                    clicked => { root.secondary-clicked(); }
+                }
+            }
+        }
+    }
+}
+
+// The compact reader, in the Direct bar and on the home page. Its size never changes with what
+// the reader does by itself (charte-ui, rule 16): no word comes and goes after its name.
+// Reading: fast waves and a green bar that moves along its foot (encart-lecture.md: « barre
+// verte qui avance »). Unplugged: red, the target crossed out. The words go to screen readers;
+// in the drawer, the full tiles say them. `label`: another fixed text (the phone drawer).
+export component BarReader inherits Rectangle {
+    in property <ReaderInfo> reader;
+    in property <string> label: root.reader.name;
+    in property <bool> show-pin: true;
+
+    property <bool> unplugged: root.reader.mode == ReaderMode.unplugged;
+    property <bool> reading: root.reader.mode == ReaderMode.reading;
+    property <float> run: Math.mod(animation-tick() / 1ms, Theme.reader-bar-period / 1ms) / (Theme.reader-bar-period / 1ms);
+
+    height: Theme.reader-compact-icon + Theme.space;
+    border-radius: Theme.reader-compact-radius;
+    clip: true;
+    background: root.unplugged ? Theme.reader-error-background : Theme.direct-pill;
+    border-width: Theme.reader-outline-width;
+    border-color: root.unplugged ? Theme.reader-error : Theme.reader-ring;
+    accessible-role: text;
+    accessible-label: root.reader.name + " : " + Readers.state-word(root.reader);
+    HorizontalLayout {
+        padding-left: Theme.space-small;
+        padding-right: Theme.button-margin;
+        spacing: Theme.space-small;
+        VerticalLayout {
+            alignment: center;
+            ReaderRings {
+                size: Theme.reader-compact-icon;
+                tone: root.unplugged ? Theme.reader-error : Theme.reader-ring;
+                period: root.reading ? Theme.reader-reading-period : Theme.reader-wave-period;
+                still: root.unplugged;
+                crossed: root.unplugged;
+            }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: Theme.header-text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        if root.show-pin && root.reader.pinned: VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.pin;
+                colorize: Theme.reader-detail;
+                width: Theme.reader-pin-icon;
+                height: Theme.reader-pin-icon;
+                accessible-role: image;
+                accessible-label: "Épinglé";
+            }
+        }
+    }
+    // Reading: the bar along its foot, inside the tile.
+    if root.reading: Rectangle {
+        x: 0;
+        y: parent.height - self.height;
+        width: parent.width * (Theme.reduced-motion ? 1 : root.run);
+        height: Theme.reader-bar-height;
+        background: Theme.reader-ring;
+    }
+}

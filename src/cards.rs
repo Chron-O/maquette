@@ -6,7 +6,8 @@ use crate::test_data::{CardPlace, CardState, Generated, Kind, Label, LoanCard};
 use crate::{App, CardAction, CardEntry, CardParkItem, CardRow, Cards, LiveFilter, OverdueCard, model};
 use slint::{ComponentHandle, SharedString};
 
-const FILTERS: [&str; 6] = ["Toutes", "En service", "À vérifier", "HS", "Perdues", "Prêtées"];
+// The states, then where a card is out (puces-pret-parc.md § 12): the same words as the band.
+const FILTERS: [&str; 7] = ["Toutes", "En service", "À vérifier", "HS", "Perdues", "Prêtées", "Non rendues"];
 
 // What the buttons of the detail do.
 const ACT_IN_SERVICE: i32 = 0;
@@ -23,6 +24,9 @@ pub struct CardsState {
     search: String,
     selected: Option<u32>,
     to_confirm: Option<CardState>,
+    last_read: Option<u32>,
+    unknown_read: Option<u32>,   // a card in none of the parks: the tile asks what to do
+    reads: u32,
 }
 
 fn state_label(state: CardState) -> Label {
@@ -53,7 +57,8 @@ fn matches_filter(card: &LoanCard, filter: usize) -> bool {
         2 => card.state == CardState::ToCheck,
         3 => card.state == CardState::Broken,
         4 => card.state == CardState::Lost,
-        5 => is_out(card),
+        5 => matches!(card.place, CardPlace::Lent { .. }),
+        6 => matches!(card.place, CardPlace::NotReturned { .. }),
         _ => true,
     }
 }
@@ -121,6 +126,22 @@ impl CardsState {
         self.to_confirm = None;
     }
 
+    // A card put on the reader: its detail opens and its row is selected (encart-lecture.md § 5).
+    // Every other read, the Démo panel puts an unknown card: the tile asks its question
+    // (encart-lecture.md § 5, § 9), and nothing else changes.
+    pub fn read(&mut self, data: &mut Generated) {
+        self.reads += 1;
+        if self.reads.is_multiple_of(2) {
+            self.unknown_read = Some(data.read_unknown_card());
+            return;
+        }
+        if let Some(number) = data.read_loan_card() {
+            self.open_card(data, number);
+            self.last_read = Some(number);
+            self.unknown_read = None;
+        }
+    }
+
     pub fn act(&mut self, data: &mut Generated, id: i32) {
         let Some(number) = self.selected else { return };
         match id {
@@ -152,14 +173,21 @@ impl CardsState {
             parks.iter().map(|p| LiveFilter { label: p.name.into(), tone: -1, detail: SharedString::new() }).collect(),
         ));
         page.set_active_park(self.park as i32);
-        page.set_filters(model(
-            FILTERS.iter().map(|f| LiveFilter { label: (*f).into(), tone: -1, detail: SharedString::new() }).collect(),
-        ));
         page.set_active_filter(self.filter as i32);
         page.set_search_text(self.search.as_str().into());
 
         let park = parks.get(self.park);
         let cards = park.map_or(&[][..], |p| &p.cards[..]);
+        // Each filter says how many cards of the park shown it keeps, as on the club Boîtiers page.
+        page.set_filters(model(
+            FILTERS.iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    let count = cards.iter().filter(|c| matches_filter(c, i)).count();
+                    LiveFilter { label: format!("{f} · {count}").into(), tone: -1, detail: SharedString::new() }
+                })
+                .collect(),
+        ));
         page.set_title(park.map_or("", |p| p.name).into());
         page.set_description(park.map_or("", |p| p.description).into());
         page.set_chips(model(park.map(|p| SharedString::from(p.description)).into_iter().collect()));
@@ -224,7 +252,31 @@ impl CardsState {
                 .collect(),
         ));
 
+        self.show_reading(&page, data);
         self.show_detail(&page, data);
+    }
+
+    // Three lines (encart-lecture.md § 8): the number, the card, its state and where it is.
+    fn show_reading(&self, page: &Cards, data: Option<&Generated>) {
+        page.set_read_unknown(self.unknown_read.is_some());
+        if let Some(number) = self.unknown_read {
+            page.set_has_reading(true);
+            page.set_read_code(number.to_string().into());
+            page.set_read_identity("Dans aucun parc du club".into());
+            page.set_read_verdict("Puce inconnue".into());
+            return;
+        }
+        let found = self.last_read.and_then(|number| {
+            let data = data?;
+            let card = data.card(number)?;
+            let park = data.card_parks.iter().find(|p| p.cards.iter().any(|c| c.number == number))?;
+            Some((card, park.name))
+        });
+        page.set_has_reading(found.is_some());
+        let Some((card, park)) = found else { return };
+        page.set_read_code(card.number.to_string().into());
+        page.set_read_identity(format!("{} · {park}", card.kind).into());
+        page.set_read_verdict(format!("{} · {}", state_label(card.state).word, place_text(&card.place).0).into());
     }
 
     fn show_detail(&self, page: &Cards, data: Option<&Generated>) {

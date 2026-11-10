@@ -5,10 +5,10 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { SecondaryButton } from "../components/buttons.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Home } from "home.slint";
-import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText } from "courses.slint";
 import { Cell, Title } from "participants.slint";
 import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
 import { DetailLine, DetailTitle } from "cards.slint";
@@ -40,8 +40,6 @@ export global RunnerBase {
     in property <int> active-filter;
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
-    in property <[string]> chips;
-    in property <string> origin;
     in property <string> title;
     in property <string> state;
     in property <string> empty;
@@ -50,7 +48,10 @@ export global RunnerBase {
     in property <string> search-text;
     in property <string> alert-title;
     in property <string> alert-count;
-    in property <[BaseIssue]> issues;
+    in property <[BaseIssue]> duplicates;
+    in property <string> duplicates-title;
+    in property <[BaseIssue]> shared-cards;
+    in property <string> shared-cards-title;
 
     in property <bool> detail-open;
     in property <string> detail-name;
@@ -375,7 +376,7 @@ export component BaseRunnerDetail inherits Rectangle {
         if RunnerBase.detail-has-licence: DetailLine { label: "Points CN"; value: RunnerBase.detail-points; }
         if !RunnerBase.detail-has-licence: HorizontalLayout {
             alignment: start;
-            StatusBadge { status: Home.status-of({ word: "Pas de licence", kind: to-check }); }
+            StatusBadge { status: Home.status-of({ word: RunnerBase.detail-licence-kind, kind: to-check }); }
         }
         if !RunnerBase.detail-has-licence: SmallText { text: "Fiche saisie à la main."; }
         if !RunnerBase.detail-has-licence: HorizontalLayout { alignment: start; SecondaryButton { label: "Chercher le licencié…"; } }
@@ -437,17 +438,12 @@ export component RunnerBasePage {
 
     VerticalLayout {
         spacing: Theme.button-margin;
+        // No settings here (the archive date is in the band): the line keeps only the alert,
+        // and its height, so that nothing moves when it comes.
         HorizontalLayout {
             vertical-stretch: 0;
-            spacing: Theme.space;
-            SummaryZone {
-                horizontal-stretch: root.layout-mode == LayoutMode.narrow ? 1 : 0;
-                title: "Réglages";
-                chips: RunnerBase.chips;
-                bubble: 19;
-                compact: root.layout-mode == LayoutMode.narrow;
-            }
-            if root.layout-mode != LayoutMode.narrow: Rectangle { horizontal-stretch: 1; }
+            height: Theme.zone;
+            Rectangle { horizontal-stretch: 1; }
             if RunnerBase.alert-title != "": AlertPill {
                 title: RunnerBase.alert-title;
                 count: RunnerBase.alert-count;
@@ -505,6 +501,39 @@ export component BaseRunnerOverlay {
 }
 
 // One line per point to check, each with its button.
+component IssueLine {
+    in property <BaseIssue> issue;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            BubbleLabel { text: root.issue.label; }
+            SmallText { text: root.issue.detail; }
+        }
+        VerticalLayout {
+            alignment: center;
+            // A look, not the screen's action: secondary (one orange button per screen).
+            SecondaryButton {
+                label: "Voir";
+                clicked => {
+                    Courses.open-bubble = 0;
+                    RunnerBase.open-runner(root.issue.id);
+                }
+            }
+        }
+    }
+}
+
+component IssueGroupTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    wrap: word-wrap;
+}
+
+// The two checks of coureurs-clubs.md § 7, each under its own title.
 component IssuesContent {
     VerticalLayout {
         padding: Theme.space-medium;
@@ -516,35 +545,12 @@ component IssuesContent {
             font-weight: Theme.weight-screen-title;
             wrap: word-wrap;
         }
-        for issue in RunnerBase.issues: HorizontalLayout {
-            spacing: Theme.space;
-            VerticalLayout {
-                horizontal-stretch: 1;
-                alignment: center;
-                BubbleLabel { text: issue.label; }
-                SmallText { text: issue.detail; }
-            }
-            VerticalLayout {
-                alignment: center;
-                PrimaryButton {
-                    label: "Voir";
-                    in-row: true;
-                    clicked => {
-                        Courses.open-bubble = 0;
-                        RunnerBase.open-runner(issue.id);
-                    }
-                }
-            }
-        }
-    }
-}
-
-component OriginContent {
-    VerticalLayout {
-        padding: Theme.space-medium;
-        spacing: Theme.space-small;
-        SmallText { text: "Origine de la base"; }
-        BubbleLabel { text: RunnerBase.origin; }
+        if RunnerBase.duplicates.length > 0: IssueGroupTitle { text: RunnerBase.duplicates-title; }
+        for issue in RunnerBase.duplicates: IssueLine { issue: issue; }
+        if RunnerBase.duplicates.length > 0 && RunnerBase.shared-cards.length > 0: RowLine { }
+        if RunnerBase.shared-cards.length > 0: IssueGroupTitle { text: RunnerBase.shared-cards-title; }
+        for issue in RunnerBase.shared-cards: IssueLine { issue: issue; }
+        SmallText { text: "Rien n'est changé sans votre accord"; }
     }
 }
 
@@ -555,7 +561,6 @@ export component RunnerBaseBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        if Courses.open-bubble == 19: OriginContent { }
         if Courses.open-bubble == 20: IssuesContent { }
     }
 }

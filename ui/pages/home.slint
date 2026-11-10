@@ -7,8 +7,9 @@ import { Icons } from "../components/icons.slint";
 import { Card } from "../components/card.slint";
 import { Indicator } from "../components/indicator.slint";
 import { LiveDot } from "../components/dot.slint";
+import { BarReader, Readers } from "../components/reader-tile.slint";
 import { PrimaryButton, SecondaryButton, QuietButton } from "../components/buttons.slint";
-import { Status, Statuses, StatusBadge } from "../components/status.slint";
+import { Status, Statuses, StatusBadge, StatusBlock } from "../components/status.slint";
 
 export enum BadgeKind { none, valid, racing, to-check, inactive, ok, pm, unknown }
 
@@ -36,6 +37,17 @@ export struct Reading {
     clock: string,
 }
 
+// The last reading, while it is live (prototype: homeLive).
+export struct HomeLast {
+    live: bool,
+    badge: Badge,
+    name: string,
+    category: string,
+    time: string,
+    place: string,
+    left: float,    // what is left of its live time, 1 down to 0
+}
+
 export struct EventRow {
     id: int,
     day: string,
@@ -58,6 +70,8 @@ export struct IndicatorItem {
     icon: image,
     long-text: string,
     short-text: string,
+    long-reserve: string,   // the longest text this indicator may show
+    short-reserve: string,
     has-dot: bool,
     attention: bool,
 }
@@ -65,9 +79,9 @@ export struct IndicatorItem {
 export global Home {
     in property <bool> has-current-event;
     in property <CurrentEvent> current-event;
-    in property <[string]> readers;
     in property <string> to-handle;
-    in property <[Reading]> readings;
+    in property <HomeLast> last;
+    in property <[Reading]> readings;   // before the last one, newest first
     in property <[EventRow]> upcoming;
     in property <[EventRow]> past;
     in property <[ClubCard]> club;
@@ -101,12 +115,15 @@ export component HomeIndicators {
 
     HorizontalLayout {
         alignment: root.layout-mode == LayoutMode.narrow ? start : end;
-        spacing: Theme.space;
+        spacing: root.layout-mode == LayoutMode.narrow ? Theme.indicator-compact-gap : Theme.space;
         for item in Home.indicators: VerticalLayout {
             alignment: center;
             Indicator {
                 icon: item.icon;
-                text: root.layout-mode == LayoutMode.wide ? item.long-text : item.short-text;
+                text: item.short-text;
+                reserve: item.short-reserve;
+                sentence: item.long-text;
+                compact: root.layout-mode == LayoutMode.narrow;
                 has-dot: item.has-dot;
                 attention: item.attention;
             }
@@ -190,26 +207,50 @@ component CurrentEventCard inherits Rectangle {
     }
 }
 
-component ToHandleButton {
+// What waits to be handled, drawn like the alert of a page (AlertPill): outlined in red,
+// with its warning icon.
+export component ToHandleButton {
+    callback clicked();
     in property <string> label;
+    // Its bubble is open: white, joined to it by a square side (`joined-down`: under it).
+    in property <bool> joined;
+    in property <bool> joined-down: true;
+    // Where the drawn pill is, inside the touch zone: the bubble is joined to the pill.
+    out property <length> pill-y: (root.height - root.pill-height) / 2;
+    out property <length> pill-height: Theme.badge-height + Theme.space;
 
     min-height: Theme.zone;
+    accessible-role: button;
+    accessible-label: root.label;
     HorizontalLayout {
         alignment: end;
         VerticalLayout {
             alignment: center;
             Rectangle {
-                height: Theme.badge-height + Theme.space;
-                border-radius: self.height / 2;
-                background: Theme.to-handle-background;
+                height: root.pill-height;
+                border-top-left-radius: root.joined && !root.joined-down ? 0px : self.height / 2;
+                border-top-right-radius: self.border-top-left-radius;
+                border-bottom-left-radius: root.joined && root.joined-down ? 0px : self.height / 2;
+                border-bottom-right-radius: self.border-bottom-left-radius;
+                background: !root.joined && zone.has-hover ? Theme.tab-hover : Theme.card;
                 border-width: Theme.attention-outline;
                 border-color: Theme.to-handle-outline;
                 HorizontalLayout {
                     padding-left: Theme.button-margin;
                     padding-right: Theme.button-margin;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        alignment: center;
+                        Image {
+                            source: Icons.triangle-alert;
+                            colorize: Theme.problem.badge-text;
+                            width: Theme.badge-icon;
+                            height: Theme.badge-icon;
+                        }
+                    }
                     Text {
                         text: root.label;
-                        color: Theme.to-handle-text;
+                        color: Theme.text;
                         font-size: Theme.text-help;
                         font-weight: Theme.weight-screen-title;
                         vertical-alignment: center;
@@ -218,14 +259,21 @@ component ToHandleButton {
             }
         }
     }
-    TouchArea {
+    zone := TouchArea {
         mouse-cursor: pointer;
-        clicked => { Navigation.open-direct(); }
+        clicked => { root.clicked(); }
     }
 }
 
 component DirectBlock inherits Rectangle {
     in property <length> tucked: 0px;   // the width hidden under the event card
+    // The small rows: 3 on a phone. Beside the event card (`fill`), the block has the card's
+    // height and shows the rows that fit whole, never more (prototype: overflow hidden).
+    in property <int> rows-shown: 3;
+    in property <bool> fill: false;
+
+    // A reading: its line, then its row, as high as a badge.
+    property <length> reading-height: Theme.thin-outline-width + Theme.space + Theme.badge-height + Theme.space;
 
     background: Theme.direct-background;
     border-radius: Theme.card-radius;
@@ -233,13 +281,16 @@ component DirectBlock inherits Rectangle {
     border-color: Theme.card-outline;
     drop-shadow-blur: Theme.demo-shadow;
     drop-shadow-color: Theme.card-shadow;
+    clip: root.fill;
 
     VerticalLayout {
         padding: Theme.direct-padding;
         padding-left: Theme.direct-padding + root.tucked;
         spacing: Theme.space;
-        alignment: start;
+        // The title row keeps the button's height, there or not: the block never changes size.
         HorizontalLayout {
+            vertical-stretch: 0;
+            min-height: Theme.zone;
             spacing: Theme.space;
             VerticalLayout {
                 alignment: center;
@@ -256,76 +307,139 @@ component DirectBlock inherits Rectangle {
                 font-weight: Theme.weight-block-title;
                 vertical-alignment: center;
             }
-            if Home.to-handle != "": ToHandleButton { label: Home.to-handle; }
+            if Home.to-handle != "": ToHandleButton {
+                label: Home.to-handle;
+                clicked => { Navigation.open-direct(); }
+            }
         }
         HorizontalLayout {
+            vertical-stretch: 0;
             alignment: start;
             spacing: Theme.space;
-            for reader in Home.readers: Rectangle {
-                height: Theme.badge-height + Theme.space-small;
-                border-radius: self.height / 2;
-                background: Theme.direct-pill;
+            for reader in Readers.finish: BarReader { reader: reader; }
+        }
+        // The last reading in big while it is live, in a room of fixed height.
+        Rectangle {
+            vertical-stretch: 0;
+            height: Theme.home-last-height;
+            if !Home.last.live: Text {
+                x: 0;
+                y: Theme.space;
+                width: parent.width;
+                text: "En attente de la prochaine lecture";
+                color: Theme.header-secondary;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+            if Home.last.live: VerticalLayout {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: parent.height;
+                alignment: center;
+                spacing: Theme.space;
                 HorizontalLayout {
-                    padding-left: Theme.space;
-                    padding-right: Theme.button-margin;
-                    spacing: Theme.space;
+                    spacing: Theme.button-margin;
                     VerticalLayout {
                         alignment: center;
-                        Rectangle {
-                            width: Theme.indicator-dot;
-                            height: Theme.indicator-dot;
-                            border-radius: self.width / 2;
-                            background: Theme.live;
+                        StatusBlock { status: Home.status-of(Home.last.badge); }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: Home.last.name;
+                            color: Theme.header-text;
+                            font-size: Theme.home-last-name-size;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Theme.space-small;
+                            Text {
+                                text: Home.last.category + " ·";
+                                color: Theme.header-secondary;
+                                font-size: Theme.text-help;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: Home.last.time;
+                                color: Theme.header-text;
+                                font-size: Theme.home-last-name-size;
+                                font-weight: Theme.weight-screen-title;
+                                vertical-alignment: center;
+                            }
+                            if Home.last.place != "" && Home.last.place != "—": Text {
+                                text: "· " + Home.last.place;
+                                color: Theme.header-secondary;
+                                font-size: Theme.text-help;
+                                vertical-alignment: center;
+                            }
                         }
                     }
-                    Text {
-                        text: reader;
-                        color: Theme.header-text;
-                        font-size: Theme.text-help;
-                        font-weight: Theme.weight-block-title;
-                        vertical-alignment: center;
+                }
+                // What is left of its live time (prototype: .x-drain).
+                Rectangle {
+                    height: Theme.live-drain-height;
+                    border-radius: self.height / 2;
+                    background: Theme.live-drain-track;
+                    Rectangle {
+                        x: 0;
+                        width: parent.width * max(0, min(1, Home.last.left));
+                        animate width { duration: Theme.live-drain-step; easing: linear; }
+                        border-radius: parent.border-radius;
+                        background: Theme.live;
                     }
                 }
             }
         }
-        if Home.readings.length == 0: Text {
-            text: "En attente de la prochaine lecture";
-            color: Theme.header-secondary;
-            font-size: Theme.text-help;
-            wrap: word-wrap;
-        }
-        for reading in Home.readings: VerticalLayout {
-            spacing: Theme.space;
-            Rectangle {
-                height: Theme.thin-outline-width;
-                background: Theme.direct-separator;
-            }
-            HorizontalLayout {
-                spacing: Theme.space;
-                VerticalLayout {
-                    alignment: center;
-                    StatusBadge { status: Home.status-of(reading.badge); }
-                }
-                Text {
-                    horizontal-stretch: 1;
-                    text: reading.name;
-                    color: Theme.header-text;
-                    font-size: Theme.text-help;
-                    font-weight: Theme.weight-screen-title;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                }
-                Text {
-                    text: reading.time;
-                    color: Theme.header-text;
-                    font-size: Theme.text-help;
-                    vertical-alignment: center;
-                }
-                Text {
-                    text: reading.clock;
-                    color: Theme.header-secondary;
-                    font-size: Theme.text-help;
-                    vertical-alignment: center;
+        // The readings keep the room of all the rows shown, there or not.
+        rows := Rectangle {
+            property <int> fitting: root.fill ? floor(self.height / root.reading-height) : root.rows-shown;
+            min-height: root.fill ? 0px : root.rows-shown * root.reading-height;
+            max-height: root.fill ? Theme.unbounded : root.rows-shown * root.reading-height;
+            vertical-stretch: 1;
+            VerticalLayout {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                alignment: start;
+                for reading[i] in Home.readings: VerticalLayout {
+                    visible: i < rows.fitting;
+                    height: i < rows.fitting ? root.reading-height : 0px;
+                    spacing: Theme.space;
+                    Rectangle {
+                        height: Theme.thin-outline-width;
+                        background: Theme.direct-separator;
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            alignment: center;
+                            StatusBadge { status: Home.status-of(reading.badge); }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: reading.name;
+                            color: Theme.header-text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: reading.time;
+                            color: Theme.header-text;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: reading.clock;
+                            color: Theme.header-secondary;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
         }
@@ -350,6 +464,7 @@ component Hero {
                 image-fit: cover;
             }
             DirectBlock {
+                fill: true;
                 tucked: Theme.direct-tuck;
                 x: root.left + Theme.hero-card-width - Theme.direct-tuck;
                 y: (parent.height - self.height) / 2;
@@ -387,7 +502,7 @@ component Hero {
             HorizontalLayout {
                 padding-left: Theme.narrow-margin;
                 padding-right: Theme.narrow-margin;
-                DirectBlock { }
+                DirectBlock { rows-shown: root.available-width < Theme.medium-threshold ? 3 : 2; }
             }
         }
     }
@@ -415,6 +530,8 @@ component TimelineRow inherits Rectangle {
 
     border-radius: Theme.field-radius;
     background: zone.has-hover ? Theme.row-hover : transparent;
+    border-width: zone.has-hover ? Theme.thin-outline-width : 0px;
+    border-color: Theme.row-hover-outline;
     animate background { duration: Theme.tint-duration; }
 
     zone := TouchArea {

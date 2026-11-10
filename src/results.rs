@@ -3,7 +3,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, format_time};
-use crate::{App, LiveFilter, ResultRow, Results, TabItem, model};
+use crate::{App, LiveFilter, ResultRow, Results, model};
 use slint::{ComponentHandle, SharedString};
 use std::collections::BTreeMap;
 
@@ -19,15 +19,15 @@ pub struct ResultsState {
 }
 
 // One ranking: its name, its color, and the runs it holds.
+fn place_text(place: usize) -> String {
+    if place == 1 { "1er".into() } else { format!("{place}e") }
+}
+
 struct Ranking {
     label: String,
     tone: i32,
     title: String,
     entries: Vec<(usize, usize)>,   // runner, run
-}
-
-fn place_text(place: usize) -> String {
-    if place == 1 { "1er".into() } else { format!("{place}e") }
 }
 
 fn rankings(event: &Event, by_course: bool) -> Vec<Ranking> {
@@ -103,7 +103,7 @@ impl ResultsState {
         let Some(event) = event else { return };
         let all = rankings(event, self.by_course);
 
-        page.set_modes(model(MODES.iter().map(|m| TabItem { label: (*m).into(), icon: Default::default() }).collect()));
+        page.set_modes(model(MODES.iter().map(|m| (*m).into()).collect()));
         page.set_active_mode(self.by_course as i32);
         page.set_ranking_search_text(self.ranking_search.as_str().into());
         page.set_search_text(self.search.as_str().into());
@@ -116,10 +116,10 @@ impl ResultsState {
         }
         page.set_chips(model(chips));
         let arrived = format!("{back} arrivé{}", if back > 1 { "s" } else { "" });
+        // The band of the prototype: no count of rankings; on a phone, without the withdrawals.
+        // The generator makes no withdrawal yet: there is none to count.
         page.set_summary_short(format!("{arrived} · {racing} en course").into());
-        page.set_summary(
-            format!("{} classement{} · {arrived} · {racing} en course", all.len(), if all.len() > 1 { "s" } else { "" }).into(),
-        );
+        page.set_summary(format!("{arrived} · {racing} en course · 0 abandon").into());
 
         let arrived_count = |ranking: &Ranking| {
             ranking.entries.iter().filter(|(i, n)| event.runners[*i].runs[*n].result.is_some()).count()
@@ -194,7 +194,8 @@ impl ResultsState {
             }
             rows.push(ResultRow {
                 runner: index as i32,
-                place: if valid { place_text(position + 1).into() } else { SharedString::new() },
+                place: if valid { (position + 1).to_string().into() } else { SharedString::new() },
+                place_note: if valid { place_text(position + 1).into() } else { SharedString::new() },
                 family: runner.family.into(),
                 first: runner.first.into(),
                 club: runner.club.into(),

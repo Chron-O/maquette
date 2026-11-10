@@ -2,11 +2,10 @@
 // Settling a reading works on the test data only.
 
 use crate::home::badge;
-use crate::test_data::{Event, Format, Issue, Reading, Runner, format_clock, format_clock_seconds, format_time, missed_control};
-use crate::{App, Live, LiveCandidate, LiveCount, LiveFilter, LiveLast, LiveListRow, LiveProblem, LiveRow, LiveSplit, LiveStop, model};
+use crate::test_data::{Event, FINISH_READERS, Format, Issue, LIVE_SECONDS, Reader, Reading, Runner, format_clock, format_clock_seconds, format_time, missed_control};
+use crate::{App, Live, LiveCandidate, LiveCount, LiveFilter, LiveLast, LiveListRow, LiveProblem, LiveRow, LiveSplit, LiveStop, LiveSummary, model};
 use slint::{ComponentHandle, SharedString};
 
-const ALERT_BUBBLE: i32 = 13;
 const COUNTS: [&str; 5] = ["inscrits", "arrivés", "en course", "PM", "non partis"];
 const LIST_TITLES: [&str; 5] = ["Inscrits", "Arrivés", "En course", "PM", "Non partis"];
 
@@ -24,6 +23,7 @@ pub struct LiveState {
     list: Option<usize>,
     selected: Option<Selected>,
     by_course: bool,    // how the Résultats rank: the same places everywhere
+    to_handle_only: bool,
 }
 
 fn place_text(place: usize) -> String {
@@ -56,6 +56,11 @@ fn settled(reading: &Reading) -> String {
     reading.settled_at.map_or(String::new(), |at| format!("réglée à {}", format_clock(at)))
 }
 
+// How long ago the last reading was read, while it is live.
+fn age(seconds: u32) -> String {
+    if seconds < 2 { "à l'instant".into() } else { format!("il y a {seconds} s") }
+}
+
 fn crossed(reading: &Reading) -> bool {
     !reading.valid && reading.runner.is_some() && !reading.to_handle()
 }
@@ -63,6 +68,56 @@ fn crossed(reading: &Reading) -> bool {
 // When each control was punched, spread evenly along the time: the generator keeps no punches.
 fn stop_time(seconds: u32, stop: usize, stops: usize) -> u32 {
     seconds * (stop as u32 + 1) / (stops as u32 + 1)
+}
+
+// The last reading is live for a short while after it was read (prototype: lastLive).
+pub fn last_reading(event: &Event, readers: &[Reader], clock: u32, by_course: bool) -> LiveLast {
+    let Some(index) = event.readings.len().checked_sub(1) else { return LiveLast::default() };
+    let reading = &event.readings[index];
+    let since = clock.saturating_sub(reading.at);
+    if since >= LIVE_SECONDS {
+        return LiveLast::default();
+    }
+    let (time, place) = time_and_place(event, reading, by_course);
+    let course = &event.courses[reading.course];
+    let ordered = course.format == Format::Imposed;
+    let missed = (!reading.valid).then(|| missed_control(reading.seconds, course.controls.len()));
+    let known = reading.runner.is_some();
+    LiveLast {
+        live: true,
+        index: index as i32,
+        badge: badge(&event.reading_label(reading)),
+        name: event.reading_name(reading).into(),
+        club: reading.runner.map_or(SharedString::new(), |i| event.runners[i].club.into()),
+        category: category(event, reading).into(),
+        tone: reading.runner.map_or(-1, |_| reading.course as i32),
+        time: time.into(),
+        place: place.into(),
+        age: age(since).into(),
+        // What is left of its live time, emptied by the drain bar.
+        left: 1.0 - since as f32 / LIVE_SECONDS as f32,
+        reader: readers.get(reading.reader).map_or(SharedString::new(), |r| r.name.as_str().into()),
+        crossed: crossed(reading),
+        stops: model(
+            course
+                .controls
+                .iter()
+                .enumerate()
+                .map(|(n, code)| LiveStop {
+                    rank: if ordered { (n + 1).to_string().into() } else { SharedString::new() },
+                    code: code.to_string().into(),
+                    time: if !known {
+                        SharedString::new()
+                    } else if missed == Some(n) {
+                        "manque".into()
+                    } else {
+                        format_time(stop_time(reading.seconds, n, course.controls.len())).into()
+                    },
+                    missed: missed == Some(n),
+                })
+                .collect(),
+        ),
+    }
 }
 
 impl LiveState {
@@ -102,6 +157,20 @@ impl LiveState {
         self.selected = None;
     }
 
+    // The drawer goes down: its detail and its « à traiter » filter go with it.
+    pub fn leave(&mut self) {
+        self.selected = None;
+        self.to_handle_only = false;
+    }
+
+    pub fn show_to_handle(&mut self) {
+        self.to_handle_only = true;
+    }
+
+    pub fn toggle_to_handle(&mut self) {
+        self.to_handle_only = !self.to_handle_only;
+    }
+
     pub fn toggle_list(&mut self, list: usize) {
         self.list = if self.list == Some(list) { None } else { Some(list) };
     }
@@ -124,16 +193,13 @@ impl LiveState {
         }
     }
 
-    fn filtering(&self) -> bool {
-        self.course != 0 || self.reader != 0 || !self.search.is_empty()
-    }
-
     fn matches(&self, event: &Event, reading: &Reading) -> bool {
         let club = reading.runner.map_or("", |i| event.runners[i].club);
         let text = format!("{} {club} {} {}", event.reading_name(reading), reading.card, category(event, reading)).to_lowercase();
         (self.course == 0 || reading.course + 1 == self.course)
             && (self.reader == 0 || reading.reader + 1 == self.reader)
             && self.search.split_whitespace().all(|word| text.contains(word))
+            && (!self.to_handle_only || reading.to_handle())
     }
 
     fn row(&self, event: &Event, index: usize) -> LiveRow {
@@ -160,47 +226,8 @@ impl LiveState {
         }
     }
 
-    fn last(&self, event: &Event, readers: &[String]) -> LiveLast {
-        let Some(index) = event.readings.len().checked_sub(1) else { return LiveLast::default() };
-        let reading = &event.readings[index];
-        let (time, place) = time_and_place(event, reading, self.by_course);
-        let club = reading.runner.map_or(String::new(), |i| event.runners[i].club.to_string());
-        let course = &event.courses[reading.course];
-        let missed = (!reading.valid).then(|| missed_control(reading.seconds, course.controls.len()));
-        let known = reading.runner.is_some();
-        LiveLast {
-            has_reading: true,
-            index: index as i32,
-            badge: badge(&event.reading_label(reading)),
-            name: event.reading_name(reading).into(),
-            club: club.into(),
-            category: category(event, reading).into(),
-            tone: reading.runner.map_or(-1, |_| reading.course as i32),
-            time: time.into(),
-            place: place.into(),
-            clock: format_clock_seconds(reading.at).into(),
-            reader: readers.get(reading.reader).map_or(SharedString::new(), |r| r.as_str().into()),
-            action: action(reading).into(),
-            crossed: crossed(reading),
-            stops: model(
-                course
-                    .controls
-                    .iter()
-                    .enumerate()
-                    .map(|(n, code)| LiveStop {
-                        code: code.to_string().into(),
-                        time: if !known {
-                            SharedString::new()
-                        } else if missed == Some(n) {
-                            "manque".into()
-                        } else {
-                            format_time(stop_time(reading.seconds, n, course.controls.len())).into()
-                        },
-                        missed: missed == Some(n),
-                    })
-                    .collect(),
-            ),
-        }
+    fn last(&self, event: &Event, readers: &[Reader], clock: u32) -> LiveLast {
+        last_reading(event, readers, clock, self.by_course)
     }
 
     fn lists(&self, event: &Event, list: usize, clock: u32) -> Vec<LiveListRow> {
@@ -286,6 +313,9 @@ impl LiveState {
         page.set_detail_place(place.as_str().into());
         page.set_detail_crossed(reading.is_some_and(crossed));
         page.set_detail_settled(reading.map_or(String::new(), settled).as_str().into());
+        page.set_detail_has_runner(runner.is_some());
+        // No ticket for a reading still to settle (lecture-a-regler.md § 4).
+        page.set_detail_can_print(reading.is_some_and(|r| r.runner.is_some() && !r.to_handle()));
 
         // What the reading asks for, in a band of its own.
         let issue = reading.filter(|r| r.to_handle()).and_then(|r| r.issue);
@@ -335,43 +365,52 @@ impl LiveState {
         let missed = reading.filter(|r| !r.valid && has_times).map(|r| missed_control(r.seconds, course.controls.len()));
         let count = course.controls.len();
         let ordered = course.format == Format::Imposed;
+        let start = runner.map(|r| r.start);
+        // The time of day of a punch: the start, plus the time since.
+        let clock_at = |at: u32| start.filter(|_| has_times).map_or("—".into(), |start| format_clock(start + at).into());
         let mut previous = 0;
-        page.set_splits(model(
-            course
-                .controls
-                .iter()
-                .enumerate()
-                .map(|(n, code)| {
-                    let at = stop_time(seconds, n, count);
-                    let is_missed = missed == Some(n);
-                    let split = LiveSplit {
-                        rank: if ordered { (n + 1).to_string().into() } else { SharedString::new() },
-                        code: code.to_string().into(),
-                        leg: if has_times && !is_missed { format_time(at - previous).into() } else { "—".into() },
-                        total: if is_missed { "manque".into() } else if has_times { format_time(at).into() } else { "—".into() },
-                        missed: is_missed,
-                    };
-                    if !is_missed {
-                        previous = at;
-                    }
-                    split
-                })
-                .collect(),
-        ));
+        let mut splits: Vec<LiveSplit> = course
+            .controls
+            .iter()
+            .enumerate()
+            .map(|(n, code)| {
+                let at = stop_time(seconds, n, count);
+                let is_missed = missed == Some(n);
+                let split = LiveSplit {
+                    rank: if ordered { (n + 1).to_string().into() } else { SharedString::new() },
+                    code: code.to_string().into(),
+                    clock: if is_missed { "—".into() } else { clock_at(at) },
+                    leg: if has_times && !is_missed { format_time(at - previous).into() } else { "—".into() },
+                    total: if is_missed { "manque".into() } else if has_times { format_time(at).into() } else { "—".into() },
+                    missed: is_missed,
+                    finish: false,
+                };
+                if !is_missed {
+                    previous = at;
+                }
+                split
+            })
+            .collect();
+        // The finish: its leg from the last control, its total the run time.
+        if has_times {
+            splits.push(LiveSplit {
+                rank: SharedString::new(),
+                code: "Arrivée".into(),
+                clock: clock_at(seconds),
+                leg: format_time(seconds - previous).into(),
+                total: format_time(seconds).into(),
+                missed: false,
+                finish: true,
+            });
+        }
+        page.set_splits(model(splits));
     }
 
-    pub fn show(&self, window: &App, event: Option<&Event>, readers: &[String], clock: u32) {
+    pub fn show(&self, window: &App, event: Option<&Event>, readers: &[Reader], clock: u32) {
         let page = window.global::<Live>();
         let Some(event) = event else { return };
         let runners = &event.runners;
-
-        page.set_readers(model(
-            readers
-                .iter()
-                .enumerate()
-                .map(|(i, name)| LiveFilter { label: name.as_str().into(), tone: -1, detail: format!("{name} · n° {}", event.station + i as u32 + 1).into() })
-                .collect(),
-        ));
+        let readers = &readers[..readers.len().min(FINISH_READERS)];
         let mut course_filters = vec![LiveFilter { label: "Tous".into(), tone: -1, detail: SharedString::new() }];
         course_filters.extend(event.courses.iter().enumerate().map(|(i, c)| LiveFilter {
             label: c.name.replace("Circuit ", "").into(),
@@ -381,7 +420,7 @@ impl LiveState {
         page.set_course_filters(model(course_filters));
         page.set_active_course(self.course as i32);
         let mut reader_filters = vec![LiveFilter { label: format!("{} lecteurs", readers.len()).into(), tone: -1, detail: SharedString::new() }];
-        reader_filters.extend(readers.iter().map(|name| LiveFilter { label: name.as_str().into(), tone: -1, detail: SharedString::new() }));
+        reader_filters.extend(readers.iter().map(|reader| LiveFilter { label: reader.name.as_str().into(), tone: -1, detail: SharedString::new() }));
         page.set_reader_filters(model(reader_filters));
         page.set_active_reader(self.reader as i32);
         page.set_search_text(self.search.as_str().into());
@@ -398,8 +437,14 @@ impl LiveState {
         page.set_list_title(self.list.map_or("", |l| LIST_TITLES[l]).into());
         page.set_list_rows(model(self.list.map_or(Vec::new(), |list| self.lists(event, list, clock))));
 
-        let closing = if racing > 0 { format!(" · fermeture {}", format_clock(event.closing)) } else { String::new() };
-        page.set_summary(format!("{racing} en course · {back} arrivé{}{closing}", if back > 1 { "s" } else { "" }).into());
+        // The figures in bold, the words around them (prototype: drBar).
+        let closing = if racing > 0 { format!("fermeture {}", format_clock(event.closing)) } else { String::new() };
+        page.set_summary(LiveSummary {
+            racing: racing.to_string().into(),
+            back: back.to_string().into(),
+            back_word: if back > 1 { "arrivés" } else { "arrivé" }.into(),
+            closing: closing.into(),
+        });
 
         let to_handle = event.to_handle();
         page.set_alert_count(to_handle.to_string().into());
@@ -420,8 +465,8 @@ impl LiveState {
                 .collect(),
         ));
 
-        page.set_filtering(self.filtering());
-        page.set_last(self.last(event, readers));
+        page.set_to_handle_only(self.to_handle_only);
+        page.set_last(self.last(event, readers, clock));
         page.set_rows(model(
             (0..event.readings.len())
                 .rev()
@@ -431,6 +476,4 @@ impl LiveState {
         ));
         self.show_detail(&page, event);
     }
-
-    pub const ALERT_BUBBLE: i32 = ALERT_BUBBLE;
 }

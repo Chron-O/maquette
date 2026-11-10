@@ -7,27 +7,29 @@ import { HeaderButton } from "components/header-button.slint";
 import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
 import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
+import { Readers, ReaderInfo, ReaderMode } from "components/reader-tile.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
 import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue } from "pages/runner-base.slint";
 import { ClubStations, ClubStationsPage, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
 import { Cards, CardsPage, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
 import { Results, ResultsPage, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
-import { Live, LivePage, LiveOverlay, LiveBubble, LiveRow, LiveStop, LiveLast, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
-import { Stations, StationsPage, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem } from "pages/stations.slint";
-import { Starts, StartsPage, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
+import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
+import { Stations, StationsPage, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
+import { Starts, StartsPage, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
 import { Participants, ParticipantsPage, ParticipantOverlay, ParticipantsBubble, ParticipantRow, ParticipantFilter, Passage } from "pages/participants.slint";
-import { Courses, BubbleOverlay, PageBand, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem } from "pages/courses.slint";
-import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem } from "pages/home.slint";
+import { Courses, BubbleOverlay, PageBand, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
+import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
 export { RunnerBase, BaseRunnerRow, BaseIssue }
 export { ClubStations, ClubStationRow, BatteryDueItem }
 export { Cards, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard }
 export { Results, ResultRanking, ResultRow }
-export { Live, LiveRow, LiveStop, LiveLast, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
-export { Stations, StationRow, CourseMark, StationProblem }
-export { Starts, StartRow, StartSection, StartGroup, StartPoint, FriseCell, FriseRow, ChangedStart }
+export { Live, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
+export { Stations, StationRow, CourseMark, StationProblem, UsefulStation }
+export { Starts, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
 export { Participants, ParticipantRow, ParticipantFilter, Passage }
-export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem }
-export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem }
+export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
+export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
+export { Readers, ReaderInfo, ReaderMode }
 
 component Header inherits Rectangle {
     in property <LayoutMode> layout-mode;
@@ -63,15 +65,24 @@ component Header inherits Rectangle {
                     horizontal-alignment: left;
                 }
             }
-            if !Navigation.home: Text {
+            if !Navigation.home: VerticalLayout {
                 horizontal-stretch: 1;
                 min-height: Theme.zone;
-                text: Navigation.header-title;
-                color: Theme.header-text;
-                font-size: Theme.text-screen-title;
-                font-weight: Theme.weight-screen-title;
-                vertical-alignment: center;
-                wrap: word-wrap;
+                alignment: center;
+                // An event: its date and place above its name (prototype: header).
+                if Navigation.header-detail != "" && root.layout-mode != LayoutMode.narrow: Text {
+                    text: Navigation.header-detail;
+                    color: Theme.header-secondary;
+                    font-size: Theme.text-help;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: Navigation.header-title;
+                    color: Theme.header-text;
+                    font-size: Theme.text-screen-title;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
             }
             if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.narrow: HomeIndicators {
                 horizontal-stretch: 1;
@@ -94,15 +105,14 @@ component Page {
     property <bool> on-participants: Navigation.in-event && Navigation.active-tab == 1;
     property <bool> on-starts: Navigation.in-event && Navigation.active-tab == 2;
     property <bool> on-stations: Navigation.in-event && Navigation.active-tab == 3;
-    property <bool> on-live: Navigation.in-event && Navigation.active-tab == 4;
-    property <bool> on-results: Navigation.in-event && Navigation.active-tab == 5;
+    property <bool> on-results: Navigation.in-event && Navigation.active-tab == 4;
     property <bool> on-cards: Navigation.cards-page;
     property <bool> on-club-stations: Navigation.stations-page;
     property <bool> on-runner-base: Navigation.runners-page;
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
 
     // These tabs keep their column and their titles in place: only the content scrolls.
-    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) && !root.narrow: VerticalLayout {
+    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) && !root.narrow: VerticalLayout {
         x: 0;
         y: 0;
         width: root.width;
@@ -127,10 +137,6 @@ component Page {
             layout-mode: root.layout-mode;
             available-width: root.width - root.left-margin - root.right-margin;
         }
-        if root.on-live: LivePage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
         if root.on-results: ResultsPage {
             layout-mode: root.layout-mode;
             available-width: root.width - root.left-margin - root.right-margin;
@@ -148,7 +154,7 @@ component Page {
             available-width: root.width - root.left-margin - root.right-margin;
         }
     }
-    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-live || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) || root.narrow: scroller := Flickable {
+    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) || root.narrow: scroller := Flickable {
         x: 0;
         y: 0;
         width: root.width;
@@ -216,15 +222,6 @@ component Page {
                 padding-left: root.left-margin;
                 padding-right: root.right-margin;
                 ResultsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-live: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                LivePage {
                     layout-mode: root.layout-mode;
                     available-width: scroller.width - root.left-margin - root.right-margin;
                 }
@@ -298,6 +295,17 @@ component DemoPanel {
             label: "Lire un boîtier";
             clicked => { Demo.read-station(); }
         }
+        if Navigation.in-event: DemoLabel { text: "Lecteur"; }
+        if Navigation.in-event: SecondaryButton {
+            label: Readers.finish.length > 0 && Readers.finish[0].mode == ReaderMode.unplugged
+                ? "Rebrancher Arrivée 1" : "Débrancher Arrivée 1";
+            clicked => { Demo.toggle-unplugged(); }
+        }
+        if Navigation.cards-page: DemoLabel { text: "Lecture"; }
+        if Navigation.cards-page: SecondaryButton {
+            label: "Lire une puce";
+            clicked => { Demo.read-card(); }
+        }
         DemoLabel { text: "Appareil"; }
         Tabs {
             tabs: Demo.devices;
@@ -337,6 +345,20 @@ export component App inherits Window {
     property <length> margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     property <length> left-margin: root.margin + root.safe-area-insets.left;
     property <length> right-margin: root.margin + root.safe-area-insets.right;
+    // On a phone, a bubble stops above the band and the Direct bar, never over them.
+    property <length> bubble-floor: root.layout-mode == LayoutMode.narrow && !Navigation.live-open ? band-zone.y : 0px;
+    init => { Courses.bubble-floor = root.bubble-floor; }
+    changed bubble-floor => { Courses.bubble-floor = root.bubble-floor; }
+
+    // The Direct open: a click outside it only closes it (prototype, 26/10). Under the tabs and
+    // the Direct button, which keep their own clicks (30/10: a tab closes it and opens).
+    if Navigation.in-event && Navigation.live-open: TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: drawer.y;
+        clicked => { Navigation.toggle-live(); }
+    }
 
     // Explicit size: the layout's own minimum must not feed back into the window width,
     // which picks the layout mode. The window minimum above stays the only limit.
@@ -345,28 +367,55 @@ export component App inherits Window {
         y: 0;
         width: root.width;
         height: root.height;
-        Header {
+        header := Header {
             vertical-stretch: 0;
             layout-mode: root.layout-mode;
             left-margin: root.left-margin;
             right-margin: root.right-margin;
             top-margin: root.safe-area-insets.top;
         }
-        if Navigation.in-event: HorizontalLayout {
+        if Navigation.in-event && root.layout-mode == LayoutMode.narrow: HorizontalLayout {
             vertical-stretch: 0;
             padding-top: Theme.space-medium;
-            padding-left: root.layout-mode == LayoutMode.narrow ? Theme.space + root.safe-area-insets.left : root.left-margin;
-            padding-right: root.layout-mode == LayoutMode.narrow ? Theme.space + root.safe-area-insets.right : root.right-margin;
-            alignment: root.layout-mode == LayoutMode.narrow ? stretch : start;
-            if root.layout-mode == LayoutMode.narrow: IconTabs {
+            padding-left: Theme.space + root.safe-area-insets.left;
+            padding-right: Theme.space + root.safe-area-insets.right;
+            spacing: Theme.space;
+            IconTabs {
+                horizontal-stretch: 1;
                 tabs: Navigation.tabs;
                 active: Navigation.active-tab;
+                ghost: Navigation.live-open;
                 clicked(i) => { Navigation.select-tab(i); }
             }
-            if root.layout-mode != LayoutMode.narrow: Tabs {
-                tabs: Navigation.tabs;
-                active: Navigation.active-tab;
-                clicked(i) => { Navigation.select-tab(i); }
+            LiveTabButton {
+                horizontal-stretch: 0;
+                narrow: true;
+            }
+        }
+        // The tabs centred on the whole width by themselves; the Direct apart, on their right
+        // (prototype: .x-direct). They move left only when the Direct would not fit.
+        if Navigation.in-event && root.layout-mode != LayoutMode.narrow: VerticalLayout {
+            vertical-stretch: 0;
+            padding-top: Theme.space-medium;
+            padding-left: root.left-margin;
+            padding-right: root.right-margin;
+            tabs-row := Rectangle {
+                height: max(event-tabs.preferred-height, live-tab.preferred-height);
+                event-tabs := Tabs {
+                    x: min((tabs-row.width - self.width) / 2, tabs-row.width - self.width - Theme.space - live-tab.width);
+                    y: (parent.height - self.height) / 2;
+                    width: self.preferred-width;
+                    tabs: Navigation.tabs;
+                    active: Navigation.active-tab;
+                    ghost: Navigation.live-open;
+                    clicked(i) => { Navigation.select-tab(i); }
+                }
+                live-tab := LiveTabButton {
+                    x: event-tabs.x + event-tabs.width + Theme.space;
+                    y: (parent.height - self.height) / 2;
+                    width: self.preferred-width;
+                    narrow: false;
+                }
             }
         }
         Page {
@@ -383,6 +432,7 @@ export component App inherits Window {
             if Navigation.runners-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? RunnerBase.summary-short : RunnerBase.summary;
                 first-action: "Fusionner des clubs";
+                first-alone: true;   // the long warning takes the whole width on a phone
                 can-import: true;
                 import-label: "Importer FFCO";
                 can-print: false;
@@ -409,36 +459,36 @@ export component App inherits Window {
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
-            if Navigation.in-event && Navigation.active-tab == 5: PageBand {
-                summary: root.layout-mode == LayoutMode.narrow ? Results.summary-short : Results.summary;
-                layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
-                right-margin: root.right-margin;
-                bottom-margin: root.safe-area-insets.bottom;
-            }
             if Navigation.in-event && Navigation.active-tab == 4: PageBand {
-                summary: Live.summary;
-                has-actions: false;
+                summary: root.layout-mode == LayoutMode.narrow ? Results.summary-short : Results.summary;
+                can-publish: true;
+                phone-publish-only: true;
                 layout-mode: root.layout-mode;
                 left-margin: root.left-margin;
                 right-margin: root.right-margin;
-                bottom-margin: root.safe-area-insets.bottom;
+                bottom-margin: 0px;   // the Direct bar is below
             }
             if Navigation.in-event && Navigation.active-tab == 3: PageBand {
                 summary: Stations.summary;
                 layout-mode: root.layout-mode;
                 left-margin: root.left-margin;
                 right-margin: root.right-margin;
-                bottom-margin: root.safe-area-insets.bottom;
+                bottom-margin: 0px;   // the Direct bar is below
             }
             if Navigation.in-event && Navigation.active-tab == 2: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Starts.summary-short : Starts.summary;
+                // The page's actions go in the band (CLAUDE.md, Placement).
+                // Hidden while a draw preview is open: it has its own « Refaire ».
+                first-action: Starts.preview ? "" : "Tirer les horaires";
+                first-clicked => { Starts.draw(); }
                 can-publish: true;
+                publish-label: Starts.publish-label;
+                publish-enabled: Starts.publish-enabled;
                 publish => { Starts.publish(); }
                 layout-mode: root.layout-mode;
                 left-margin: root.left-margin;
                 right-margin: root.right-margin;
-                bottom-margin: root.safe-area-insets.bottom;
+                bottom-margin: 0px;   // the Direct bar is below
             }
             if Navigation.in-event && Navigation.active-tab == 1: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Participants.summary-short : Participants.summary;
@@ -446,15 +496,98 @@ export component App inherits Window {
                 layout-mode: root.layout-mode;
                 left-margin: root.left-margin;
                 right-margin: root.right-margin;
-                bottom-margin: root.safe-area-insets.bottom;
+                bottom-margin: 0px;   // the Direct bar is below
             }
-            if Navigation.in-event && Navigation.active-tab == 0 && !Courses.empty
-                && (root.layout-mode != LayoutMode.narrow || !Courses.list-only): PageBand {
+            if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && !Courses.empty
+                && (root.layout-mode != LayoutMode.narrow || Courses.list-only): PageBand {
                 summary: Courses.summary;
                 layout-mode: root.layout-mode;
                 left-margin: root.left-margin;
                 right-margin: root.right-margin;
+                bottom-margin: 0px;   // the Direct bar is below
+            }
+            // Keeps the place of the Direct bar, which lies over it.
+            if Navigation.in-event: Rectangle { height: live-bar.closed-height; }
+        }
+    }
+
+    // Over the header: ‹ Accueil and the indicators only close the open Direct (26/10).
+    if Navigation.in-event && Navigation.live-open: TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: header.height;
+        clicked => { Navigation.toggle-live(); }
+    }
+
+    // The Direct drawer (prototype: #dr): its bar at the bottom, over the band's last place;
+    // open, it rises up to the tabs and covers the page.
+    drawer := Rectangle {
+        property <length> open-y: header.height + Theme.space-medium + Theme.tab-bar-height + Theme.space;
+        property <length> closed-y: root.height - live-bar.closed-height;
+        property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+        // Keeps the end of the Direct clear of the Démo button.
+        property <length> demo-room: Theme.zone + root.safe-area-insets.bottom + 2 * Theme.space-medium;
+
+        visible: Navigation.in-event;
+        x: 0;
+        y: Navigation.live-open ? self.open-y : self.closed-y;
+        width: root.width;
+        height: root.height - self.open-y;
+        animate y {
+            duration: Theme.drawer-duration;
+            easing: cubic-bezier(0.3, 0.8, 0.3, 1);
+        }
+        // Under the bar's lower half: no seam between the bar and the page of the Direct.
+        Rectangle {
+            y: live-bar.height / 2;
+            height: parent.height - self.y;
+            background: Theme.page-background;
+        }
+        VerticalLayout {
+            live-bar := LiveBar {
+                vertical-stretch: 0;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                background: Theme.page-background;
+                if !drawer.narrow: VerticalLayout {
+                    x: 0;
+                    y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    padding-top: Theme.space-medium;
+                    padding-bottom: drawer.demo-room;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    LivePage {
+                        layout-mode: root.layout-mode;
+                        available-width: drawer.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if drawer.narrow: live-scroller := Flickable {
+                    x: 0;
+                    y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    live-content := VerticalLayout {
+                        width: live-scroller.width;
+                        alignment: start;
+                        padding-top: Theme.space-medium;
+                        padding-bottom: drawer.demo-room;
+                        padding-left: root.left-margin;
+                        padding-right: root.right-margin;
+                        LivePage {
+                            layout-mode: root.layout-mode;
+                            available-width: live-scroller.width - root.left-margin - root.right-margin;
+                        }
+                    }
+                    content-height: max(self.height, live-content.preferred-height);
+                }
             }
         }
     }
@@ -516,63 +649,64 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 5 && Courses.open-bubble > 0: ResultsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 4 && Courses.open-bubble > 0: ResultsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 4 && Courses.open-bubble > 0: LiveBubble {
+    if Navigation.in-event && Navigation.live-open && Courses.open-bubble > 0: LiveBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && (Navigation.active-tab == 4 || Navigation.active-tab == 5) && Live.detail-open && root.layout-mode != LayoutMode.wide: LiveOverlay {
+    if Navigation.in-event && (Navigation.live-open || Navigation.active-tab == 4) && Live.detail-open && root.layout-mode != LayoutMode.wide: LiveOverlay {
         width: 100%;
         height: 100%;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 3 && Courses.open-bubble > 0: StationsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 3 && Courses.open-bubble > 0: StationsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+        narrow: root.layout-mode == LayoutMode.narrow;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 3 && Stations.detail-open && root.layout-mode != LayoutMode.wide: StationOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && Courses.open-bubble > 0: StartsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 3 && Stations.detail-open && root.layout-mode != LayoutMode.wide: StationOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && Starts.detail-open && root.layout-mode != LayoutMode.wide: StartOverlay {
         width: 100%;
         height: 100%;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 2 && Courses.open-bubble > 0: StartsBubble {
-        width: 100%;
-        height: 100%;
-        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
-    }
-
-    if Navigation.in-event && Navigation.active-tab == 2 && Starts.detail-open && root.layout-mode != LayoutMode.wide: StartOverlay {
-        width: 100%;
-        height: 100%;
-    }
-
-    if Navigation.in-event && Navigation.active-tab == 1 && Courses.open-bubble > 0: ParticipantsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && Courses.open-bubble > 0: ParticipantsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 1 && Participants.detail-open && root.layout-mode != LayoutMode.wide: ParticipantOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && Participants.detail-open && root.layout-mode != LayoutMode.wide: ParticipantOverlay {
         width: 100%;
         height: 100%;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 0 && Courses.open-bubble > 0: BubbleOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && Courses.open-bubble > 0: BubbleOverlay {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && Navigation.active-tab == 0 && Courses.detail-open && root.layout-mode != LayoutMode.wide: DetailOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && Courses.detail-open && root.layout-mode != LayoutMode.wide: DetailOverlay {
         width: 100%;
         height: 100%;
     }

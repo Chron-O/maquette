@@ -2,9 +2,17 @@ import { Theme } from "../theme.slint";
 
 // Header indicator: icon, dot and text, in an outlined pill. Dot and text are optional.
 // `attention`: yellow outline and dot (08-direct.png).
+// `reserve`: the longest text it may show. The pill keeps that width whatever it shows, so
+// nothing moves when a reader, a device or a screen changes by itself (charte-ui, rule 16).
 export component Indicator inherits Rectangle {
     in property <image> icon;
     in property <string> text;
+    in property <string> reserve;
+    in property <string> sentence;   // the whole state, for screen readers
+    in property <bool> compact;      // on a phone: tighter, so the three always fit
+
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.sentence;
     in property <bool> attention: false;
     in property <bool> has-dot: true;
 
@@ -14,9 +22,9 @@ export component Indicator inherits Rectangle {
     border-color: root.attention ? Theme.attention : Theme.header-outline;
 
     HorizontalLayout {
-        padding-left: Theme.indicator-margin;
-        padding-right: Theme.indicator-margin;
-        spacing: Theme.space;
+        padding-left: root.compact ? Theme.indicator-compact-margin : Theme.indicator-margin;
+        padding-right: root.compact ? Theme.indicator-compact-margin : Theme.indicator-margin;
+        spacing: root.compact ? Theme.indicator-compact-gap : Theme.space;
         VerticalLayout {
             alignment: center;
             Image {
@@ -26,21 +34,30 @@ export component Indicator inherits Rectangle {
                 height: Theme.indicator-icon;
             }
         }
-        if root.has-dot: VerticalLayout {
+        // The dot keeps its room, there or not, once there is something to say.
+        if root.has-dot || root.reserve != "": VerticalLayout {
             alignment: center;
             Rectangle {
                 width: Theme.indicator-dot;
                 height: Theme.indicator-dot;
                 border-radius: self.width / 2;
-                background: root.attention ? Theme.attention : Theme.live;
+                background: !root.has-dot ? transparent : root.attention ? Theme.attention : Theme.live;
             }
         }
-        if root.text != "": Text {
+        if root.text != "" || root.reserve != "": Text {
+            min-width: probe.preferred-width;
             text: root.text;
             color: Theme.header-text;
             font-size: Theme.text-help;
             font-weight: Theme.weight-block-title;
             vertical-alignment: center;
         }
+    }
+    // Measures the reserved text; never shown.
+    probe := Text {
+        visible: false;
+        text: root.reserve;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-block-title;
     }
 }

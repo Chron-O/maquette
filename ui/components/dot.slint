@@ -1,11 +1,14 @@
 import { Theme } from "../theme.slint";
+import { Icons } from "icons.slint";
 
-// Breathing dot: "En course", Direct. Stays still when the system asks for reduced motion.
+// Breathing dot: "En course", Direct. Stays still when the system asks for reduced motion,
+// and when `still` says nothing is going on.
 export component LiveDot {
     in property <color> tone;
     in property <length> size;
+    in property <bool> still: false;
 
-    property <float> breath: Theme.reduced-motion ? 1
+    property <float> breath: Theme.reduced-motion || root.still ? 1
         : (1 + Math.sin(animation-tick() / Theme.breathing-period * 360deg)) / 2;
 
     width: size;
@@ -38,5 +41,48 @@ export component SpinningIcon {
         width: root.size;
         height: root.size;
         transform-rotation: root.angle;
+    }
+}
+
+// Reader ready to read (prototype: .tg and .wave): two rings, and a third one that leaves
+// them, grows and fades. `period`: slow while waiting, fast while reading. No waves when
+// `still`, nor when the system asks for reduced motion.
+export component ReaderRings {
+    in property <length> size;
+    in property <color> tone: Theme.reader-ring;
+    in property <duration> period: Theme.reader-wave-period;
+    in property <bool> still: false;
+    in property <bool> crossed: false;   // unplugged: a stroke across the target
+
+    property <float> time: Math.mod(animation-tick() / 1ms, root.period / 1ms) / (root.period / 1ms);
+    property <float> wave: 1 - (1 - root.time) * (1 - root.time);   // ease-out
+
+    width: root.size;
+    height: root.size;
+
+    if !Theme.reduced-motion && !root.still: Rectangle {
+        width: root.size * (Theme.reader-wave-start + (Theme.reader-wave-end - Theme.reader-wave-start) * root.wave);
+        height: self.width;
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        border-radius: self.width / 2;
+        border-width: root.size * Theme.reader-wave-stroke;
+        border-color: root.tone;
+        opacity: Theme.reader-wave-opacity * (1 - root.wave);
+    }
+    Image {
+        source: Icons.co-finish;
+        colorize: root.tone;
+        width: root.size;
+        height: root.size;
+    }
+    if root.crossed: Path {
+        width: root.size;
+        height: root.size;
+        viewbox-width: 52;
+        viewbox-height: 52;
+        stroke: root.tone;
+        stroke-width: root.size * Theme.reader-cross-stroke;
+        commands: "M 8 44 L 44 8";
     }
 }

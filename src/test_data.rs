@@ -44,6 +44,7 @@ pub struct Course {
     pub entrants: u32,
     pub controls: Vec<u32>,
     pub start_point: u32,
+    pub map: Option<&'static str>,  // its map file, when one is given
 }
 
 // A control on the map, in a 600 × 360 drawing.
@@ -366,19 +367,45 @@ impl BaseRunner {
     }
 }
 
+// A reader plugged into this device (prototype: RD). Pinned, no window takes it by itself.
+pub struct Reader {
+    pub name: String,
+    pub serial: u32,
+    pub pinned: bool,
+    pub unplugged: bool,
+}
+
+// What a reader is doing now.
+#[derive(Clone, Copy, PartialEq)]
+pub enum ReaderStatus {
+    Ready,
+    Reading,
+    Unplugged,
+}
+
+// The readers, in this order: the two finish readers of the event, the entry desk, a free one.
+pub const FINISH_READERS: usize = 2;
+pub const ENTRY_READER: usize = 2;
+pub const FREE_READER: usize = 3;
+// A card stays « being read » this long on its reader, and the last reading « live » this long.
+pub const READING_SECONDS: u32 = 2;
+pub const LIVE_SECONDS: u32 = 15;
+
 pub struct Generated {
     pub events: Vec<Event>,
     pub upcoming: Vec<usize>,
     pub past: Vec<usize>,
-    pub readers: Vec<String>,
+    pub readers: Vec<Reader>,
     pub runner_base: Vec<BaseRunner>,
     pub archive_date: String,
+    pub archive_date_numeric: String,   // dd/mm/yyyy
     pub card_parks: Vec<CardPark>,
     pub station_parks: Vec<StationPark>,
     pub devices_asking: u32,
     pub screens: u32,
     today: u32,
     clock_seconds: u32,
+    next_reading: u32,
     random: Random,
 }
 
@@ -468,8 +495,17 @@ pub fn missed_control(seconds: u32, controls: usize) -> usize {
     seconds as usize % controls.max(1)
 }
 
+// Of the punches read on a station back from the forest, those of cards not yet in the event:
+// always one to three, so that the reading card has something to say.
+pub fn punches_not_in_event(punches: u32) -> usize {
+    punches as usize % 3 + 1
+}
+
 const COURSE_NAMES: [&str; 5] = ["Circuit A", "Circuit B", "Circuit C", "Circuit D", "Jaune"];
 const CATEGORIES: [&str; 5] = ["H21E, H20", "D21E, H35", "H16, D16, D40", "H18, D18", "Open jaune"];
+// The fifth course has no map yet: both cases are shown.
+const MAP_FILES: [Option<&str>; 5] =
+    [Some("Forêt de Brou.ocd"), Some("Forêt de Brou.ocd"), Some("Forêt de Brou.ocd"), Some("Forêt de Brou.ocd"), None];
 const CLUBS: [&str; 6] = ["ASO Lyon", "SMOC", "TAD", "COLE", "CO Brou", "OTB"];
 const ALL_CATEGORIES: [&str; 6] = ["H21E", "D21E", "H35", "D40", "H16", "D18"];
 const UNKNOWN_CATEGORY: &str = "H70";
@@ -529,6 +565,7 @@ fn new_courses(random: &mut Random, count: u32, controls: &[Control]) -> Vec<Cou
                 entrants: random.between(10, 80),
                 controls: chosen,
                 start_point: 1,
+                map: MAP_FILES[i],
             }
         })
         .collect()
@@ -635,8 +672,8 @@ fn new_stations(random: &mut Random, event_controls: &[Control], points: u32, mo
     }
     needs.push(("Arrivée F1".into(), "F1".into(), None));
     needs.extend(event_controls.iter().map(|c| (format!("Poste {}", c.code), c.code.to_string(), Some(c.code))));
-    needs.push(("Effacer E1".into(), "E1".into(), None));
-    needs.push(("Contrôler C1".into(), "C1".into(), None));
+    needs.push(("Effacer 1".into(), "E1".into(), None));
+    needs.push(("Contrôler 1".into(), "C1".into(), None));
 
     let count = needs.len() as u32;
     // A few needs still to handle before leaving, on controls only.
@@ -776,10 +813,10 @@ fn new_event(random: &mut Random, name: &str, days: u32, moment: Moment) -> Even
         course.entrants = runners.iter().filter(|r| r.runs.iter().any(|run| run.course == i)).count() as u32;
     }
     // Today, at least one result that does not count: the feed must show one.
-    if moment == Moment::Today {
-        if let Some(run) = runners.iter_mut().filter(|r| r.is_back()).flat_map(|r| &mut r.runs).nth(3) {
-            run.result = run.result.map(|(seconds, _)| (seconds, false));
-        }
+    if moment == Moment::Today
+        && let Some(run) = runners.iter_mut().filter(|r| r.is_back()).flat_map(|r| &mut r.runs).nth(3)
+    {
+        run.result = run.result.map(|(seconds, _)| (seconds, false));
     }
     let readings = first_readings(random, &runners, &courses, moment);
     let entered = runners.len();
@@ -816,6 +853,14 @@ const CARD_KINDS: [&str; 6] = ["SI-Card 8", "SI-Card 9", "SI-Card 10", "SI-Card 
 const CARD_BATTERIES: [&str; 5] = ["09/2024", "03/2025", "11/2025", "03/2026", "06/2026"];
 const CARD_NOTES: [&str; 3] = ["Bouton qui accroche", "Rangée à part", "Pile faible"];
 const STOCK_SEED: u64 = 0x5EED;
+
+// The same date as 14/10/2026.
+fn numeric_date(days: u32) -> String {
+    let (_, day, month, _) = date(days);
+    let index = MONTHS.iter().position(|(m, _, _)| *m == month).unwrap_or(0);
+    let (month, year) = if index == 3 { (1, 2027) } else { (index + 10, 2026) };
+    format!("{day:02}/{month:02}/{year}")
+}
 
 fn short_date(days: u32) -> String {
     let (_, day, _, short) = date(days);
@@ -1076,11 +1121,11 @@ fn new_runner_base(seed: u64, events: &[Event], today: u32) -> Vec<BaseRunner> {
 const STATION_KINDS: [&str; 3] = ["BSF7", "BSF8", "BSM8"];
 const STATION_NOTES: [&str; 3] = ["Étiquette à refaire", "Bip faible", "Support fendu"];
 const STATION_STOCK_SEED: u64 = 0xB01E;
-const UNIDENTIFIED_PARK: &str = "Non identifiés";
+pub const UNIDENTIFIED_PARK: &str = "Non identifiés";
 const BATTERY_YEAR: u32 = 2026;
 const BATTERY_MAX_YEARS: u32 = 5;
 const LOW_CHARGE: u32 = 320;
-const CLOCK_MAX_GAP: u32 = 30;
+pub const CLOCK_MAX_GAP: u32 = 30;
 
 fn new_stock_station(random: &mut Random, serial: u32, code: String, today: u32) -> StockStation {
     let state = match random.below(24) {
@@ -1204,22 +1249,34 @@ impl Generated {
         let card_parks = new_card_parks(seed, &mut events, &past, today);
         let station_parks = new_station_parks(seed, &events[CURRENT_EVENT], today);
         let archive_date = short_date(today.saturating_sub(4));
+        let archive_date_numeric = numeric_date(today.saturating_sub(4));
         let runner_base = new_runner_base(seed, &events, today);
         let clock_seconds = events[CURRENT_EVENT].readings.last().map(|r| r.at + 30);
         let clock_seconds = clock_seconds.unwrap_or_else(|| random.between(10, 14) * 3600);
+        // Invented serial numbers, close to the event's own station.
+        let serial = events[CURRENT_EVENT].station;
+        let reader = |name: &str, serial: u32, pinned: bool| Reader { name: name.into(), serial, pinned, unplugged: false };
+        let readers = vec![
+            reader("Arrivée 1", serial, true),
+            reader("Arrivée 2", serial + 6, true),
+            reader("Accueil", serial + 11, false),
+            reader("Lecteur libre", serial + 2, false),
+        ];
         Generated {
             events,
             upcoming,
             past,
-            readers: vec!["Arrivée 1".into(), "Arrivée 2".into()],
+            readers,
             runner_base,
             archive_date,
+            archive_date_numeric,
             card_parks,
             station_parks,
             devices_asking: random.below(2),
             screens: random.below(3),
             today,
             clock_seconds,
+            next_reading: clock_seconds + 3,
             random,
         }
     }
@@ -1270,6 +1327,50 @@ impl Generated {
     }
 
     // A reading measures the station, and never changes a state chosen by someone.
+    pub fn toggle_pin(&mut self, reader: usize) {
+        if let Some(reader) = self.readers.get_mut(reader) {
+            reader.pinned = !reader.pinned;
+        }
+    }
+
+    pub fn toggle_unplugged(&mut self, reader: usize) {
+        if let Some(reader) = self.readers.get_mut(reader) {
+            reader.unplugged = !reader.unplugged;
+        }
+    }
+
+    // A finish reader is reading the card just put on it, for a short while.
+    pub fn reader_status(&self, reader: usize) -> ReaderStatus {
+        if self.readers.get(reader).is_some_and(|r| r.unplugged) {
+            return ReaderStatus::Unplugged;
+        }
+        let last = self.events[CURRENT_EVENT].readings.last();
+        if last.is_some_and(|r| r.reader == reader && self.clock_seconds.saturating_sub(r.at) < READING_SECONDS) {
+            ReaderStatus::Reading
+        } else {
+            ReaderStatus::Ready
+        }
+    }
+
+    // A card of the stock put on that reader: nothing changes, its detail opens.
+    pub fn read_loan_card(&mut self) -> Option<u32> {
+        let numbers: Vec<u32> = self.cards().map(|c| c.number).collect();
+        if numbers.is_empty() {
+            return None;
+        }
+        Some(self.random.pick(&numbers))
+    }
+
+    // A card that is in none of the club's parks: a runner's own card put on the reader.
+    pub fn read_unknown_card(&mut self) -> u32 {
+        loop {
+            let number = self.random.between(2_000_000, 8_999_999);
+            if self.card(number).is_none() {
+                return number;
+            }
+        }
+    }
+
     pub fn read_stock_station(&mut self) -> Option<u32> {
         let serials: Vec<u32> = self.stock_stations().filter(|s| s.state != StockState::Destroyed).map(|s| s.serial).collect();
         if serials.is_empty() {
@@ -1377,18 +1478,44 @@ impl Generated {
         self.clock_seconds
     }
 
-    // A runner out on a course comes back and reads their card. Now and then, a card nobody
-    // knows or one read a second time.
+    // One second of the race goes by; now and then, a card is read.
+    pub fn tick(&mut self) {
+        self.clock_seconds += 1;
+        if self.clock_seconds >= self.next_reading {
+            self.read_card_now();
+            self.next_reading = self.clock_seconds + self.random.between(4, 20);
+        }
+    }
+
+    // Time goes by, then a card is read. Only the captures need it.
+    #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
     pub fn read_a_card(&mut self) {
+        self.clock_seconds += self.random.between(5, 40);
+        self.read_card_now();
+    }
+
+    // Lets time go by without any reading. Only the captures need it.
+    #[cfg(not(any(target_os = "ios", target_arch = "wasm32")))]
+    pub fn wait(&mut self, seconds: u32) {
+        self.clock_seconds += seconds;
+        self.next_reading = self.next_reading.max(self.clock_seconds + 1);
+    }
+
+    // A runner out on a course comes back and reads their card. Now and then, a card nobody
+    // knows or one read a second time. An unplugged reader reads nothing.
+    fn read_card_now(&mut self) {
         let random = &mut self.random;
-        self.clock_seconds += random.between(5, 40);
         let at = self.clock_seconds;
         let event = &mut self.events[CURRENT_EVENT];
         let racing: Vec<usize> = (0..event.runners.len()).filter(|i| event.runners[*i].is_racing()).collect();
         if racing.is_empty() {
             return;
         }
-        let reader = random.below(2) as usize;
+        let plugged: Vec<usize> = (0..FINISH_READERS).filter(|i| !self.readers[*i].unplugged).collect();
+        if plugged.is_empty() {
+            return;
+        }
+        let reader = random.pick(&plugged);
         let draw = random.below(12);
         let reading = if draw == 0 {
             Reading {

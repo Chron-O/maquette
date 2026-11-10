@@ -3,10 +3,15 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, Runner, START_STEP, format_clock};
-use crate::{App, ChangedStart, FriseCell, FriseRow, StartGroup, StartPoint, StartRow, StartSection, Starts, TabItem, model};
+use crate::participants::card_label;
+use crate::{App, ChangedStart, FriseCell, FriseRow, StartGroup, StartPoint, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 2] = ["Liste", "Frise"];
+
+// The Frise has one column per minute, and a time written every 2 minutes (prototype: depFrise).
+const MINUTE: u32 = 60;
+const FRISE_LABEL_EVERY: u32 = 2 * MINUTE;
 
 fn plural(count: usize, noun: &str) -> String {
     format!("{count} {noun}{}", if count > 1 { "s" } else { "" })
@@ -196,22 +201,25 @@ impl StartsState {
         let published = event.published.clone().unwrap_or("Non publiés".into());
         let vacants = plural(event.vacants.len(), "vacant");
 
-        page.set_first_start(format_clock(first).into());
         page.set_chips(model(vec!["Avec horaires".into(), published.as_str().into(), "Clubs séparés".into(), "1 vacant par circuit".into()]));
         page.set_summary(
             format!("{} · {range} · {vacants} · {}", plural(starters.len(), "partant"), published.to_lowercase()).into(),
         );
-        page.set_summary_short(format!("{} · {vacants}", plural(starters.len(), "partant")).into());
+        page.set_summary_short(format!("{} · {range}", plural(starters.len(), "partant")).into());
 
         let changed: Vec<&Runner> = runners.iter().filter(|r| r.changed).collect();
         page.set_alert_count(changed.len().to_string().into());
         page.set_alert_title(if changed.is_empty() {
             SharedString::new()
         } else if changed.len() > 1 {
-            format!("{} coureurs ont changé d'heure", changed.len()).into()
+            format!("{} coureurs ont changé d'heure depuis la publication", changed.len()).into()
         } else {
-            "1 coureur a changé d'heure".into()
+            "1 coureur a changé d'heure depuis la publication".into()
         });
+        // Nothing to publish once published and unchanged, nor while a draw is not applied
+        // (departs-tirage-v2.md, Publier); the count is the runners whose time changed.
+        page.set_publish_enabled(self.preview.is_none() && (event.published.is_none() || !changed.is_empty()));
+        page.set_publish_label(if changed.is_empty() { "Publier".into() } else { format!("Publier ({})", changed.len()).into() });
         page.set_changed(model(
             changed.iter().map(|r| ChangedStart { name: r.name().into(), time: format_clock(r.start).into() }).collect(),
         ));
@@ -240,6 +248,24 @@ impl StartsState {
             chips.extend(points.iter().map(|p| StartPoint { label: format!("S{p}").into() }));
         }
         page.set_points(model(chips));
+
+        // One settings block per start point: its first start, its step, and how many leave together.
+        let point_of = |index: usize| runners[index].runs.first().map(|r| event.courses[r.course].start_point);
+        page.set_point_settings(model(
+            points
+                .iter()
+                .map(|point| {
+                    let times: Vec<u32> = starters.iter().filter(|i| point_of(**i) == Some(*point)).map(|i| self.time_of(event, *i)).collect();
+                    let together = times.iter().map(|t| times.iter().filter(|o| *o / MINUTE == *t / MINUTE).count()).max().unwrap_or(0);
+                    StartPointSetting {
+                        name: format!("Départ S{point}").into(),
+                        first_start: times.iter().min().map_or("—".into(), |t| format_clock(*t)).into(),
+                        step: format!("Toutes les {} min", START_STEP / MINUTE).into(),
+                        limit: format!("Au plus {} par minute", plural(together, "coureur")).into(),
+                    }
+                })
+                .collect(),
+        ));
         page.set_active_point(self.point as i32);
         page.set_views(model(VIEWS.iter().map(|v| TabItem { label: (*v).into(), icon: Default::default() }).collect()));
         page.set_active_view(self.view as i32);
@@ -292,41 +318,64 @@ impl StartsState {
                             "écart 2 min".into(),
                             plural(entrants, "coureur").into(),
                         ]),
+                        detail: format!("écart 2 min · {}", plural(entrants, "coureur")).into(),
                         rows: model(lines),
                     }
                 })
                 .collect(),
         ));
 
-        // The frise: one column per start.
-        let columns = ((last.saturating_sub(first)) / START_STEP) as usize + 1;
-        page.set_frise_times(model((0..columns).map(|c| format_clock(first + c as u32 * START_STEP).into()).collect()));
+        // The frise: one column per minute, rows sorted by start point.
+        let columns = ((last.saturating_sub(first)) / MINUTE) as usize + 1;
+        page.set_frise_times(model(
+            (0..columns)
+                .map(|c| first + c as u32 * MINUTE)
+                .map(|t| if t % FRISE_LABEL_EVERY == 0 { format_clock(t).into() } else { SharedString::new() })
+                .collect(),
+        ));
+        let mut order: Vec<usize> = (0..event.courses.len()).filter(|i| in_point(*i)).collect();
+        order.sort_by_key(|i| event.courses[*i].start_point);
         page.set_frise_rows(model(
-            event
-                .courses
+            order
                 .iter()
                 .enumerate()
-                .filter(|(i, _)| in_point(*i))
-                .map(|(i, course)| {
-                    let mut cells = vec![
-                        FriseCell { index: -1, label: SharedString::new(), vacant: false, locked: false, moved: false, dimmed: false };
-                        columns
-                    ];
+                .map(|(n, &i)| {
+                    let course = &event.courses[i];
+                    let empty = FriseCell {
+                        index: -1,
+                        label: SharedString::new(),
+                        vacant: false,
+                        locked: false,
+                        moved: false,
+                        dimmed: false,
+                    };
+                    let mut cells = vec![empty; columns];
                     for vacant in event.vacants.iter().filter(|v| v.course == i) {
-                        cells[((vacant.time - first) / START_STEP) as usize].vacant = true;
+                        cells[((vacant.time - first) / MINUTE) as usize].vacant = true;
                     }
                     for index in starters.iter().copied().filter(|r| runners[*r].runs[0].course == i) {
                         let time = self.time_of(event, index);
-                        cells[((time - first) / START_STEP) as usize] = FriseCell {
+                        let moved = time != runners[index].start;
+                        cells[((time - first) / MINUTE) as usize] = FriseCell {
                             index: index as i32,
                             label: initials(&runners[index]).into(),
                             vacant: false,
                             locked: runners[index].locked,
-                            moved: time != runners[index].start,
+                            moved,
                             dimmed: !self.shown(event, index),
                         };
                     }
-                    FriseRow { name: course.name.as_str().into(), tone: i as i32, cells: model(cells) }
+                    let first_of_point = n == 0 || event.courses[order[n - 1]].start_point != course.start_point;
+                    FriseRow {
+                        point: if points.len() > 1 && first_of_point {
+                            format!("Départ S{}", course.start_point).into()
+                        } else {
+                            SharedString::new()
+                        },
+                        name: course.name.as_str().into(),
+                        tone: i as i32,
+                        cells: model(cells),
+                    }
                 })
                 .collect(),
         ));
@@ -354,9 +403,15 @@ impl StartsState {
             page.set_detail_subtitle(
                 format!("{} · {}", runner.category, course.map_or("sans circuit", |c| c.name.as_str())).into(),
             );
-            page.set_detail_time(format_clock(self.time_of(event, index)).into());
+            let time = self.time_of(event, index);
+            page.set_detail_time(format_clock(time).into());
+            page.set_detail_old_time(if time != runner.start { format_clock(runner.start).into() } else { SharedString::new() });
             page.set_detail_point(course.map_or(SharedString::new(), |c| format!("S{}", c.start_point).into()));
             page.set_detail_locked(runner.locked);
+            page.set_detail_club(runner.club.into());
+            page.set_detail_card(card_label(runner).into());
+            let groups: Vec<&str> = event.groups.iter().filter(|g| g.members.contains(&index)).map(|g| g.name.as_str()).collect();
+            page.set_detail_groups(if groups.is_empty() { "—".into() } else { groups.join(", ").into() });
         }
     }
 }

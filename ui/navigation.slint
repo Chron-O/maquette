@@ -8,13 +8,17 @@ export global Navigation {
     in property <bool> stations-page;
     in property <bool> runners-page;
     in property <string> header-title;
+    in property <string> header-detail;   // an event: its date and place
     in property <string> back-label;
     in property <[TabItem]> tabs;
     in property <int> active-tab;
+    in property <bool> live-open;
+    in property <bool> live-running;
     callback open-event(int);
     callback open-direct();
     callback open-club-page(int);
     callback select-tab(int);
+    callback toggle-live();
     callback go-back();
 }
 
@@ -27,6 +31,8 @@ export global Demo {
     callback select-device(int);
     callback select-test-data(int);
     callback read-station();
+    callback read-card();
+    callback toggle-unplugged();   // unplugs or plugs back the first finish reader
 }
 
 export enum LayoutMode { narrow, medium, wide }

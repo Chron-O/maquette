@@ -38,14 +38,20 @@ export component PrimaryButton {
 }
 
 // Secondary button: white, thin outline, radius 10. Optional icon on the left.
+// `enabled: false`: drawn pale, the click does nothing.
 export component SecondaryButton {
     callback clicked();
     in property <string> label;
     in property <image> icon;
     in property <bool> has-icon: false;
     in property <bool> danger: false;
+    in property <bool> enabled: true;
 
     min-height: Theme.zone;
+    opacity: root.enabled ? 1 : Theme.dimmed-opacity;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
 
     Rectangle {
         height: Theme.secondary-button-height;
@@ -80,7 +86,8 @@ export component SecondaryButton {
         }
     }
     zone := TouchArea {
-        mouse-cursor: pointer;
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
 }
@@ -120,19 +127,27 @@ export component QuietButton {
 }
 
 // Small "···" button on table rows (08-direct.png).
+// `open`: its menu is open, joined to it on the side `down` says.
 export component MoreButton {
     callback clicked();
+    in property <bool> open;
+    in property <bool> down: true;
 
     min-height: Theme.zone;
     min-width: Theme.small-button-width;
 
     Rectangle {
+        property <length> radius: self.height / 2;
         width: Theme.small-button-width;
         height: Theme.small-button-height;
-        border-radius: self.height / 2;
+        border-top-left-radius: root.open && !root.down ? 0px : self.radius;
+        border-top-right-radius: self.border-top-left-radius;
+        border-bottom-left-radius: root.open && root.down ? 0px : self.radius;
+        border-bottom-right-radius: self.border-bottom-left-radius;
         border-width: Theme.thin-outline-width;
         border-color: Theme.thin-outline;
-        background: zone.pressed ? Theme.secondary-button-pressed
+        background: root.open ? Theme.card
+            : zone.pressed ? Theme.secondary-button-pressed
             : zone.has-hover ? Theme.secondary-button-hover
             : Theme.secondary-button;
         animate background { duration: Theme.tint-duration; }

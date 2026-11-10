@@ -3,7 +3,7 @@
 
 use crate::cards::plural;
 use crate::home::badge;
-use crate::test_data::{Generated, Kind, Label, StockState, StockStation, format_clock_seconds};
+use crate::test_data::{CLOCK_MAX_GAP, Generated, Kind, Label, StockState, StockStation, UNIDENTIFIED_PARK};
 use crate::{App, BatteryDueItem, CardAction, CardEntry, CardParkItem, ClubStationRow, ClubStations, LiveFilter, model};
 use slint::{ComponentHandle, SharedString};
 
@@ -23,7 +23,7 @@ pub struct ClubStationsState {
     search: String,
     selected: Option<u32>,
     to_confirm: Option<StockState>,
-    last_read: Option<(u32, String)>,   // the station, and when
+    last_read: Option<u32>,
 }
 
 fn state_label(state: StockState) -> Label {
@@ -144,9 +144,10 @@ impl ClubStationsState {
     }
 
     pub fn read(&mut self, data: &mut Generated) {
+        // The station read is chosen: its detail opens, its row is selected (encart-lecture.md § 8).
         if let Some(serial) = data.read_stock_station() {
-            self.show_park_of(data, serial);
-            self.last_read = Some((serial, format_clock_seconds(data.clock())));
+            self.open_station(data, serial);
+            self.last_read = Some(serial);
         }
     }
 
@@ -187,14 +188,22 @@ impl ClubStationsState {
             parks.iter().map(|p| LiveFilter { label: p.name.into(), tone: -1, detail: SharedString::new() }).collect(),
         ));
         page.set_active_park(self.park as i32);
-        page.set_filters(model(
-            FILTERS.iter().map(|f| LiveFilter { label: (*f).into(), tone: -1, detail: SharedString::new() }).collect(),
-        ));
         page.set_active_filter(self.filter as i32);
         page.set_search_text(self.search.as_str().into());
 
         let park = parks.get(self.park);
         let stations = park.map_or(&[][..], |p| &p.stations[..]);
+        // Each filter says how many stations of the park shown it keeps.
+        page.set_filters(model(
+            FILTERS.iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    let count = stations.iter().filter(|s| matches_filter(s, i)).count();
+                    LiveFilter { label: format!("{f} · {count}").into(), tone: -1, detail: SharedString::new() }
+                })
+                .collect(),
+        ));
+        page.set_can_add(park.is_some_and(|p| p.name != UNIDENTIFIED_PARK));
         page.set_title(park.map_or("", |p| p.name).into());
         page.set_description(park.map_or("", |p| p.description).into());
         page.set_chips(model(park.map(|p| SharedString::from(p.description)).into_iter().collect()));
@@ -208,7 +217,6 @@ impl ClubStationsState {
         page.set_summary_short(format!("{total} · {due_text}").into());
 
         let words: Vec<&str> = self.search.split_whitespace().collect();
-        let read = self.last_read.as_ref().map(|(serial, _)| *serial);
         let rows: Vec<ClubStationRow> = stations
             .iter()
             .filter(|s| matches_filter(s, self.filter))
@@ -228,7 +236,7 @@ impl ClubStationsState {
                 clock_warning: s.clock_off(),
                 warning: battery_warning(s).into(),
                 note: s.note.into(),
-                selected: self.selected == Some(s.serial) || read == Some(s.serial),
+                selected: self.selected == Some(s.serial),
             })
             .collect();
         page.set_empty(
@@ -263,21 +271,27 @@ impl ClubStationsState {
         self.show_detail(&page, data);
     }
 
+    // Three lines (encart-lecture.md § 8): the code, who it is, what is wrong. The time, the
+    // battery and the note are in the detail.
     fn show_reading(&self, page: &ClubStations, data: Option<&Generated>) {
-        let found = self.last_read.as_ref().and_then(|(serial, at)| {
+        let found = self.last_read.and_then(|serial| {
             let data = data?;
-            let station = data.stock_station(*serial)?;
-            let park = data.station_parks.iter().find(|p| p.stations.iter().any(|s| s.serial == *serial))?;
-            Some((station, park.name, at))
+            let station = data.stock_station(serial)?;
+            let park = data.station_parks.iter().find(|p| p.stations.iter().any(|s| s.serial == serial))?;
+            Some((station, park.name))
         });
         page.set_has_reading(found.is_some());
-        let Some((station, park, at)) = found else { return };
-        page.set_read_label(format!("Dernier boîtier lu · {at}").into());
+        let Some((station, park)) = found else { return };
         page.set_read_code(station.code.as_str().into());
-        page.set_read_detail(format!("n° {} · {} · {park}", station.serial, station.kind).into());
-        page.set_read_clock(clock_text(station).into());
-        page.set_read_battery(format!("{} · {}", battery_text(station), charge_text(station)).into());
-        page.set_read_note(station.note.into());
+        page.set_read_identity(format!("n° {} · {} · {park}", station.serial, station.kind).into());
+        let mut verdict = Vec::new();
+        if station.state == StockState::BatteryDue || station.old_battery() || station.low_charge() {
+            verdict.push("Pile à changer");
+        }
+        if station.clock_off() {
+            verdict.push("Heure à régler");
+        }
+        page.set_read_verdict(if verdict.is_empty() { "OK".into() } else { verdict.join(" · ").into() });
     }
 
     fn show_detail(&self, page: &ClubStations, data: Option<&Generated>) {
@@ -303,6 +317,7 @@ impl ClubStationsState {
         page.set_detail_can_change_battery(station.state != StockState::Destroyed);
         page.set_detail_clock(clock_text(station).into());
         page.set_detail_measured(station.measured.as_deref().unwrap_or("—").into());
+        page.set_detail_clock_limit(format!("À régler au-delà de {CLOCK_MAX_GAP} s").into());
         page.set_detail_note(if station.note.is_empty() { "Aucune note" } else { station.note }.into());
         page.set_actions(model(actions_of(station)));
         page.set_history(model(

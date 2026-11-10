@@ -1,9 +1,11 @@
 // Turns the test data, or the lack of it, into what the home page shows.
 
 use crate::test_data::{CURRENT_EVENT, Generated, Kind, Label, format_clock, format_time};
-use crate::{App, Badge, BadgeKind, ClubCard, CurrentEvent, EventRow, Home, Icons, IndicatorItem, Reading, Stat, model};
+use crate::live::last_reading;
+use crate::{App, Badge, BadgeKind, ClubCard, CurrentEvent, EventRow, Home, HomeLast, Icons, IndicatorItem, Reading, Stat, model};
 use slint::{ComponentHandle, SharedString};
 
+// The small rows under the last reading: 3 on a phone, 2 on wider windows.
 const READINGS_SHOWN: usize = 3;
 
 pub fn badge(label: &Label) -> Badge {
@@ -97,30 +99,46 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
 fn indicators(window: &App, data: Option<&Generated>) -> Vec<IndicatorItem> {
     let icons = window.global::<Icons>();
     let (readers, asking, screens) = data.map_or((0, 0, 0), |d| (d.readers.len() as u32, d.devices_asking, d.screens));
-    let item = |icon, long: String, short: String, has_dot: bool, attention: bool| IndicatorItem {
+    let unplugged = data.and_then(|d| d.readers.iter().find(|r| r.unplugged));
+    // A small pill: icon, dot and a short word; the sentence goes to screen readers. Each pill
+    // keeps the width of the longest word it may show by itself during the race: a reader that
+    // unplugs or a device that asks to join never moves the others (charte-ui, rule 16).
+    let item = |icon, long: String, short: String, reserve: String, has_dot: bool, attention: bool| IndicatorItem {
         icon,
         long_text: long.into(),
         short_text: short.into(),
+        long_reserve: SharedString::new(),
+        short_reserve: reserve.into(),
         has_dot,
         attention,
     };
+    let ready = if readers > 1 { format!("{readers} prêts") } else { format!("{readers} prêt") };
+    let readers_reserve = if readers > 0 { longest(&[ready.clone(), "1 débranché".into()]) } else { String::new() };
+    let devices_reserve = if data.is_some() { "1 demande".to_string() } else { String::new() };
+    let screens_word = plural(screens, "écran");
     vec![
-        if readers > 0 {
-            item(icons.get_co_station(), format!("{readers} lecteurs prêts"), readers.to_string(), true, false)
+        if let Some(reader) = unplugged {
+            item(icons.get_co_station(), format!("Lecteur {} débranché", reader.name), "1 débranché".into(), readers_reserve, true, true)
+        } else if readers > 0 {
+            item(icons.get_co_station(), format!("{readers} lecteurs prêts"), ready, readers_reserve, true, false)
         } else {
-            item(icons.get_co_station(), "Lecteurs : aucun branché".into(), "".into(), false, false)
+            item(icons.get_co_station(), "Lecteurs : aucun branché".into(), "".into(), readers_reserve, false, false)
         },
         if asking > 0 {
-            item(icons.get_monitor_smartphone(), "1 appareil demande à rejoindre".into(), "1 demande".into(), true, true)
+            item(icons.get_monitor_smartphone(), "1 appareil demande à rejoindre".into(), "1 demande".into(), devices_reserve, true, true)
         } else {
-            item(icons.get_monitor_smartphone(), "Rôle et appareils : aucun appareil relié".into(), "".into(), false, false)
+            item(icons.get_monitor_smartphone(), "Rôle et appareils : aucun appareil relié".into(), "".into(), devices_reserve, false, false)
         },
         if screens > 0 {
-            item(icons.get_tv(), format!("{} diffusent", plural(screens, "écran")), screens.to_string(), true, false)
+            item(icons.get_tv(), format!("{screens_word} diffusent"), screens_word.clone(), screens_word, true, false)
         } else {
-            item(icons.get_tv(), "Écrans publics : rien diffusé".into(), "".into(), false, false)
+            item(icons.get_tv(), "Écrans publics : rien diffusé".into(), "".into(), String::new(), false, false)
         },
     ]
+}
+
+fn longest(texts: &[String]) -> String {
+    texts.iter().max_by_key(|t| t.chars().count()).cloned().unwrap_or_default()
 }
 
 pub fn show(window: &App, data: Option<&Generated>) {
@@ -130,7 +148,7 @@ pub fn show(window: &App, data: Option<&Generated>) {
 
     let Some(data) = data else {
         home.set_has_current_event(false);
-        home.set_readers(model(Vec::new()));
+        home.set_last(HomeLast::default());
         home.set_readings(model(Vec::new()));
         home.set_to_handle("".into());
         home.set_upcoming(model(Vec::new()));
@@ -151,12 +169,23 @@ pub fn show(window: &App, data: Option<&Generated>) {
             stat(current.courses.len() as u32, "circuits"),
         ]),
     });
-    home.set_readers(model(data.readers.iter().map(|r| SharedString::from(r.as_str())).collect()));
+    // The last reading in big while it is live, then the ones before it in small rows.
+    let last = last_reading(current, &data.readers, data.clock(), false);
+    home.set_last(HomeLast {
+        live: last.live,
+        badge: last.badge,
+        name: last.name,
+        category: last.category,
+        time: last.time,
+        place: last.place,
+        left: last.left,
+    });
     home.set_readings(model(
         current
             .readings
             .iter()
             .rev()
+            .skip(usize::from(last.live))
             .take(READINGS_SHOWN)
             .map(|r| Reading {
                 badge: badge(&current.reading_label(r)),

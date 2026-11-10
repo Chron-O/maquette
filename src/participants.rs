@@ -38,12 +38,25 @@ fn card_text(runner: &Runner) -> String {
     runner.card.map_or("—".into(), |card| card.to_string())
 }
 
+// The card, and whether it is a loan (participants-resultats.md § 1).
+pub fn card_label(runner: &Runner) -> String {
+    match runner.card {
+        Some(card) if runner.lent => format!("{card} · prêtée"),
+        _ => card_text(runner),
+    }
+}
+
 fn category_text(runner: &Runner) -> String {
     if runner.runs.len() > 1 {
         format!("{} · {} passages", runner.category, runner.runs.len())
     } else {
         runner.category.clone()
     }
+}
+
+// One course colour per passage, in passage order.
+fn tones(runner: &Runner) -> slint::ModelRc<i32> {
+    model(runner.runs.iter().map(|r| r.course as i32).collect())
 }
 
 fn passage_label(run: &Run) -> Label {
@@ -120,7 +133,6 @@ impl ParticipantsState {
         let runners = &event.runners;
 
         page.set_chips(model(vec!["Inscription par catégorie".into(), "Sans dossards".into(), "Champs libres : repas".into()]));
-        page.set_station(format!("Accueil · n° {}", event.station).into());
 
         let lent: Vec<&Runner> = runners.iter().filter(|r| r.lent).collect();
         page.set_lent_count(lent.len().to_string().into());
@@ -128,11 +140,18 @@ impl ParticipantsState {
         page.set_lent_name(lent.first().map_or(SharedString::new(), |r| format!("{} · {}", r.name(), card_text(r)).into()));
 
         let without_card = runners.iter().filter(|r| r.card.is_none()).count();
+        // « · N passages » only when someone runs more than once (participants-resultats.md § 1).
+        let passage_count: usize = runners.iter().map(|r| r.runs.len()).sum();
+        let people = if passage_count > runners.len() {
+            format!("{} · {}", plural(runners.len(), "participant"), plural(passage_count, "passage"))
+        } else {
+            plural(runners.len(), "participant")
+        };
         let clubs: BTreeSet<&str> = runners.iter().map(|r| r.club).collect();
         page.set_summary(
             format!(
                 "{} · {} · {} sans puce · {} prêtée{}",
-                plural(runners.len(), "participant"),
+                people,
                 plural(clubs.len(), "club"),
                 without_card,
                 lent.len(),
@@ -141,7 +160,7 @@ impl ParticipantsState {
             .into(),
         );
 
-        page.set_summary_short(format!("{} · {} sans puce", plural(runners.len(), "participant"), without_card).into());
+        page.set_summary_short(format!("{people} · {without_card} sans puce").into());
 
         let names: Vec<String> = runners.iter().map(|r| r.name()).collect();
         let duplicates = names.iter().enumerate().filter(|(i, n)| names[..*i].contains(n)).count();
@@ -198,8 +217,8 @@ impl ParticipantsState {
                         club: runner.club.into(),
                         category: category_text(runner).into(),
                         category_short: runner.category.as_str().into(),
-                        tone: runner.runs.first().map_or(-1, |r| r.course as i32),
-                        card: card_text(runner).into(),
+                        tones: tones(runner),
+                        card: card_label(runner).into(),
                         no_card: runner.card.is_none(),
                         start: format_clock(runner.start).into(),
                         result: time.unwrap_or_else(|| format_clock(runner.start)).into(),
@@ -214,9 +233,9 @@ impl ParticipantsState {
         if let Some(runner) = selected {
             page.set_detail_name(runner.name().into());
             page.set_detail_category(category_text(runner).into());
-            page.set_detail_tone(runner.runs.first().map_or(-1, |r| r.course as i32));
+            page.set_detail_tones(tones(runner));
             page.set_detail_club(runner.club.into());
-            page.set_detail_card(card_text(runner).into());
+            page.set_detail_card(card_label(runner).into());
             page.set_detail_start(format_clock(runner.start).into());
             page.set_passages(model(
                 runner
@@ -226,7 +245,7 @@ impl ParticipantsState {
                         let course = &event.courses[run.course];
                         let ordered = course.format == Format::Imposed;
                         Passage {
-                            course: course.name.as_str().into(),
+                            course: format!("{} · {}", course.name, plural(course.controls.len(), "poste")).into(),
                             tone: run.course as i32,
                             ordered,
                             stops: model(
@@ -237,7 +256,6 @@ impl ParticipantsState {
                                     .map(|(n, code)| SequenceStop {
                                         code: code.to_string().into(),
                                         rank: if ordered { n as i32 + 1 } else { -1 },
-                                        selected: false,
                                     })
                                     .collect(),
                             ),

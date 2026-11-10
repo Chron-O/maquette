@@ -11,6 +11,9 @@ use std::rc::Rc;
 
 const FILTERS: [&str; 7] = ["Tous", "Licenciés", "Non licenciés", "Compétition", "Découverte", "Loisir", "Handisport"];
 
+// One wording for a record typed by hand, in the table and in the detail.
+const NO_LICENCE: &str = "Pas de licence";
+
 const LEAGUES: [(&str, &str); 5] = [
     ("AR", "Auvergne-Rhône-Alpes"),
     ("BR", "Bretagne"),
@@ -87,19 +90,20 @@ fn sort_key(runner: &BaseRunner, column: usize) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-// What deserves a look: a record typed by hand with the name of a licensed runner, or a card
-// on two records. Nothing is changed by this list.
-fn issues_of(base: &[BaseRunner]) -> Vec<BaseIssue> {
-    let mut issues = Vec::new();
+// What deserves a look, in two groups (coureurs-clubs.md § 7): a record typed by hand with the
+// name of a licensed runner, and a card on two records. Nothing is changed by these lists.
+fn issues_of(base: &[BaseRunner]) -> (Vec<BaseIssue>, Vec<BaseIssue>) {
+    let mut duplicates = Vec::new();
     for runner in base.iter().filter(|r| r.licence.is_none()) {
         if base.iter().any(|o| o.licence.is_some() && o.family == runner.family && o.first == runner.first) {
-            issues.push(BaseIssue {
+            duplicates.push(BaseIssue {
                 id: runner.id as i32,
                 label: runner.name().into(),
-                detail: "Doublon possible · fiche saisie et licencié".into(),
+                detail: "fiche saisie ↔ licencié".into(),
             });
         }
     }
+    let mut shared = Vec::new();
     let mut cards: BTreeMap<u32, Vec<&BaseRunner>> = BTreeMap::new();
     for runner in base {
         if let Some(card) = runner.card {
@@ -108,13 +112,13 @@ fn issues_of(base: &[BaseRunner]) -> Vec<BaseIssue> {
     }
     for (card, holders) in cards.iter().filter(|(_, holders)| holders.len() > 1) {
         let names: Vec<String> = holders.iter().map(|h| h.name()).collect();
-        issues.push(BaseIssue {
+        shared.push(BaseIssue {
             id: holders[0].id as i32,
             label: format!("Puce {card}").into(),
             detail: names.join(" · ").into(),
         });
     }
-    issues
+    (duplicates, shared)
 }
 
 impl RunnerBaseState {
@@ -183,16 +187,19 @@ impl RunnerBaseState {
         let licensed = base.iter().filter(|r| r.licence.is_some()).count();
         let hand = base.len() - licensed;
         let clubs = base.iter().map(|r| r.club).collect::<BTreeSet<_>>().len();
-        let archive = data.map_or(String::new(), |d| format!("Archive FFCO du {}", d.archive_date));
-        page.set_origin(archive.as_str().into());
-        page.set_chips(model(if archive.is_empty() { Vec::new() } else { vec![SharedString::from(archive.as_str())] }));
+        // The warning of coureurs-clubs.md § 5 opens the band, then the counts.
+        let licensed_text = format!("{licensed} licencié{}", if licensed > 1 { "s" } else { "" });
+        let warning = match data {
+            Some(d) => format!("Base locale, pas forcément à jour · archive FFCO importée le {} ({licensed_text})", d.archive_date_numeric),
+            None => "Base locale, pas forcément à jour · archive FFCO jamais importée".to_string(),
+        };
         page.set_title("Base du club".into());
         page.set_state(plural(base.len(), "fiche").into());
-        let licensed_text = format!("{licensed} licencié{}", if licensed > 1 { "s" } else { "" });
         page.set_summary(
-            format!("{licensed_text} · {} · {} saisie{} à la main", plural(clubs, "club"), plural(hand, "fiche"), if hand > 1 { "s" } else { "" }).into(),
+            format!("{warning} · {} · {} saisie{} à la main", plural(clubs, "club"), plural(hand, "fiche"), if hand > 1 { "s" } else { "" })
+                .into(),
         );
-        page.set_summary_short(format!("{licensed_text} · {}", plural(clubs, "club")).into());
+        page.set_summary_short(format!("{warning} · {}", plural(clubs, "club")).into());
 
         let words: Vec<&str> = self.search.split_whitespace().collect();
         let mut shown: Vec<&BaseRunner> = base
@@ -245,7 +252,7 @@ impl RunnerBaseState {
                 category: r.category.as_str().into(),
                 year: r.year.to_string().into(),
                 licence: r.licence.map_or("—".into(), |l| l.to_string().into()),
-                kind: if r.licence.is_some() { kind_word(r.licence_kind).into() } else { "Sans licence".into() },
+                kind: if r.licence.is_some() { kind_word(r.licence_kind).into() } else { NO_LICENCE.into() },
                 card: r.card.map_or("—".into(), |c| c.to_string().into()),
                 points: r.points.as_ref().map_or("—".into(), |(points, _)| points.to_string().into()),
                 selected: self.selected == Some(r.id),
@@ -262,14 +269,18 @@ impl RunnerBaseState {
         }
         page.set_rows(ModelRc::from(self.rows.clone()));
 
-        let issues = issues_of(base);
-        page.set_alert_title(match issues.len() {
+        let (duplicates, shared) = issues_of(base);
+        let count = duplicates.len() + shared.len();
+        page.set_alert_title(match count {
             0 => SharedString::new(),
             1 => "1 point à vérifier".into(),
             n => format!("{n} points à vérifier").into(),
         });
-        page.set_alert_count(issues.len().to_string().into());
-        page.set_issues(model(issues));
+        page.set_alert_count(count.to_string().into());
+        page.set_duplicates_title(format!("Doublons possibles · {}", duplicates.len()).into());
+        page.set_shared_cards_title(format!("Puces sur deux fiches · {}", shared.len()).into());
+        page.set_duplicates(model(duplicates));
+        page.set_shared_cards(model(shared));
 
         self.show_detail(&page, data);
     }
@@ -287,7 +298,7 @@ impl RunnerBaseState {
         page.set_detail_league(league_name(league(runner)).into());
         page.set_detail_has_licence(runner.licence.is_some());
         page.set_detail_licence(runner.licence.map_or(SharedString::new(), |l| l.to_string().into()));
-        page.set_detail_licence_kind(kind_full(runner.licence_kind).into());
+        page.set_detail_licence_kind(if runner.licence.is_some() { kind_full(runner.licence_kind) } else { NO_LICENCE }.into());
         page.set_detail_season(if runner.renewed { "2026 · relicencié".into() } else { format!("non relicencié (absent de l'archive du {})", data.archive_date).into() });
         page.set_detail_not_renewed(!runner.renewed);
         page.set_detail_points(runner.points.as_ref().map_or("—".into(), |(points, date)| format!("{points} pts · CN du {date}").into()));
