@@ -5,10 +5,11 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
 import { Cell, Title } from "participants.slint";
 import { ReaderTile, Readers } from "../components/reader-tile.slint";
@@ -57,6 +58,8 @@ export global Stations {
     in property <int> active-mode;
     in property <[TabItem]> filters;
     in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
     in property <string> search-text;
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
@@ -98,6 +101,8 @@ export global Stations {
 
     callback select-mode(int);
     callback select-filter(int);
+    callback toggle-filter(int, int);
+    callback clear-filters();
     callback select-row(int);
     callback sort-by(int);
     callback search(string);
@@ -399,19 +404,11 @@ component StationsContent {
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: Stations.search-text != "";
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.stations-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.stations-head-search;
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            padding-top: root.narrow ? 0 : Theme.space;
-            SecondaryButton {
-                label: "Boîtier spécial";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-            Rectangle { horizontal-stretch: 1; }
-        }
         if Stations.reading: ReadingCard {
             vertical-stretch: 0;
             narrow: root.narrow;
@@ -429,16 +426,33 @@ component StationsContent {
                     vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space;
+                    // The add action, then on the right the alert, the filters and the search
+                    // (brief zones-onglets § 6). The add stays white: a reading has its orange.
                     HorizontalLayout {
-                        spacing: Theme.space-small;
-                        for item[i] in Stations.filters: HighlightChip {
-                            width: Theme.participant-chip-width;
-                            label: item.label;
-                            tone: -1;
-                            active: Stations.active-filter == i;
-                            clicked => { Stations.select-filter(i); }
+                        spacing: Theme.space;
+                        SecondaryButton {
+                            label: "Boîtier spécial";
+                            icon: Icons.plus;
+                            has-icon: true;
                         }
                         Rectangle { horizontal-stretch: 1; }
+                        if Stations.alert-title != "": AlertPill {
+                            title: Stations.alert-title;
+                            count: Stations.alert-count;
+                            bubble: 11;
+                            compact: !root.roomy;
+                        }
+                        FilterButton {
+                            filters: Stations.active-filters;
+                            narrow: root.narrow;
+                            open: Courses.open-bubble == 25;
+                            open-down: Courses.bubble-down;
+                            clicked => {
+                                Courses.open-at(25, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                            }
+                            remove(g, c) => { Stations.toggle-filter(g, c); }
+                            clear => { Stations.clear-filters(); }
+                        }
                         if root.narrow: SearchToggle {
                             open: root.search-open;
                             clicked => {
@@ -448,7 +462,7 @@ component StationsContent {
                                 root.search-open = !root.search-open;
                             }
                         }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.search-below: VerticalLayout {
                             alignment: center;
                             InputField {
                                 width: Theme.code-search-width;
@@ -457,6 +471,11 @@ component StationsContent {
                                 edited(text) => { Stations.search(text); }
                             }
                         }
+                    }
+                    if root.search-below: InputField {
+                        placeholder: "Poste ou n°…";
+                        text: Stations.search-text;
+                        edited(text) => { Stations.search(text); }
                     }
                     if root.narrow && root.search-open: InputField {
                         placeholder: "Poste ou n°…";
@@ -576,9 +595,11 @@ component UsefulCard inherits Rectangle {
 }
 
 export component StationDetail inherits Rectangle {
-    background: Theme.card;
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
     border-radius: Theme.card-radius;
-    border-width: Theme.thin-outline-width;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
     // Behind the content, so that a click in the detail does not close it.
@@ -663,12 +684,9 @@ export component StationsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Stations.detail-open;
-    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
 
     VerticalLayout {
-        spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
             StationsReader { compact: true; }
@@ -677,92 +695,57 @@ export component StationsPage {
                 active: Stations.active-mode;
                 clicked(i) => { Stations.select-mode(i); }
             }
-            HorizontalLayout {
-                spacing: Theme.space;
-                SummaryZone {
-                    horizontal-stretch: 1;
-                    title: "";
-                    chips: Stations.chips;
-                    bubble: 10;
-                    compact: true;
-                }
-                if Stations.alert-title != "": AlertPill {
-                    title: Stations.alert-title;
-                    count: Stations.alert-count;
-                    bubble: 11;
-                    compact: true;
-                }
-            }
             StationsContent {
                 layout-mode: root.layout-mode;
                 available-width: root.available-width;
             }
             if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
         }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.button-margin;
-            SummaryZone {
-                title: "";
-                chips: Stations.chips;
-                bubble: 10;
-                compact: root.layout-mode == LayoutMode.medium;
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if Stations.alert-title != "": AlertPill {
-                title: Stations.alert-title;
-                count: Stations.alert-count;
-                bubble: 11;
-            }
-        }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
-            VerticalLayout {
-                width: Theme.course-list-width;
-                alignment: start;
-                spacing: Theme.space;
-                StationsReader { }
-                Tabs {
-                    tabs: Stations.modes;
-                    active: Stations.active-mode;
-                    clicked(i) => { Stations.select-mode(i); }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left (brief zones-onglets § 3).
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.space;
+                        alignment: start;
+                        spacing: Theme.space;
+                        StationsReader { }
+                        Tabs {
+                            tabs: Stations.modes;
+                            active: Stations.active-mode;
+                            clicked(i) => { Stations.select-mode(i); }
+                        }
+                        GaugeCard { }
+                        if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
+                    }
                 }
-                GaugeCard { }
-                if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
-            }
-            StationsContent {
-                horizontal-stretch: 1;
-                layout-mode: root.layout-mode;
-                available-width: root.content-width;
-            }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := StationDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
+                StationsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
                 }
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Stations.detail-open;
+                close => { Stations.close-detail(); }
+                StationDetail { in-sheet: true; }
             }
         }
     }
 }
 
-// On medium and narrow layouts, the detail opens over the page.
+// On a phone, the detail rises from the bottom.
 export component StationOverlay {
-    TouchArea {
-        clicked => { Stations.close-detail(); }
-    }
-    Rectangle {
-        background: Theme.overlay-veil;
-        StationDetail {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
-            height: self.preferred-height;
-        }
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: Stations.detail-open;
+        close => { Stations.close-detail(); }
+        StationDetail { in-sheet: true; }
     }
 }
 
@@ -851,7 +834,7 @@ component SectionTitle inherits Text {
 
 // The settings of the event's stations (prototype 22/10: bxSettings), in two sections.
 // Values from Rust; the buttons have no effect for now.
-component SettingsContent {
+export component StationsSettings {
     in property <bool> narrow;
 
     VerticalLayout {
@@ -938,9 +921,9 @@ component ProblemsContent {
         for problem in Stations.problems: HorizontalLayout {
             spacing: Theme.space;
             BubbleLabel { horizontal-stretch: 1; text: problem.label; }
-            PrimaryButton {
+            // Applies the matching filter, which shows in the Filtres button.
+            QuietButton {
                 label: Stations.alert-button;
-                in-row: true;
                 clicked => {
                     Courses.open-bubble = 0;
                     Stations.alert-action();
@@ -958,8 +941,13 @@ export component StationsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        wanted-width: Courses.open-bubble == 10 ? Theme.station-settings-width : Theme.bubble-width;
-        if Courses.open-bubble == 10: SettingsContent { narrow: root.narrow; }
+        wanted-width: Courses.open-bubble == 25 ? Theme.filter-bubble-width : Theme.bubble-width;
         if Courses.open-bubble == 11: ProblemsContent { }
+        if Courses.open-bubble == 25: FiltersContent {
+            groups: Stations.filter-groups;
+            toggle(g, c) => { Stations.toggle-filter(g, c); }
+            clear => { Stations.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
+        }
     }
 }

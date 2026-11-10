@@ -3,7 +3,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, Station, StationState, missed_control, punches_not_in_event};
-use crate::{App, CourseMark, StationProblem, StationRow, Stations, TabItem, UsefulStation, model};
+use crate::{ActiveFilter, App, CourseMark, FilterChoice, FilterGroup, StationProblem, StationRow, Stations, TabItem, UsefulStation, model};
 use slint::{ComponentHandle, SharedString};
 use std::cmp::Ordering;
 
@@ -88,6 +88,15 @@ impl StationsState {
 
     pub fn select_filter(&mut self, filter: usize) {
         self.only_to_handle = filter == 1;
+    }
+
+    // The Filtres bubble has one group, with one choice: what is to handle.
+    pub fn toggle_filter(&mut self, _group: usize, _choice: usize) {
+        self.only_to_handle = !self.only_to_handle;
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.only_to_handle = false;
     }
 
     pub fn show_only_to_handle(&mut self) {
@@ -424,6 +433,18 @@ impl StationsState {
             page.set_useful(model(Vec::new()));
         }
         page.set_active_filter(self.only_to_handle as i32);
+        // The same filter in the Filtres button (brief zones-onglets § 5).
+        let word = if self.collecting { "Dehors" } else { "À régler" };
+        page.set_filter_groups(model(vec![FilterGroup {
+            key: 0,
+            title: "État".into(),
+            choices: model(vec![FilterChoice { label: word.into(), tone: -1, active: self.only_to_handle }]),
+        }]));
+        page.set_active_filters(model(if self.only_to_handle {
+            vec![ActiveFilter { label: word.into(), tone: -1, group: 0, choice: 0 }]
+        } else {
+            Vec::new()
+        }));
 
         let mut problems: Vec<String> = Vec::new();
         if self.collecting {

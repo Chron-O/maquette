@@ -356,6 +356,10 @@ fn connect_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Stations>();
     page.on_select_mode(on_click(window, state, |s, i: i32| s.select_mode(i as usize)));
     page.on_select_filter(on_click(window, state, |s, i: i32| s.select_filter(i as usize)));
+    let toggle = on_click(window, state, |s, (g, c): (i32, i32)| s.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |s, _: ()| s.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_select_row(on_click(window, state, |s, i: i32| s.select_row(i as usize)));
     page.on_sort_by(on_click(window, state, |s, i: i32| s.sort_by(i)));
     page.on_search(on_click(window, state, |s, text: slint::SharedString| s.set_search(&text)));
