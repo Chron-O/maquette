@@ -476,6 +476,10 @@ fn connect_results(window: &App, state: &Rc<RefCell<AppState>>) {
     });
     page.on_select_ranking(on_click(window, state, |r, i: i32| r.select_ranking(i as usize)));
     page.on_select_category(on_click(window, state, |r, i: i32| r.select_category(i as usize)));
+    let toggle = on_click(window, state, |r, (g, c): (i32, i32)| r.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |r, _: ()| r.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_search(on_click(window, state, |r, text: slint::SharedString| r.set_search(&text)));
     page.on_search_ranking(on_click(window, state, |r, text: slint::SharedString| r.set_ranking_search(&text)));
 }

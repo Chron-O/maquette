@@ -12,7 +12,7 @@ import { Navigation, Demo, LayoutMode } from "navigation.slint";
 import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue } from "pages/runner-base.slint";
 import { ClubStations, ClubStationsPage, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
 import { Cards, CardsPage, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
-import { Results, ResultsPage, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
+import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
 import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
@@ -566,8 +566,7 @@ export component App inherits Window {
 
     // The Paramètres tab, hung under the bubble; open, it lies over the content. The Direct and
     // a tab without settings have none, but their content starts at the same height.
-    property <int> settings-tab: !Navigation.in-event || Navigation.live-open ? -1
-        : Navigation.active-tab <= 3 ? Navigation.active-tab : -1;
+    property <int> settings-tab: !Navigation.in-event || Navigation.live-open ? -1 : Navigation.active-tab;
     if root.settings-tab >= 0: SettingsTab {
         x: (root.width - self.width) / 2;
         y: header.height + Theme.tab-bubble-height - Theme.settings-tab-tuck;
@@ -575,13 +574,15 @@ export component App inherits Window {
         summary: root.settings-tab == 0 ? Zones.join(Courses.chips)
             : root.settings-tab == 1 ? Zones.join(Participants.chips)
             : root.settings-tab == 2 ? Zones.join(Starts.chips)
-            : Zones.join(Stations.chips);
+            : root.settings-tab == 3 ? Zones.join(Stations.chips)
+            : Zones.join(Results.chips);
         narrow: root.layout-mode == LayoutMode.narrow;
         open <=> Navigation.settings-open;
         if root.settings-tab == 0: CoursesSettings { }
         if root.settings-tab == 1: ParticipantSettings { }
         if root.settings-tab == 2: StartsSettings { }
         if root.settings-tab == 3: StationsSettings { narrow: root.layout-mode == LayoutMode.narrow; }
+        if root.settings-tab == 4: ResultsSettings { }
     }
 
     // A layer of the window's size: the bubble's own fixed height must not limit the window.

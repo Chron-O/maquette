@@ -3,7 +3,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, format_time};
-use crate::{App, LiveFilter, ResultRow, Results, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, LiveFilter, ResultRow, Results, model};
 use slint::{ComponentHandle, SharedString};
 use std::collections::BTreeMap;
 
@@ -90,6 +90,15 @@ impl ResultsState {
         self.category = category;
     }
 
+    // The Filtres bubble: one group, the categories of a course ranking.
+    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
+        self.category = if self.category == choice + 1 { 0 } else { choice + 1 };
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.category = 0;
+    }
+
     pub fn set_search(&mut self, text: &str) {
         self.search = text.trim().to_lowercase();
     }
@@ -146,6 +155,8 @@ impl ResultsState {
             page.set_title_tone(-1);
             page.set_state("".into());
             page.set_category_chips(model(Vec::new()));
+            page.set_filter_groups(model(Vec::new()));
+            page.set_active_filters(model(Vec::new()));
             page.set_rows(model(Vec::new()));
             page.set_empty("Aucun classement".into());
             return;
@@ -174,6 +185,29 @@ impl ResultsState {
         }
         page.set_category_chips(model(category_chips));
         page.set_active_category(self.category as i32);
+        // The same filter in the Filtres button: by course only, as the categories.
+        page.set_filter_groups(model(if categories.is_empty() {
+            Vec::new()
+        } else {
+            vec![FilterGroup {
+                key: 0,
+                title: "Catégorie".into(),
+                choices: model(
+                    categories
+                        .iter()
+                        .enumerate()
+                        .map(|(c, name)| FilterChoice { label: (*name).into(), tone: -1, active: self.category == c + 1 })
+                        .collect(),
+                ),
+            }]
+        }));
+        page.set_active_filters(model(
+            self.category
+                .checked_sub(1)
+                .and_then(|c| categories.get(c).map(|name| ActiveFilter { label: (*name).into(), tone: -1, group: 0, choice: c as i32 }))
+                .into_iter()
+                .collect(),
+        ));
         let category = self.category.checked_sub(1).and_then(|i| categories.get(i)).copied();
 
         // Valid results first, from the fastest, then those that do not count.

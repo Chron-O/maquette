@@ -7,6 +7,7 @@ import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
 import { MoreButton } from "../components/buttons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail } from "../components/zones.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { BubbleFrame, BubbleLabel, CourseChip, Courses, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -43,6 +44,10 @@ export global Results {
     in property <[LiveFilter]> category-chips;
     in property <int> active-category;
     in property <[string]> chips;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    callback toggle-filter(int, int);
+    callback clear-filters();
     in property <[string]> modes;
     in property <int> active-mode;
     in property <bool> by-course;
@@ -64,13 +69,17 @@ export global Results {
 }
 
 // The rankings: the column's navigation, with its magnifier.
+// The floating panel on the left (brief zones-onglets § 3).
 component RankingColumn inherits Rectangle {
     property <bool> search-open: Results.ranking-search-text != "";
 
     background: Theme.card;
-    border-radius: Theme.card-radius;
+    border-radius: Theme.sheet-radius;
     border-width: Theme.card-outline-width;
     border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.sheet-shadow-blur;
+    drop-shadow-offset-y: Theme.sheet-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
     clip: true;
     VerticalLayout {
         padding: Theme.space;
@@ -368,6 +377,21 @@ component ResultsContent {
                         }
                         SmallText { text: Results.state; }
                     }
+                    // The filters, then the search (brief zones-onglets § 6).
+                    if Results.filter-groups.length > 0: VerticalLayout {
+                        alignment: start;
+                        FilterButton {
+                            filters: Results.active-filters;
+                            narrow: root.narrow;
+                            open: Courses.open-bubble == 27;
+                            open-down: Courses.bubble-down;
+                            clicked => {
+                                Courses.open-at(27, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                            }
+                            remove(g, c) => { Results.toggle-filter(g, c); }
+                            clear => { Results.clear-filters(); }
+                        }
+                    }
                     if root.narrow: VerticalLayout {
                         alignment: start;
                         SearchToggle {
@@ -396,12 +420,6 @@ component ResultsContent {
                     init => { self.take-focus(); }
                     edited(text) => { Results.search(text); }
                 }
-                if Results.category-chips.length > 0: ChipFlow {
-                    items: Results.category-chips;
-                    active: Results.active-category;
-                    chip-width: Theme.live-reader-chip-width;
-                    clicked(i) => { Results.select-category(i); }
-                }
             }
             RowLine { vertical-stretch: 0; }
             if root.narrow: ResultsList { }
@@ -417,20 +435,11 @@ export component ResultsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Live.detail-open;
-    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
 
     VerticalLayout {
-        spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
-            SummaryZone {
-                title: "";
-                chips: Results.chips;
-                bubble: 14;
-                compact: true;
-            }
             ChipFlow {
                 items: Results.ranking-chips;
                 active: Results.active-ranking;
@@ -442,35 +451,46 @@ export component ResultsPage {
                 available-width: root.available-width;
             }
         }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 0;
-            SummaryZone {
-                title: "";
-                chips: Results.chips;
-                bubble: 14;
-                compact: root.layout-mode == LayoutMode.medium;
-            }
-            Rectangle { horizontal-stretch: 1; }
-        }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
-            RankingColumn { width: Theme.course-list-width; }
-            ResultsContent {
-                horizontal-stretch: 1;
-                layout-mode: root.layout-mode;
-                available-width: root.content-width;
-            }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := LiveDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                RankingColumn { width: Theme.course-list-width; }
+                ResultsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
                 }
             }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Live.detail-open;
+                close => { Live.close-detail(); }
+                LiveDetail { in-sheet: true; }
+            }
+        }
+    }
+}
+
+// The rows of the Paramètres tab.
+export component ResultsSettings {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Classer"; }
+            // A setting, not a view (departs-tirage-v2.md § A).
+            ChoiceSegments {
+                choices: Results.modes;
+                active: Results.active-mode;
+                clicked(i) => { Results.select-mode(i); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: "Temps maximal"; }
+            BubbleLabel { text: "aucun"; wrap: no-wrap; }
         }
     }
 }
@@ -482,7 +502,8 @@ export component ResultsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        wanted-width: Courses.open-bubble == 24 ? Theme.menu-bubble-width : Theme.bubble-width;
+        wanted-width: Courses.open-bubble == 24 ? Theme.menu-bubble-width
+            : Courses.open-bubble == 27 ? Theme.filter-bubble-width : Theme.bubble-width;
         // The « ⋯ » of a row (prototype: rDots): no effect yet.
         if Courses.open-bubble == 24: VerticalLayout {
             padding-top: Theme.space-small;
@@ -492,24 +513,11 @@ export component ResultsBubble {
             MenuItem { text: "Changer le statut…"; }
             MenuItem { text: "Historique"; }
         }
-        if Courses.open-bubble == 14: VerticalLayout {
-            padding: Theme.space-medium;
-            spacing: Theme.button-margin;
-            HorizontalLayout {
-                spacing: Theme.space;
-                BubbleLabel { horizontal-stretch: 1; text: "Classer"; }
-                // A setting, not a view (departs-tirage-v2.md § A).
-                ChoiceSegments {
-                    choices: Results.modes;
-                    active: Results.active-mode;
-                    clicked(i) => { Results.select-mode(i); }
-                }
-            }
-            HorizontalLayout {
-                spacing: Theme.space;
-                BubbleLabel { horizontal-stretch: 1; text: "Temps maximal"; }
-                BubbleLabel { text: "aucun"; wrap: no-wrap; }
-            }
+        if Courses.open-bubble == 27: FiltersContent {
+            groups: Results.filter-groups;
+            toggle(g, c) => { Results.toggle-filter(g, c); }
+            clear => { Results.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
         }
     }
 }
