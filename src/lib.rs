@@ -430,6 +430,10 @@ fn connect_live(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Live>();
     page.on_select_course(on_click(window, state, |l, i: i32| l.select_course(i as usize)));
     page.on_select_reader(on_click(window, state, |l, i: i32| l.select_reader(i as usize)));
+    let toggle = on_click(window, state, |l, (g, c): (i32, i32)| l.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |l, _: ()| l.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_select_row(on_click(window, state, |l, i: i32| l.select_row(i as usize)));
     page.on_open_row(on_click(window, state, |l, i: i32| l.open_row(i as usize)));
     page.on_toggle_list(on_click(window, state, |l, i: i32| l.toggle_list(i as usize)));

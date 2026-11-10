@@ -3,7 +3,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, FINISH_READERS, Format, Issue, LIVE_SECONDS, Reader, Reading, Runner, format_clock, format_clock_seconds, format_time, missed_control};
-use crate::{App, Live, LiveCandidate, LiveCount, LiveFilter, LiveLast, LiveListRow, LiveProblem, LiveRow, LiveSplit, LiveStop, LiveSummary, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, Live, LiveCandidate, LiveCount, LiveFilter, LiveLast, LiveListRow, LiveProblem, LiveRow, LiveSplit, LiveStop, LiveSummary, model};
 use slint::{ComponentHandle, SharedString};
 
 const COUNTS: [&str; 5] = ["inscrits", "arrivés", "en course", "PM", "non partis"];
@@ -169,6 +169,22 @@ impl LiveState {
 
     pub fn toggle_to_handle(&mut self) {
         self.to_handle_only = !self.to_handle_only;
+    }
+
+    // The Filtres bubble (brief zones-onglets § 5): 0 the course, 1 the reader, 2 what is to
+    // handle. A second click on the chosen choice takes it away.
+    pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        match group {
+            0 => self.course = if self.course == choice + 1 { 0 } else { choice + 1 },
+            1 => self.reader = if self.reader == choice + 1 { 0 } else { choice + 1 },
+            _ => self.to_handle_only = !self.to_handle_only,
+        }
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.course = 0;
+        self.reader = 0;
+        self.to_handle_only = false;
     }
 
     pub fn toggle_list(&mut self, list: usize) {
@@ -423,6 +439,42 @@ impl LiveState {
         reader_filters.extend(readers.iter().map(|reader| LiveFilter { label: reader.name.as_str().into(), tone: -1, detail: SharedString::new() }));
         page.set_reader_filters(model(reader_filters));
         page.set_active_reader(self.reader as i32);
+
+        // The same filters, in the Filtres button and its bubble.
+        let courses: Vec<(String, i32)> = event.courses.iter().enumerate().map(|(i, c)| (c.name.clone(), i as i32)).collect();
+        let reader_names: Vec<(String, i32)> = readers.iter().map(|r| (r.name.clone(), -1)).collect();
+        let to_handle = vec![("À traiter".to_string(), -1)];
+        let chosen = [self.course.checked_sub(1), self.reader.checked_sub(1), self.to_handle_only.then_some(0)];
+        let lists = [("Circuit", &courses), ("Lecteur", &reader_names), ("Lectures", &to_handle)];
+        page.set_filter_groups(model(
+            lists
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, choices))| !choices.is_empty())
+                .map(|(g, (title, choices))| FilterGroup {
+                    key: g as i32,
+                    title: (*title).into(),
+                    choices: model(
+                        choices
+                            .iter()
+                            .enumerate()
+                            .map(|(c, (label, tone))| FilterChoice { label: label.as_str().into(), tone: *tone, active: chosen[g] == Some(c) })
+                            .collect(),
+                    ),
+                })
+                .collect(),
+        ));
+        page.set_active_filters(model(
+            lists
+                .iter()
+                .enumerate()
+                .filter_map(|(g, (_, choices))| {
+                    let c = chosen[g]?;
+                    let (label, tone) = choices.get(c)?;
+                    Some(ActiveFilter { label: label.as_str().into(), tone: *tone, group: g as i32, choice: c as i32 })
+                })
+                .collect(),
+        ));
         page.set_search_text(self.search.as_str().into());
 
         let racing = runners.iter().filter(|r| r.is_racing()).count();

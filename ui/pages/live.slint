@@ -11,6 +11,7 @@ import { BarReader, ReaderMode, ReaderTile, Readers } from "../components/reader
 import { MoreButton, PrimaryButton, SecondaryButton } from "../components/buttons.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, BadgeKind, Home, ToHandleButton } from "home.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText } from "courses.slint";
 import { CategoryCell, Cell, NameCell } from "participants.slint";
 
@@ -108,6 +109,8 @@ export global Live {
     in property <[LiveRow]> rows;
     in property <LiveLast> last;
     in property <bool> to-handle-only;   // the feed shows only what is to handle
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
     in property <LiveSummary> summary;
     in property <string> alert-title;
     in property <string> alert-count;
@@ -151,6 +154,8 @@ export global Live {
     callback search(string);
     callback close-detail();
     callback toggle-to-handle();
+    callback toggle-filter(int, int);
+    callback clear-filters();
     in-out property <int> menu-row: -1;   // the row whose « ⋯ » menu is open
     callback show-to-handle();
     callback give-to(int);
@@ -883,108 +888,81 @@ component LiveContent {
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: Live.search-text != "";
-    property <length> courses-width: Live.course-filters.length * (Theme.live-chip-narrow-width + Theme.space-small);
-    property <length> readers-width: Live.reader-filters.length * (Theme.live-reader-chip-width + Theme.space-small);
-    // Both filters and the search on one line when they fit: the feed keeps its room.
-    property <bool> one-row: !root.narrow
-        && root.available-width >= 3 * Theme.space + root.courses-width + root.readers-width + Theme.live-search-width;
-    property <bool> search-below: !root.narrow && !root.one-row;
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.live-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.live-head-search;
 
-    VerticalLayout {
-        spacing: root.narrow ? Theme.button-margin : Theme.space;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            padding-top: root.narrow ? 0 : Theme.space;
-            SecondaryButton {
-                label: "Arrivée manuelle…";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-            Rectangle { horizontal-stretch: 1; }
-        }
-        Rectangle {
-            vertical-stretch: root.narrow ? 0 : 1;
-            background: Theme.card;
-            border-radius: Theme.card-radius;
-            border-width: Theme.card-outline-width;
-            border-color: Theme.card-outline;
-            clip: true;
+    Rectangle {
+        background: Theme.card;
+        border-radius: Theme.card-radius;
+        border-width: Theme.card-outline-width;
+        border-color: Theme.card-outline;
+        clip: true;
+        VerticalLayout {
+            // The add action in orange; on the right, the filters and the search (brief
+            // zones-onglets § 6). What is to handle is in the bar above, and in the filters.
             VerticalLayout {
-                VerticalLayout {
-                    vertical-stretch: 0;
-                    padding: Theme.space;
-                    spacing: Theme.space-small;
-                    HorizontalLayout {
-                        spacing: Theme.space;
-                        ChipFlow {
-                            horizontal-stretch: root.one-row ? 0 : 1;
-                            items: Live.course-filters;
-                            chip-width: Theme.live-chip-narrow-width;
-                            active: Live.active-course;
-                            clicked(i) => { Live.select-course(i); }
-                            min-width: root.one-row ? root.courses-width : 0px;
+                vertical-stretch: 0;
+                padding: Theme.space;
+                spacing: Theme.space;
+                HorizontalLayout {
+                    spacing: Theme.space;
+                    PrimaryButton {
+                        label: root.roomy ? "Arrivée manuelle" : "Arrivée";
+                        icon: Icons.plus;
+                        has-icon: true;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    FilterButton {
+                        filters: Live.active-filters;
+                        narrow: root.narrow;
+                        open: Courses.open-bubble == 26;
+                        open-down: Courses.bubble-down;
+                        clicked => {
+                            Courses.open-at(26, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
                         }
-                        if root.one-row: ChipFlow {
-                            horizontal-stretch: 1;
-                            items: Live.reader-filters;
-                            chip-width: Theme.live-reader-chip-width;
-                            active: Live.active-reader;
-                            clicked(i) => { Live.select-reader(i); }
-                        }
-                        if root.narrow: VerticalLayout {
-                            alignment: start;
-                            SearchToggle {
-                                open: root.search-open;
-                                clicked => {
-                                    if root.search-open {
-                                        Live.search("");
-                                    }
-                                    root.search-open = !root.search-open;
+                        remove(g, c) => { Live.toggle-filter(g, c); }
+                        clear => { Live.clear-filters(); }
+                    }
+                    if root.narrow: VerticalLayout {
+                        alignment: start;
+                        SearchToggle {
+                            open: root.search-open;
+                            clicked => {
+                                if root.search-open {
+                                    Live.search("");
                                 }
-                            }
-                        }
-                        if !root.narrow && !root.search-below: VerticalLayout {
-                            alignment: start;
-                            InputField {
-                                // Never narrower than its placeholder, whatever the font gives.
-                                width: max(Theme.live-search-width, self.placeholder-width);
-                                placeholder: "Chercher un coureur, une puce…";
-                                text: Live.search-text;
-                                edited(text) => { Live.search(text); }
+                                root.search-open = !root.search-open;
                             }
                         }
                     }
-                    if !root.one-row: ChipFlow {
-                        items: Live.reader-filters;
-                        chip-width: Theme.live-reader-chip-width;
-                        active: Live.active-reader;
-                        clicked(i) => { Live.select-reader(i); }
-                    }
-                    if root.search-below: InputField {
-                        placeholder: "Chercher un coureur, une puce…";
-                        text: Live.search-text;
-                        edited(text) => { Live.search(text); }
-                    }
-                    if root.narrow && root.search-open: InputField {
-                        placeholder: "Chercher un coureur, une puce…";
-                        text: Live.search-text;
-                        init => { self.take-focus(); }
-                        edited(text) => { Live.search(text); }
+                    if !root.narrow && !root.search-below: VerticalLayout {
+                        alignment: start;
+                        InputField {
+                            // Never narrower than its placeholder, whatever the font gives.
+                            width: max(Theme.live-search-width, self.placeholder-width);
+                            placeholder: "Chercher un coureur, une puce…";
+                            text: Live.search-text;
+                            edited(text) => { Live.search(text); }
+                        }
                     }
                 }
-                if Live.to-handle-only: HorizontalLayout {
-                    vertical-stretch: 0;
-                    alignment: start;
-                    padding-left: Theme.space;
-                    padding-bottom: Theme.space;
-                    ToHandleChip { }
+                if root.search-below: InputField {
+                    placeholder: "Chercher un coureur, une puce…";
+                    text: Live.search-text;
+                    edited(text) => { Live.search(text); }
                 }
-                RowLine { vertical-stretch: 0; }
-                if root.narrow: LiveList { }
-                if !root.narrow: LiveTable {
-                    vertical-stretch: 1;
-                    available-width: root.available-width;
+                if root.narrow && root.search-open: InputField {
+                    placeholder: "Chercher un coureur, une puce…";
+                    text: Live.search-text;
+                    init => { self.take-focus(); }
+                    edited(text) => { Live.search(text); }
                 }
+            }
+            RowLine { vertical-stretch: 0; }
+            if root.narrow: LiveList { }
+            if !root.narrow: LiveTable {
+                vertical-stretch: 1;
+                available-width: root.available-width;
             }
         }
     }
@@ -1217,9 +1195,9 @@ component ProblemBand inherits Rectangle {
         if Live.detail-unknown: HorizontalLayout { alignment: start; SecondaryButton { label: "Inscrire un nouveau…"; } }
         if Live.detail-twice: HorizontalLayout {
             alignment: start;
-            PrimaryButton {
+            // White: the screen's one orange button is the add action (brief zones-onglets § 6).
+            SecondaryButton {
                 label: "Garder le premier résultat";
-                in-row: true;
                 clicked => { Live.keep-first(); }
             }
         }
@@ -1276,9 +1254,11 @@ component SplitsTable {
 }
 
 export component LiveDetail inherits Rectangle {
-    background: Theme.card;
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
     border-radius: Theme.card-radius;
-    border-width: Theme.thin-outline-width;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
     // Behind the content, so that a click in the detail does not close it.
@@ -1367,12 +1347,9 @@ export component LivePage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Live.detail-open;
-    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
 
     VerticalLayout {
-        spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
             RaceCounts { }
@@ -1382,55 +1359,45 @@ export component LivePage {
                 available-width: root.available-width;
             }
         }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
-            VerticalLayout {
-                width: Theme.course-list-width;
-                spacing: Theme.space;
-                RaceCounts { vertical-stretch: 0; }
-                if Live.active-list >= 0: RaceList { vertical-stretch: 1; }
-                if Live.active-list < 0: Rectangle { vertical-stretch: 1; }
-            }
-            LiveContent {
-                horizontal-stretch: 1;
-                layout-mode: root.layout-mode;
-                available-width: root.content-width;
-            }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := LiveDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left: the race in figures, and the list opened.
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.space;
+                        spacing: Theme.space;
+                        RaceCounts { vertical-stretch: 0; }
+                        if Live.active-list >= 0: RaceList { vertical-stretch: 1; }
+                        if Live.active-list < 0: Rectangle { vertical-stretch: 1; }
+                    }
                 }
+                LiveContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
+                }
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Live.detail-open;
+                close => { Live.close-detail(); }
+                LiveDetail { in-sheet: true; }
             }
         }
     }
 }
 
-// On medium and narrow layouts, the detail opens over the page, and scrolls when it is long.
+// On a phone, the detail rises from the bottom.
 export component LiveOverlay {
-    Rectangle { background: Theme.overlay-veil; }
-    Flickable {
-        x: 0;
-        y: 0;
+    BottomDetail {
         width: root.width;
         height: root.height;
-        content-height: max(root.height, detail.preferred-height + 2 * Theme.narrow-margin);
-        TouchArea {
-            width: root.width;
-            height: parent.height;
-            clicked => { Live.close-detail(); }
-        }
-        detail := LiveDetail {
-            x: (root.width - self.width) / 2;
-            y: max(Theme.narrow-margin, (root.height - self.height) / 2);
-            width: min(Theme.detail-overlay-width, root.width - 2 * Theme.narrow-margin);
-            height: self.preferred-height;
-        }
+        shown: Live.detail-open;
+        close => { Live.close-detail(); }
+        LiveDetail { in-sheet: true; }
     }
 }
 
@@ -1442,7 +1409,14 @@ export component LiveBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        wanted-width: Courses.open-bubble == 21 ? Theme.menu-bubble-width : Theme.bubble-width;
+        wanted-width: Courses.open-bubble == 21 ? Theme.menu-bubble-width
+            : Courses.open-bubble == 26 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 26: FiltersContent {
+            groups: Live.filter-groups;
+            toggle(g, c) => { Live.toggle-filter(g, c); }
+            clear => { Live.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
+        }
         if Courses.open-bubble == 13: VerticalLayout {
             padding: Theme.space-medium;
             spacing: Theme.space;
