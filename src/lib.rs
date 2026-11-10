@@ -304,6 +304,10 @@ fn connect_starts(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_sort_by(on_click(window, state, |s, i: i32| s.sort_by(i)));
     page.on_select_group(on_click(window, state, |s, i: i32| s.select_group(i as usize)));
     page.on_select_point(on_click(window, state, |s, i: i32| s.select_point(i as usize)));
+    let toggle = on_click(window, state, |s, (g, c): (i32, i32)| s.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |s, _: ()| s.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_select_view(on_click(window, state, |s, i: i32| s.select_view(i as usize)));
     page.on_search(on_click(window, state, |s, text: slint::SharedString| s.set_search(&text)));
     let close = on_click(window, state, |s, _: ()| s.close_detail());

@@ -8,6 +8,7 @@ import { Icons } from "../components/icons.slint";
 import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
@@ -87,6 +88,8 @@ export global Starts {
     in property <int> active-group: -1;
     in property <[StartPoint]> points;
     in property <int> active-point;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
     in property <[TabItem]> views;
     in property <int> active-view;
     in property <string> search-text;
@@ -118,6 +121,8 @@ export global Starts {
     callback sort-by(int);
     callback select-group(int);
     callback select-point(int);
+    callback toggle-filter(int, int);
+    callback clear-filters();
     callback select-view(int);
     callback search(string);
     callback close-detail();
@@ -625,6 +630,8 @@ component StartsContent {
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: Starts.search-text != "";
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.starts-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.starts-head-search;
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
@@ -644,15 +651,37 @@ component StartsContent {
                     vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space;
+                    // The draw in orange, then the views; on the right, the alert, the filters and
+                    // the search (brief zones-onglets § 6). The draw hides while its preview is open.
                     HorizontalLayout {
                         spacing: Theme.space;
+                        if !Starts.preview: PrimaryButton {
+                            label: root.narrow ? "Tirer" : "Tirer les horaires";
+                            clicked => { Starts.draw(); }
+                        }
                         if !root.narrow: Tabs {
                             tabs: Starts.views;
                             active: Starts.active-view;
                             clicked(i) => { Starts.select-view(i); }
                         }
-                        if root.narrow && Starts.points.length > 0: PointChips { }
                         Rectangle { horizontal-stretch: 1; }
+                        if Starts.alert-title != "" && !Starts.preview: AlertPill {
+                            title: Starts.alert-title;
+                            count: Starts.alert-count;
+                            bubble: 8;
+                            compact: !root.roomy;
+                        }
+                        FilterButton {
+                            filters: Starts.active-filters;
+                            narrow: root.narrow;
+                            open: Courses.open-bubble == 24;
+                            open-down: Courses.bubble-down;
+                            clicked => {
+                                Courses.open-at(24, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                            }
+                            remove(g, c) => { Starts.toggle-filter(g, c); }
+                            clear => { Starts.clear-filters(); }
+                        }
                         if root.narrow: SearchToggle {
                             open: root.search-open;
                             clicked => {
@@ -662,7 +691,7 @@ component StartsContent {
                                 root.search-open = !root.search-open;
                             }
                         }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.search-below: VerticalLayout {
                             alignment: center;
                             InputField {
                                 width: Theme.code-search-width;
@@ -671,7 +700,11 @@ component StartsContent {
                                 edited(text) => { Starts.search(text); }
                             }
                         }
-                        if !root.narrow && Starts.active-group >= 0: GroupChip { }
+                    }
+                    if root.search-below: InputField {
+                        placeholder: "Nom ou club…";
+                        text: Starts.search-text;
+                        edited(text) => { Starts.search(text); }
                     }
                     if root.narrow && root.search-open: InputField {
                         placeholder: "Nom ou club…";
@@ -679,11 +712,6 @@ component StartsContent {
                         init => { self.take-focus(); }
                         edited(text) => { Starts.search(text); }
                     }
-                    if root.narrow && Starts.active-group >= 0: HorizontalLayout {
-                        alignment: start;
-                        GroupChip { }
-                    }
-                    if !root.narrow && Starts.points.length > 0: PointChips { }
                 }
                 RowLine { vertical-stretch: 0; }
                 if root.narrow: StartsList { }
@@ -728,11 +756,15 @@ component GroupItem inherits Rectangle {
     }
 }
 
+// The floating panel on the left (brief zones-onglets § 3).
 component GroupsColumn inherits Rectangle {
     background: Theme.card;
-    border-radius: Theme.card-radius;
+    border-radius: Theme.sheet-radius;
     border-width: Theme.card-outline-width;
     border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.sheet-shadow-blur;
+    drop-shadow-offset-y: Theme.sheet-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
     VerticalLayout {
         padding: Theme.space;
         spacing: Theme.space;
@@ -763,9 +795,11 @@ component GroupsColumn inherits Rectangle {
 }
 
 export component StartDetail inherits Rectangle {
-    background: Theme.card;
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
     border-radius: Theme.card-radius;
-    border-width: Theme.thin-outline-width;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
     // Behind the content, so that a click in the detail does not close it.
@@ -868,95 +902,42 @@ export component StartsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Starts.detail-open;
-    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
 
     VerticalLayout {
-        spacing: Theme.button-margin;
-        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
-            spacing: Theme.button-margin;
+        if root.layout-mode == LayoutMode.narrow: StartsContent {
+            layout-mode: root.layout-mode;
+            available-width: root.available-width;
+        }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
             HorizontalLayout {
-                spacing: Theme.space;
-                SummaryZone {
+                spacing: Theme.button-margin;
+                GroupsColumn { width: Theme.course-list-width; }
+                StartsContent {
                     horizontal-stretch: 1;
-                    title: "";
-                    chips: Starts.chips;
-                    bubble: 7;
-                    compact: true;
-                }
-                if Starts.alert-title != "" && !Starts.preview: AlertPill {
-                    title: Starts.alert-title;
-                    count: Starts.alert-count;
-                    bubble: 8;
-                    compact: true;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
                 }
             }
-            StartsContent {
-                layout-mode: root.layout-mode;
-                available-width: root.available-width;
-            }
-        }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.button-margin;
-            SummaryZone {
-                title: "";
-                chips: Starts.chips;
-                bubble: 7;
-                compact: root.layout-mode == LayoutMode.medium;
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if Starts.alert-title != "" && !Starts.preview: AlertPill {
-                title: Starts.alert-title;
-                count: Starts.alert-count;
-                bubble: 8;
-            }
-        }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
-            GroupsColumn { width: Theme.course-list-width; }
-            StartsContent {
-                horizontal-stretch: 1;
-                layout-mode: root.layout-mode;
-                available-width: root.content-width;
-            }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := StartDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
-                }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Starts.detail-open;
+                close => { Starts.close-detail(); }
+                StartDetail { in-sheet: true; }
             }
         }
     }
 }
 
-// On medium and narrow layouts, the detail opens over the page.
+// On a phone, the detail rises from the bottom.
 export component StartOverlay {
-    Rectangle { background: Theme.overlay-veil; }
-    // A long detail scrolls instead of leaving the screen.
-    Flickable {
-        x: 0;
-        y: 0;
+    BottomDetail {
         width: root.width;
         height: root.height;
-        content-height: max(root.height, detail.preferred-height + 2 * Theme.narrow-margin);
-        TouchArea {
-            width: root.width;
-            height: parent.height;
-            clicked => { Starts.close-detail(); }
-        }
-        detail := StartDetail {
-            x: (root.width - self.width) / 2;
-            y: max(Theme.narrow-margin, (root.height - self.height) / 2);
-            width: min(Theme.detail-overlay-width, root.width - 2 * Theme.narrow-margin);
-            height: self.preferred-height;
-        }
+        shown: Starts.detail-open;
+        close => { Starts.close-detail(); }
+        StartDetail { in-sheet: true; }
     }
 }
 
@@ -970,7 +951,8 @@ component SettingRow {
     }
 }
 
-component SettingsContent {
+// The rows of the Paramètres tab.
+export component StartsSettings {
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.button-margin;
@@ -1108,8 +1090,14 @@ export component StartsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        wanted-width: Courses.open-bubble == 23 ? Theme.menu-bubble-width : Theme.bubble-width;
-        if Courses.open-bubble == 7: SettingsContent { }
+        wanted-width: Courses.open-bubble == 23 ? Theme.menu-bubble-width
+            : Courses.open-bubble == 24 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 24: FiltersContent {
+            groups: Starts.filter-groups;
+            toggle(g, c) => { Starts.toggle-filter(g, c); }
+            clear => { Starts.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
+        }
         if Courses.open-bubble == 8: ChangesContent { }
         if Courses.open-bubble == 9: SectionContent { }
         if Courses.open-bubble == 23: VerticalLayout {

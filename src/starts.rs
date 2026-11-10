@@ -4,7 +4,7 @@
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, Runner, START_STEP, format_clock};
 use crate::participants::card_label;
-use crate::{App, ChangedStart, FriseCell, FriseRow, StartGroup, StartPoint, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
+use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, StartGroup, StartPoint, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 2] = ["Liste", "Frise"];
@@ -88,6 +88,20 @@ impl StartsState {
 
     pub fn select_group(&mut self, group: usize) {
         self.group = if self.group == Some(group) { None } else { Some(group) };
+    }
+
+    // The Filtres bubble (brief zones-onglets § 5): group 0 the start point, group 1 the group.
+    // A second click on the chosen choice takes it away.
+    pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        match group {
+            0 => self.point = if self.point == choice + 1 { 0 } else { choice + 1 },
+            _ => self.select_group(choice),
+        }
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.point = 0;
+        self.group = None;
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -248,6 +262,40 @@ impl StartsState {
             chips.extend(points.iter().map(|p| StartPoint { label: format!("S{p}").into() }));
         }
         page.set_points(model(chips));
+
+        // The filters: the start point (when there are several), then the group.
+        let point_names: Vec<String> = if points.len() > 1 { points.iter().map(|p| format!("Départ S{p}")).collect() } else { Vec::new() };
+        let group_names: Vec<String> = event.groups.iter().map(|g| g.name.clone()).collect();
+        let chosen = [self.point.checked_sub(1), self.group];
+        let lists = [("Point de départ", &point_names), ("Groupe", &group_names)];
+        page.set_filter_groups(model(
+            lists
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, names))| !names.is_empty())
+                .map(|(g, (title, names))| FilterGroup {
+                    key: g as i32,
+                    title: (*title).into(),
+                    choices: model(
+                        names
+                            .iter()
+                            .enumerate()
+                            .map(|(c, name)| FilterChoice { label: name.as_str().into(), tone: -1, active: chosen[g] == Some(c) })
+                            .collect(),
+                    ),
+                })
+                .collect(),
+        ));
+        page.set_active_filters(model(
+            lists
+                .iter()
+                .enumerate()
+                .filter_map(|(g, (_, names))| {
+                    let c = chosen[g]?;
+                    Some(ActiveFilter { label: names.get(c)?.as_str().into(), tone: -1, group: g as i32, choice: c as i32 })
+                })
+                .collect(),
+        ));
 
         // One settings block per start point: its first start, its step, and how many leave together.
         let point_of = |index: usize| runners[index].runs.first().map(|r| event.courses[r.course].start_point);

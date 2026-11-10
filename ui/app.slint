@@ -15,7 +15,7 @@ import { Cards, CardsPage, CardOverlay, CardsBubble, CardRow, CardParkItem, Card
 import { Results, ResultsPage, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
-import { Starts, StartsPage, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
+import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
 import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
 import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
@@ -453,10 +453,6 @@ export component App inherits Window {
             }
             if Navigation.in-event && Navigation.active-tab == 2: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Starts.summary-short : Starts.summary;
-                // The page's actions go in the band (CLAUDE.md, Placement).
-                // Hidden while a draw preview is open: it has its own « Refaire ».
-                first-action: Starts.preview ? "" : "Tirer les horaires";
-                first-clicked => { Starts.draw(); }
                 can-publish: true;
                 publish-label: Starts.publish-label;
                 publish-enabled: Starts.publish-enabled;
@@ -571,16 +567,19 @@ export component App inherits Window {
     // The Paramètres tab, hung under the bubble; open, it lies over the content. The Direct and
     // a tab without settings have none, but their content starts at the same height.
     property <int> settings-tab: !Navigation.in-event || Navigation.live-open ? -1
-        : Navigation.active-tab <= 1 ? Navigation.active-tab : -1;
+        : Navigation.active-tab <= 2 ? Navigation.active-tab : -1;
     if root.settings-tab >= 0: SettingsTab {
         x: (root.width - self.width) / 2;
         y: header.height + Theme.tab-bubble-height - Theme.settings-tab-tuck;
         width: bubble.width - 2 * (root.layout-mode == LayoutMode.narrow ? Theme.settings-tab-narrow-inset : Theme.settings-tab-inset);
-        summary: root.settings-tab == 0 ? Zones.join(Courses.chips) : Zones.join(Participants.chips);
+        summary: root.settings-tab == 0 ? Zones.join(Courses.chips)
+            : root.settings-tab == 1 ? Zones.join(Participants.chips)
+            : Zones.join(Starts.chips);
         narrow: root.layout-mode == LayoutMode.narrow;
         open <=> Navigation.settings-open;
         if root.settings-tab == 0: CoursesSettings { }
         if root.settings-tab == 1: ParticipantSettings { }
+        if root.settings-tab == 2: StartsSettings { }
     }
 
     // A layer of the window's size: the bubble's own fixed height must not limit the window.
@@ -724,7 +723,7 @@ export component App inherits Window {
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && Starts.detail-open && root.layout-mode != LayoutMode.wide: StartOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && root.layout-mode == LayoutMode.narrow: StartOverlay {
         width: 100%;
         height: 100%;
     }

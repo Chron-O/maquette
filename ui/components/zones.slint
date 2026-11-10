@@ -14,6 +14,7 @@ export struct FilterChoice {
 }
 
 export struct FilterGroup {
+    key: int,        // which group, for Rust: a page may leave a group out
     title: string,
     choices: [FilterChoice],
 }
@@ -413,7 +414,7 @@ export component FiltersContent {
             font-size: Theme.text-label;
             font-weight: Theme.weight-screen-title;
         }
-        for group[g] in root.groups: VerticalLayout {
+        for group in root.groups: VerticalLayout {
             spacing: Theme.space-small;
             Text {
                 text: group.title;
@@ -430,7 +431,7 @@ export component FiltersContent {
                     y: floor(c / flow.per-row) * Theme.zone;
                     width: root.per-row-width;
                     choice: choice;
-                    clicked => { root.toggle(g, c); }
+                    clicked => { root.toggle(group.key, c); }
                 }
             }
         }

@@ -250,6 +250,7 @@ impl ParticipantsState {
                 .iter()
                 .enumerate()
                 .map(|(g, (title, choices))| FilterGroup {
+                    key: g as i32,
                     title: (*title).into(),
                     choices: model(
                         choices
