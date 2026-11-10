@@ -9,12 +9,18 @@ component Tab {
     callback clicked();
     callback position(length, length);   // tells the bar where to place the pill
     in property <string> label;
+    in property <image> icon;
+    in property <bool> with-icon;
     in property <bool> active;
     in property <bool> ghost;
 
+    property <color> tint: !root.active ? Theme.tab-text : root.ghost ? Theme.ghost-tab-text : Theme.active-tab-text;
+    animate tint { duration: Theme.tab-duration; }
+    property <length> icon-room: root.with-icon ? Theme.tab-icon + Theme.space : 0px;
+
     // Width reserved for the bold text: tabs do not move when the selection changes.
     min-height: Theme.zone;
-    min-width: reference.preferred-width + 2 * Theme.tab-margin;
+    min-width: reference.preferred-width + root.icon-room + 2 * Theme.tab-margin;
 
     function report() {
         if root.active {
@@ -38,12 +44,25 @@ component Tab {
         background: !root.active && zone.has-hover ? Theme.tab-hover : transparent;
         animate background { duration: Theme.tint-duration; }
     }
-    Text {
-        text: root.label;
-        color: !root.active ? Theme.tab-text : root.ghost ? Theme.ghost-tab-text : Theme.active-tab-text;
-        animate color { duration: Theme.tab-duration; }
-        font-size: Theme.text-label;
-        font-weight: root.active ? Theme.weight-block-title : Theme.weight-label;
+    HorizontalLayout {
+        alignment: center;
+        spacing: Theme.space;
+        if root.with-icon: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: root.tint;
+                width: Theme.tab-icon;
+                height: Theme.tab-icon;
+            }
+        }
+        Text {
+            text: root.label;
+            color: root.tint;
+            font-size: Theme.text-label;
+            font-weight: root.active ? Theme.weight-block-title : Theme.weight-label;
+            vertical-alignment: center;
+        }
     }
     zone := TouchArea {
         mouse-cursor: pointer;
@@ -52,12 +71,15 @@ component Tab {
 }
 
 // Pill tab bar with words: a single dark pill slides to the active tab. `ghost`: something
-// lies over the tab (the open Direct), the pill stays, pale.
+// lies over the tab (the open Direct), the pill stays, pale. `with-icons`: icon + word.
+// `bare`: no track of its own (inside the tab bubble).
 export component Tabs inherits Rectangle {
     callback clicked(int);
     in property <[TabItem]> tabs;
     in property <int> active: -1;
     in property <bool> ghost;
+    in property <bool> with-icons;
+    in property <bool> bare;
 
     property <length> pill-x;
     property <length> pill-width;
@@ -65,7 +87,7 @@ export component Tabs inherits Rectangle {
 
     height: Theme.tab-bar-height;
     border-radius: self.height / 2;
-    background: Theme.tabs-background;
+    background: root.bare ? transparent : Theme.tabs-background;
 
     Timer {
         interval: Theme.tab-duration + Theme.tint-duration;
@@ -92,6 +114,8 @@ export component Tabs inherits Rectangle {
         padding-right: Theme.space-small;
         for tab[i] in root.tabs: Tab {
             label: tab.label;
+            icon: tab.icon;
+            with-icon: root.with-icons;
             active: i == root.active;
             ghost: root.ghost;
             clicked => { root.clicked(i); }
@@ -156,6 +180,7 @@ export component IconTabs inherits Rectangle {
     in property <[TabItem]> tabs;
     in property <int> active: -1;
     in property <bool> ghost;
+    in property <bool> bare;
 
     property <length> margin: Theme.space-small / 2;
     property <length> extra: root.active >= 0 ? measure.preferred-width + Theme.space-small : 0px;
@@ -164,7 +189,7 @@ export component IconTabs inherits Rectangle {
 
     height: Theme.tab-bar-height;
     border-radius: self.height / 2;
-    background: Theme.tabs-background;
+    background: root.bare ? transparent : Theme.tabs-background;
 
     Timer {
         interval: Theme.tab-duration + Theme.tint-duration;

@@ -13,6 +13,7 @@ export global Navigation {
     in property <[TabItem]> tabs;
     in property <int> active-tab;
     in property <bool> live-open;
+    in-out property <bool> settings-open;   // the Paramètres tab unfolded; folded on a tab change
     in property <bool> live-running;
     callback open-event(int);
     callback open-direct();

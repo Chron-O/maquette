@@ -2,8 +2,9 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Format, Kind, Label, Run, Runner, format_clock, format_time};
-use crate::{App, Passage, ParticipantFilter, ParticipantRow, Participants, SequenceStop, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, Passage, ParticipantRow, Participants, SequenceStop, model};
 use slint::{ComponentHandle, SharedString};
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 fn plural(count: usize, noun: &str) -> String {
@@ -20,17 +21,34 @@ enum SortKey {
     Start,
 }
 
+// The filter groups, in the Filtres bubble (brief zones-onglets § 5). One choice per group.
+const STATE: usize = 0;
+const COURSE: usize = 1;
+const CARD: usize = 2;
+const CHECK: usize = 3;
+const STATES: [&str; 4] = ["Inscrits", "En course", "Arrivés", "PM"];
+const CARDS: [&str; 2] = ["Sans puce", "Prêtée"];
+const CHECKS: [&str; 2] = ["Doublons possibles", "Catégorie inconnue"];
+
 pub struct ParticipantsState {
     sort: SortKey,
     ascending: bool,
-    filter: usize,      // 0 all, otherwise a course + 1
+    filters: [Option<usize>; 4],   // the choice of each group, if any
     search: String,
     selected: Option<usize>,
+    problems: RefCell<Vec<(usize, usize)>>, // the filter of each line of the alert, set by show
 }
 
 impl Default for ParticipantsState {
     fn default() -> Self {
-        ParticipantsState { sort: SortKey::Name, ascending: true, filter: 0, search: String::new(), selected: None }
+        ParticipantsState {
+            sort: SortKey::Name,
+            ascending: true,
+            filters: [None; 4],
+            search: String::new(),
+            selected: None,
+            problems: RefCell::new(Vec::new()),
+        }
     }
 }
 
@@ -76,8 +94,24 @@ impl ParticipantsState {
         self.selected = None;
     }
 
-    pub fn select_filter(&mut self, filter: usize) {
-        self.filter = filter;
+    // A second click on the chosen choice takes it away.
+    pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        if let Some(slot) = self.filters.get_mut(group) {
+            *slot = if *slot == Some(choice) { None } else { Some(choice) };
+        }
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.filters = [None; 4];
+    }
+
+    // « Voir » on a line of the alert: its filter, alone.
+    pub fn show_problem(&mut self, index: usize) {
+        let problem = self.problems.borrow().get(index).copied();
+        if let Some((group, choice)) = problem {
+            self.clear_filters();
+            self.filters[group] = Some(choice);
+        }
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -101,14 +135,31 @@ impl ParticipantsState {
         }
     }
 
-    fn matches(&self, runner: &Runner) -> bool {
-        let in_filter = self.filter == 0 || runner.runs.iter().any(|r| r.course + 1 == self.filter);
+    fn matches(&self, runner: &Runner, duplicate: bool) -> bool {
+        let state = match self.filters[STATE] {
+            None => true,
+            Some(choice) => runner.label().word == ["Inscrit", "En course", "Arrivé", "PM"][choice],
+        };
+        let course = self.filters[COURSE].is_none_or(|c| runner.runs.iter().any(|r| r.course == c));
+        let card = match self.filters[CARD] {
+            None => true,
+            Some(0) => runner.card.is_none(),
+            Some(_) => runner.lent,
+        };
+        let check = match self.filters[CHECK] {
+            None => true,
+            Some(0) => duplicate,
+            Some(_) => runner.unknown_category,
+        };
         let text = format!("{} {} {}", runner.name(), runner.club, card_text(runner)).to_lowercase();
-        in_filter && self.search.split_whitespace().all(|word| text.contains(word))
+        state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event) -> Vec<usize> {
-        let mut rows: Vec<usize> = (0..event.runners.len()).filter(|i| self.matches(&event.runners[*i])).collect();
+        let names: Vec<String> = event.runners.iter().map(|r| r.name()).collect();
+        let duplicate = |i: usize| names.iter().filter(|n| **n == names[i]).count() > 1;
+        let mut rows: Vec<usize> =
+            (0..event.runners.len()).filter(|i| self.matches(&event.runners[*i], duplicate(*i))).collect();
         rows.sort_by_key(|i| {
             let runner = &event.runners[*i];
             let key = match self.sort {
@@ -165,16 +216,18 @@ impl ParticipantsState {
         let names: Vec<String> = runners.iter().map(|r| r.name()).collect();
         let duplicates = names.iter().enumerate().filter(|(i, n)| names[..*i].contains(n)).count();
         let unknown = runners.iter().filter(|r| r.unknown_category).count();
-        let mut problems: Vec<String> = Vec::new();
+        // Each line of the alert, with the filter its « Voir » applies.
+        let mut problems: Vec<(String, usize, usize)> = Vec::new();
         if duplicates > 0 {
-            problems.push(plural(duplicates, "doublon possible").replace("doublon possibles", "doublons possibles"));
+            problems.push((plural(duplicates, "doublon possible").replace("doublon possibles", "doublons possibles"), CHECK, 0));
         }
         if without_card > 0 {
-            problems.push(format!("{} sans puce", plural(without_card, "inscrit")));
+            problems.push((format!("{} sans puce", plural(without_card, "inscrit")), CARD, 0));
         }
         if unknown > 0 {
-            problems.push(plural(unknown, "catégorie inconnue").replace("catégorie inconnues", "catégories inconnues"));
+            problems.push((plural(unknown, "catégorie inconnue").replace("catégorie inconnues", "catégories inconnues"), CHECK, 1));
         }
+        *self.problems.borrow_mut() = problems.iter().map(|(_, group, choice)| (*group, *choice)).collect();
         page.set_alert_count(problems.len().to_string().into());
         page.set_alert_title(
             if problems.is_empty() {
@@ -183,15 +236,46 @@ impl ParticipantsState {
                 format!("{} à vérifier", plural(problems.len(), "point")).into()
             },
         );
-        page.set_problems(model(problems.iter().map(|p| SharedString::from(p.as_str())).collect()));
+        page.set_problems(model(problems.iter().map(|p| SharedString::from(p.0.as_str())).collect()));
 
-        let mut filters = vec![ParticipantFilter { label: "Tous".into(), tone: -1 }];
-        filters.extend(event.courses.iter().enumerate().map(|(i, c)| {
-            let count = runners.iter().filter(|r| r.runs.iter().any(|run| run.course == i)).count();
-            ParticipantFilter { label: format!("{} · {count}", c.name.replace("Circuit ", "")).into(), tone: i as i32 }
-        }));
-        page.set_filters(model(filters));
-        page.set_active_filter(self.filter as i32);
+        let courses: Vec<(String, i32)> = event.courses.iter().enumerate().map(|(i, c)| (c.name.clone(), i as i32)).collect();
+        let groups: [(&str, Vec<(String, i32)>); 4] = [
+            ("État", STATES.iter().map(|s| (s.to_string(), -1)).collect()),
+            ("Circuit", courses),
+            ("Puce", CARDS.iter().map(|s| (s.to_string(), -1)).collect()),
+            ("À vérifier", CHECKS.iter().map(|s| (s.to_string(), -1)).collect()),
+        ];
+        page.set_filter_groups(model(
+            groups
+                .iter()
+                .enumerate()
+                .map(|(g, (title, choices))| FilterGroup {
+                    title: (*title).into(),
+                    choices: model(
+                        choices
+                            .iter()
+                            .enumerate()
+                            .map(|(c, (label, tone))| FilterChoice {
+                                label: label.as_str().into(),
+                                tone: *tone,
+                                active: self.filters[g] == Some(c),
+                            })
+                            .collect(),
+                    ),
+                })
+                .collect(),
+        ));
+        page.set_active_filters(model(
+            groups
+                .iter()
+                .enumerate()
+                .filter_map(|(g, (_, choices))| {
+                    let c = self.filters[g]?;
+                    let (label, tone) = choices.get(c)?;
+                    Some(ActiveFilter { label: label.as_str().into(), tone: *tone, group: g as i32, choice: c as i32 })
+                })
+                .collect(),
+        ));
         page.set_search_text(self.search.as_str().into());
         page.set_sort_column(match self.sort {
             SortKey::State => 0,

@@ -256,7 +256,11 @@ fn connect_participants(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Participants>();
     page.on_select_row(on_click(window, state, |p, i: i32| p.select_row(i as usize)));
     page.on_sort_by(on_click(window, state, |p, i: i32| p.sort_by(i)));
-    page.on_select_filter(on_click(window, state, |p, i: i32| p.select_filter(i as usize)));
+    let toggle = on_click(window, state, |p, (g, c): (i32, i32)| p.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |p, _: ()| p.clear_filters());
+    page.on_clear_filters(move || clear(()));
+    page.on_show_problem(on_click(window, state, |p, i: i32| p.show_problem(i as usize)));
     page.on_search(on_click(window, state, |p, text: slint::SharedString| p.set_search(&text)));
     let close = on_click(window, state, |p, _: ()| p.close_detail());
     page.on_close_detail(move || close(()));

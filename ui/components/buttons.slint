@@ -7,6 +7,8 @@ export component PrimaryButton {
     callback clicked();
     in property <string> label;
     in property <bool> in-row: false;
+    in property <image> icon;
+    in property <bool> has-icon: false;
 
     min-height: Theme.primary-button-height;
 
@@ -22,6 +24,17 @@ export component PrimaryButton {
     HorizontalLayout {
         padding-left: root.in-row ? Theme.button-margin : Theme.primary-button-margin;
         padding-right: root.in-row ? Theme.button-margin : Theme.primary-button-margin;
+        spacing: Theme.button-icon-gap;
+        alignment: center;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.primary-button-text;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+        }
         Text {
             text: root.label;
             color: Theme.primary-button-text;

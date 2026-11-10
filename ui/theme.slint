@@ -560,4 +560,37 @@ export global Theme {
     out property <length> space: 8px;
     out property <length> space-medium: 16px;
 
+
+    // Zones of a tab (brief zones-onglets, 10/11/2026). The prototype's values are a guide.
+    // The tab bubble, astride the header and the page.
+    out property <length> tab-bubble-padding: 6px;
+    out property <length> tab-bubble-height: tab-bar-height + 2 * tab-bubble-padding;
+    out property <length> tab-bubble-shadow-blur: 18px;
+    out property <length> tab-bubble-shadow-offset: 4px;
+    // The Paramètres tab, hung under the bubble.
+    out property <length> settings-tab-height: touch ? 48px : 46px;
+    out property <length> settings-tab-tuck: 10px;        // how far it goes under the bubble
+    out property <length> settings-tab-inset: 56px;       // narrower than the bubble, each side
+    out property <length> settings-tab-narrow-inset: 16px;
+    out property <length> settings-tab-shadow-blur: 14px;
+    out property <length> settings-tab-shadow-offset: 6px;
+    // The floating panels, left (the column) and right (the detail).
+    out property <length> sheet-radius: 16px;
+    out property <length> sheet-gap: 12px;                // off the edges
+    out property <length> sheet-shadow-blur: dark ? 0px : 24px;
+    out property <length> sheet-shadow-offset: 4px;
+    out property <color> sheet-shadow: dark ? transparent : #16362824;
+    out property <duration> sheet-duration: reduced-motion ? 0ms : 300ms;
+    out property <length> side-sheet-width: 380px;
+    out property <length> bottom-sheet-top: 96px;         // a phone: what stays seen above it
+    // The Filtres button and its bubble.
+    out property <color> filter-in-use: tabs-background;  // pale green (« soft »)
+    out property <length> filter-in-use-outline: 2px;
+    out property <length> filter-in-use-height: touch ? 32px : 26px;
+    out property <length> filter-cross: 14px;
+    out property <length> filter-choice-width: 170px;
+    out property <length> filter-bubble-width: 380px;
+    // Participants, head of the content: full labels from this width; the search under them below.
+    out property <length> participants-head-roomy: 820px;
+    out property <length> participants-head-search: 580px;
 }

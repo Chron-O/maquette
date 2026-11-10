@@ -16,7 +16,8 @@ import { Results, ResultsPage, ResultsBubble, ResultRanking, ResultRow } from "p
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
 import { Starts, StartsPage, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
-import { Participants, ParticipantsPage, ParticipantOverlay, ParticipantsBubble, ParticipantRow, ParticipantFilter, Passage } from "pages/participants.slint";
+import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
+import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
 import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
 export { RunnerBase, BaseRunnerRow, BaseIssue }
@@ -26,7 +27,7 @@ export { Results, ResultRanking, ResultRow }
 export { Live, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
 export { Stations, StationRow, CourseMark, StationProblem, UsefulStation }
 export { Starts, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
-export { Participants, ParticipantRow, ParticipantFilter, Passage }
+export { Participants, ParticipantRow, Passage, FilterChoice, FilterGroup, ActiveFilter }
 export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
 export { Readers, ReaderInfo, ReaderMode }
@@ -84,12 +85,13 @@ component Header inherits Rectangle {
                     wrap: word-wrap;
                 }
             }
-            if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.narrow: HomeIndicators {
+            if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.wide: HomeIndicators {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
         }
-        if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.narrow: HomeIndicators {
+        // Narrower windows: the indicators under the name, which keeps its room (iPad portrait).
+        if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.wide: HomeIndicators {
             layout-mode: root.layout-mode;
         }
     }
@@ -334,10 +336,16 @@ export component App inherits Window {
     preferred-height: Theme.window-height;
     min-width: Theme.window-min-width;
     min-height: Theme.window-min-height;
+    // No maximum: the fixed sizes of the elements laid over the page must not limit the window.
+    max-width: Theme.unbounded;
+    max-height: Theme.unbounded;
     background: Theme.page-background;
     default-font-family: Theme.font;
 
     in-out property <bool> demo-open: false;
+
+    property <int> tab: Navigation.active-tab;
+    changed tab => { Navigation.settings-open = false; }
 
     property <LayoutMode> layout-mode: root.width < Theme.medium-threshold ? LayoutMode.narrow
         : root.width <= Theme.wide-threshold ? LayoutMode.medium
@@ -374,49 +382,17 @@ export component App inherits Window {
             right-margin: root.right-margin;
             top-margin: root.safe-area-insets.top;
         }
-        if Navigation.in-event && root.layout-mode == LayoutMode.narrow: HorizontalLayout {
+        // The lower part of the header, under the tab bubble (brief zones-onglets § 1), then the
+        // room of the bubble's lower half and of the Paramètres tab: every tab starts at the
+        // same height, with Paramètres or without.
+        if Navigation.in-event: Rectangle {
             vertical-stretch: 0;
-            padding-top: Theme.space-medium;
-            padding-left: Theme.space + root.safe-area-insets.left;
-            padding-right: Theme.space + root.safe-area-insets.right;
-            spacing: Theme.space;
-            IconTabs {
-                horizontal-stretch: 1;
-                tabs: Navigation.tabs;
-                active: Navigation.active-tab;
-                ghost: Navigation.live-open;
-                clicked(i) => { Navigation.select-tab(i); }
-            }
-            LiveTabButton {
-                horizontal-stretch: 0;
-                narrow: true;
-            }
+            height: Theme.tab-bubble-height / 2;
+            background: Theme.header;
         }
-        // The tabs centred on the whole width by themselves; the Direct apart, on their right
-        // (prototype: .x-direct). They move left only when the Direct would not fit.
-        if Navigation.in-event && root.layout-mode != LayoutMode.narrow: VerticalLayout {
+        if Navigation.in-event: Rectangle {
             vertical-stretch: 0;
-            padding-top: Theme.space-medium;
-            padding-left: root.left-margin;
-            padding-right: root.right-margin;
-            tabs-row := Rectangle {
-                height: max(event-tabs.preferred-height, live-tab.preferred-height);
-                event-tabs := Tabs {
-                    x: min((tabs-row.width - self.width) / 2, tabs-row.width - self.width - Theme.space - live-tab.width);
-                    y: (parent.height - self.height) / 2;
-                    width: self.preferred-width;
-                    tabs: Navigation.tabs;
-                    active: Navigation.active-tab;
-                    ghost: Navigation.live-open;
-                    clicked(i) => { Navigation.select-tab(i); }
-                }
-                live-tab := LiveTabButton {
-                    x: event-tabs.x + event-tabs.width + Theme.space;
-                    y: (parent.height - self.height) / 2;
-                    width: self.preferred-width;
-                    narrow: false;
-                }
-            }
+            height: Theme.tab-bubble-height / 2 + Theme.settings-tab-height - Theme.settings-tab-tuck;
         }
         Page {
             vertical-stretch: 1;
@@ -523,7 +499,7 @@ export component App inherits Window {
     // The Direct drawer (prototype: #dr): its bar at the bottom, over the band's last place;
     // open, it rises up to the tabs and covers the page.
     drawer := Rectangle {
-        property <length> open-y: header.height + Theme.space-medium + Theme.tab-bar-height + Theme.space;
+        property <length> open-y: header.height + Theme.tab-bubble-height + Theme.space;
         property <length> closed-y: root.height - live-bar.closed-height;
         property <bool> narrow: root.layout-mode == LayoutMode.narrow;
         // Keeps the end of the Direct clear of the Démo button.
@@ -587,6 +563,69 @@ export component App inherits Window {
                         }
                     }
                     content-height: max(self.height, live-content.preferred-height);
+                }
+            }
+        }
+    }
+
+    // The Paramètres tab, hung under the bubble; open, it lies over the content.
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1: SettingsTab {
+        x: (root.width - self.width) / 2;
+        y: header.height + Theme.tab-bubble-height - Theme.settings-tab-tuck;
+        width: bubble.width - 2 * (root.layout-mode == LayoutMode.narrow ? Theme.settings-tab-narrow-inset : Theme.settings-tab-inset);
+        summary: Participants.chips.length >= 3
+            ? Participants.chips[0] + " · " + Participants.chips[1] + " · " + Participants.chips[2] : "";
+        narrow: root.layout-mode == LayoutMode.narrow;
+        open <=> Navigation.settings-open;
+        ParticipantSettings { }
+    }
+
+    // The tabs in a white bubble astride the header and the page (brief zones-onglets § 1).
+    // The Direct stays apart, at its end: it opens the drawer (Robin, 10/11).
+    // A layer of the window's size: the bubble's own fixed height must not limit the window.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        bubble := Rectangle {
+            visible: Navigation.in-event;
+            x: (root.width - self.width) / 2;
+            y: header.height;
+            // As wide as its tabs, centred; a phone gives it the whole width.
+            width: root.layout-mode == LayoutMode.narrow
+                ? root.width - 2 * Theme.narrow-margin - root.safe-area-insets.left - root.safe-area-insets.right
+                : min(root.width - root.left-margin - root.right-margin, self.preferred-width);
+            height: Theme.tab-bubble-height;
+            border-radius: self.height / 2;
+            background: Theme.card;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            drop-shadow-blur: Theme.tab-bubble-shadow-blur;
+            drop-shadow-offset-y: Theme.tab-bubble-shadow-offset;
+            drop-shadow-color: Theme.sheet-shadow;
+            HorizontalLayout {
+                padding: Theme.tab-bubble-padding;
+                spacing: Theme.space;
+                if root.layout-mode == LayoutMode.narrow: IconTabs {
+                    horizontal-stretch: 1;
+                    bare: true;
+                    tabs: Navigation.tabs;
+                    active: Navigation.active-tab;
+                    ghost: Navigation.live-open;
+                    clicked(i) => { Navigation.select-tab(i); }
+                }
+                if root.layout-mode != LayoutMode.narrow: Tabs {
+                    bare: true;
+                    with-icons: root.layout-mode == LayoutMode.wide;
+                    tabs: Navigation.tabs;
+                    active: Navigation.active-tab;
+                    ghost: Navigation.live-open;
+                    clicked(i) => { Navigation.select-tab(i); }
+                }
+                LiveTabButton {
+                    horizontal-stretch: 0;
+                    narrow: root.layout-mode == LayoutMode.narrow;
                 }
             }
         }
@@ -695,7 +734,7 @@ export component App inherits Window {
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && Participants.detail-open && root.layout-mode != LayoutMode.wide: ParticipantOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && root.layout-mode == LayoutMode.narrow: ParticipantSheet {
         width: 100%;
         height: 100%;
     }

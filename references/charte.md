@@ -62,7 +62,7 @@ En sombre : **surfaces toutes neutres**, la couleur seulement sur texte/icône d
 - Coupées si le système demande moins de mouvements.
 
 ## Icônes
-- **Lucide** (ISC) : grille 24, trait 2 px, bouts arrondis, contour seul. Utilisées : `users` `radio` `trophy` `check` `x` `footprints` `log-out` `circle-help` (fichier `circle-question-mark` depuis Lucide 1.67) `settings` `plus` `triangle-alert` `pin` `pin-off` `monitor-smartphone` `tv` `app-window` `laptop` `smartphone` `qr-code`.
+- **Lucide** (ISC) : grille 24, trait 2 px, bouts arrondis, contour seul. Utilisées : `users` `radio` `trophy` `check` `x` `footprints` `log-out` `circle-help` (fichier `circle-question-mark` depuis Lucide 1.67) `settings` `plus` `triangle-alert` `pin` `pin-off` `monitor-smartphone` `tv` `app-window` `laptop` `smartphone` `qr-code` `funnel` (bouton Filtres, validé le 10/11/2026) `chevron-down` (languette Paramètres, validé le 10/11/2026).
 - **Icônes CO** (même style, viewBox 0 0 24 24, stroke 2, round) :
   - Départ : `M12 4 21 19H3Z`
   - Poste : cercle (12,12) r7

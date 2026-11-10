@@ -78,7 +78,13 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
             })
             .collect()
     });
-    let click_time = WAIT * (clicks.len() as u32 + 1);
+    // The system may shrink the window when it opens: its size is given again once it is shown.
+    let resize = window.as_weak();
+    slint::Timer::single_shot(WAIT / 2, move || {
+        let window = resize.unwrap();
+        window.window().set_size(slint::LogicalSize::new(width, height));
+    });
+    let click_time = WAIT * (clicks.len() as u32 + 2);
     for (i, position) in clicks.into_iter().enumerate() {
         let weak = window.as_weak();
         slint::Timer::single_shot(WAIT * (i as u32 + 1), move || {
