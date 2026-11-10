@@ -26,6 +26,29 @@ export struct ActiveFilter {
     choice: int,
 }
 
+// Helpers shared by the zones.
+export global Zones {
+    // The settings of a page, in one line: « A · B · C » (up to five).
+    public pure function join(chips: [string]) -> string {
+        if chips.length == 0 {
+            return "";
+        }
+        if chips.length == 1 {
+            return chips[0];
+        }
+        if chips.length == 2 {
+            return chips[0] + " · " + chips[1];
+        }
+        if chips.length == 3 {
+            return chips[0] + " · " + chips[1] + " · " + chips[2];
+        }
+        if chips.length == 4 {
+            return chips[0] + " · " + chips[1] + " · " + chips[2] + " · " + chips[3];
+        }
+        return chips[0] + " · " + chips[1] + " · " + chips[2] + " · " + chips[3] + " · " + chips[4];
+    }
+}
+
 // A course colour, as a small square (the same as CourseChip, which lives in a page file).
 component Tone inherits Rectangle {
     in property <int> tone;
@@ -420,6 +443,89 @@ export component FiltersContent {
             QuietButton {
                 label: "Fermer";
                 clicked => { root.close(); }
+            }
+        }
+    }
+}
+
+// The detail of a row on wider windows: the same panel as on the left, sliding in from the right
+// over the content, which keeps its width (brief zones-onglets § 4). No veil: a click on another
+// row changes it. Escape or its cross closes it. Lies over the whole page area.
+export component SideDetail {
+    callback close();
+    in property <bool> shown;
+
+    Rectangle {
+        clip: true;
+        sheet := Sheet {
+            x: root.shown ? parent.width - self.width : parent.width + Theme.sheet-gap;
+            animate x {
+                duration: Theme.sheet-duration;
+                easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+            }
+            y: 0;
+            width: min(Theme.side-sheet-width, parent.width);
+            height: parent.height;
+            visible: root.shown || self.x < parent.width;
+            keys := FocusScope {
+                key-pressed(event) => {
+                    if event.text == Key.Escape {
+                        root.close();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+            Flickable {
+                content-height: inner.preferred-height;
+                inner := VerticalLayout {
+                    width: parent.width;
+                    alignment: start;
+                    @children
+                }
+            }
+        }
+    }
+    changed shown => {
+        if root.shown {
+            keys.focus();
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom, over a veil; a touch on the veil closes it.
+export component BottomDetail {
+    callback close();
+    in property <bool> shown;
+
+    Rectangle {
+        background: Theme.overlay-veil;
+        opacity: root.shown ? 1 : 0;
+        animate opacity { duration: Theme.sheet-duration; }
+    }
+    TouchArea {
+        enabled: root.shown;
+        clicked => { root.close(); }
+    }
+    Sheet {
+        x: Theme.narrow-margin;
+        y: root.shown ? Theme.bottom-sheet-top : root.height + Theme.sheet-gap;
+        animate y {
+            duration: Theme.sheet-duration;
+            easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        width: root.width - 2 * Theme.narrow-margin;
+        height: root.height - Theme.bottom-sheet-top + Theme.sheet-radius;
+        visible: root.shown || self.y < root.height;
+        clip: true;
+        TouchArea { }
+        Flickable {
+            height: parent.height - Theme.sheet-radius;
+            content-height: inner.preferred-height;
+            inner := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                @children
             }
         }
     }
