@@ -3,7 +3,7 @@
 
 use crate::cards::plural;
 use crate::test_data::{BaseRunner, CardPlace, Generated, LicenceKind};
-use crate::{App, BaseIssue, BaseRunnerRow, LiveFilter, RunnerBase, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, BaseIssue, BaseRunnerRow, LiveFilter, RunnerBase, model};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -126,6 +126,15 @@ impl RunnerBaseState {
         self.filter = filter;
     }
 
+    // The Filtres bubble (brief zones-onglets § 5): one group, the choices after « Tous ».
+    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
+        self.filter = if self.filter == choice + 1 { 0 } else { choice + 1 };
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.filter = 0;
+    }
+
     pub fn set_search(&mut self, text: &str) {
         self.search = text.trim().to_lowercase();
     }
@@ -180,6 +189,26 @@ impl RunnerBaseState {
             FILTERS.iter().map(|f| LiveFilter { label: (*f).into(), tone: -1, detail: SharedString::new() }).collect(),
         ));
         page.set_active_filter(self.filter as i32);
+        page.set_filter_groups(model(vec![FilterGroup {
+            key: 0,
+            title: "Coureurs".into(),
+            choices: model(
+                FILTERS
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .map(|(i, label)| FilterChoice { label: (*label).into(), tone: -1, active: self.filter == i })
+                    .collect(),
+            ),
+        }]));
+        page.set_active_filters(model(
+            FILTERS
+                .get(self.filter)
+                .filter(|_| self.filter > 0)
+                .map(|label| ActiveFilter { label: (*label).into(), tone: -1, group: 0, choice: self.filter as i32 - 1 })
+                .into_iter()
+                .collect(),
+        ));
         page.set_search_text(self.search.as_str().into());
         page.set_sort_column(self.sort_column as i32);
         page.set_sort_ascending(!self.descending);

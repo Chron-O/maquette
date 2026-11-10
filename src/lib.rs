@@ -520,6 +520,10 @@ fn connect_cards(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Cards>();
     page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
     page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    let toggle = on_click(window, state, |page_state, (g, c): (i32, i32)| page_state.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |c, _: ()| c.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_select_row(on_click(window, state, |c, number: i32| c.select_row(number as u32)));
     page.on_search(on_click(window, state, |c, text: slint::SharedString| c.set_search(&text)));
     let close = on_click(window, state, |c, _: ()| c.close_detail());
@@ -571,6 +575,10 @@ fn connect_club_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<ClubStations>();
     page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
     page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    let toggle = on_click(window, state, |page_state, (g, c): (i32, i32)| page_state.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |c, _: ()| c.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_select_row(on_click(window, state, |c, serial: i32| c.select_row(serial as u32)));
     page.on_search(on_click(window, state, |c, text: slint::SharedString| c.set_search(&text)));
     let close = on_click(window, state, |c, _: ()| c.close_detail());
@@ -601,6 +609,10 @@ fn connect_runner_base(window: &App, state: &Rc<RefCell<AppState>>) {
     }
     let page = window.global::<RunnerBase>();
     page.on_select_filter(on_click(window, state, |r, i: i32| r.select_filter(i as usize)));
+    let toggle = on_click(window, state, |r, (g, c): (i32, i32)| r.toggle_filter(g as usize, c as usize));
+    page.on_toggle_filter(move |g, c| toggle((g, c)));
+    let clear = on_click(window, state, |r, _: ()| r.clear_filters());
+    page.on_clear_filters(move || clear(()));
     page.on_select_row(on_click(window, state, |r, id: i32| r.select_row(id as u32)));
     page.on_open_runner(on_click(window, state, |r, id: i32| r.open_runner(id as u32)));
     page.on_sort_by(on_click(window, state, |r, column: i32| r.sort_by(column as usize)));

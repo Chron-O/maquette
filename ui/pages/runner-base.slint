@@ -5,7 +5,8 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { SecondaryButton } from "../components/buttons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail } from "../components/zones.slint";
+import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText } from "courses.slint";
@@ -38,6 +39,10 @@ export global RunnerBase {
     in property <[BaseRunnerRow]> rows;
     in property <[LiveFilter]> filters;
     in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    callback toggle-filter(int, int);
+    callback clear-filters();
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
     in property <string> title;
@@ -217,15 +222,6 @@ component RunnerBaseContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            SecondaryButton {
-                label: "Ajouter un coureur";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-            Rectangle { horizontal-stretch: 1; }
-        }
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
             background: Theme.card;
@@ -239,9 +235,16 @@ component RunnerBaseContent {
                     vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space-small;
+                    // The add action in orange; on the right, the alert, the filters and the search
+                    // (brief zones-onglets § 6).
                     HorizontalLayout {
                         spacing: Theme.space;
-                        VerticalLayout {
+                        PrimaryButton {
+                            label: root.narrow ? "Ajouter" : "Ajouter un coureur";
+                            icon: Icons.plus;
+                            has-icon: true;
+                        }
+                        if !root.narrow: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
@@ -252,6 +255,30 @@ component RunnerBaseContent {
                                 wrap: word-wrap;
                             }
                             SmallText { text: RunnerBase.state; }
+                        }
+                        if root.narrow: Rectangle { horizontal-stretch: 1; }
+                        if RunnerBase.alert-title != "": VerticalLayout {
+                            alignment: center;
+                            AlertPill {
+                                title: RunnerBase.alert-title;
+                                count: RunnerBase.alert-count;
+                                bubble: 20;
+                                compact: root.narrow;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            FilterButton {
+                                filters: RunnerBase.active-filters;
+                                narrow: root.narrow;
+                                open: Courses.open-bubble == 30;
+                                open-down: Courses.bubble-down;
+                                clicked => {
+                                    Courses.open-at(30, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                                }
+                                remove(g, c) => { RunnerBase.toggle-filter(g, c); }
+                                clear => { RunnerBase.clear-filters(); }
+                            }
                         }
                         if root.narrow: VerticalLayout {
                             alignment: start;
@@ -275,17 +302,22 @@ component RunnerBaseContent {
                             }
                         }
                     }
+                    // A phone: the title under the buttons, which keep the width.
+                    if root.narrow: VerticalLayout {
+                        Text {
+                            text: RunnerBase.title;
+                            color: Theme.text;
+                            font-size: Theme.text-body;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: RunnerBase.state; }
+                    }
                     if root.narrow && root.search-open: InputField {
                         placeholder: "Nom, club, licence ou puce…";
                         text: RunnerBase.search-text;
                         init => { self.take-focus(); }
                         edited(text) => { RunnerBase.search(text); }
-                    }
-                    ChipFlow {
-                        items: RunnerBase.filters;
-                        active: RunnerBase.active-filter;
-                        chip-width: Theme.base-chip-width;
-                        clicked(i) => { RunnerBase.select-filter(i); }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -300,9 +332,11 @@ component RunnerBaseContent {
 }
 
 export component BaseRunnerDetail inherits Rectangle {
-    background: Theme.card;
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
     border-radius: Theme.card-radius;
-    border-width: Theme.thin-outline-width;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
     // Behind the content, so that a click in the detail does not close it.
@@ -432,71 +466,37 @@ export component RunnerBasePage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && RunnerBase.detail-open;
-    property <length> content-width: root.available-width
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
-
     VerticalLayout {
-        spacing: Theme.button-margin;
-        // No settings here (the archive date is in the band): the line keeps only the alert,
-        // and its height, so that nothing moves when it comes.
-        HorizontalLayout {
-            vertical-stretch: 0;
-            height: Theme.zone;
-            Rectangle { horizontal-stretch: 1; }
-            if RunnerBase.alert-title != "": AlertPill {
-                title: RunnerBase.alert-title;
-                count: RunnerBase.alert-count;
-                bubble: 20;
-                compact: root.layout-mode == LayoutMode.narrow;
-            }
-        }
         if root.layout-mode == LayoutMode.narrow: RunnerBaseContent {
             layout-mode: root.layout-mode;
             available-width: root.available-width;
         }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
             RunnerBaseContent {
-                horizontal-stretch: 1;
+                width: parent.width;
+                height: parent.height;
                 layout-mode: root.layout-mode;
-                available-width: root.content-width;
+                available-width: root.available-width;
             }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := BaseRunnerDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
-                }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: RunnerBase.detail-open;
+                close => { RunnerBase.close-detail(); }
+                BaseRunnerDetail { in-sheet: true; }
             }
         }
     }
 }
 
-// On medium and narrow layouts, the detail opens over the page, and scrolls when it is long.
+// On a phone, the detail rises from the bottom.
 export component BaseRunnerOverlay {
-    TouchArea {
-        clicked => { RunnerBase.close-detail(); }
-    }
-    Rectangle {
-        background: Theme.overlay-veil;
-        Flickable {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
-            height: min(detail.preferred-height, parent.height - 2 * Theme.narrow-margin);
-            content-height: detail.preferred-height;
-            detail := BaseRunnerDetail {
-                x: 0;
-                y: 0;
-                width: parent.width;
-                height: self.preferred-height;
-            }
-        }
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: RunnerBase.detail-open;
+        close => { RunnerBase.close-detail(); }
+        BaseRunnerDetail { in-sheet: true; }
     }
 }
 
@@ -561,6 +561,13 @@ export component RunnerBaseBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
+        wanted-width: Courses.open-bubble == 30 ? Theme.filter-bubble-width : Theme.bubble-width;
         if Courses.open-bubble == 20: IssuesContent { }
+        if Courses.open-bubble == 30: FiltersContent {
+            groups: RunnerBase.filter-groups;
+            toggle(g, c) => { RunnerBase.toggle-filter(g, c); }
+            clear => { RunnerBase.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
+        }
     }
 }

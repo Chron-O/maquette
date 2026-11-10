@@ -325,42 +325,6 @@ export component MenuHead inherits Rectangle {
     }
 }
 
-// Only what is to handle: said in a chip, which takes it away (prototype: drTable0).
-component ToHandleChip inherits Rectangle {
-    height: Theme.highlight-chip-height;
-    border-radius: self.height / 2;
-    background: Theme.surface;
-    border-width: Theme.thin-outline-width;
-    border-color: Theme.thin-outline;
-    accessible-role: button;
-    accessible-label: "Afficher tout";
-    HorizontalLayout {
-        padding-left: Theme.button-margin;
-        padding-right: Theme.space;
-        spacing: Theme.space-small;
-        Text {
-            text: "Afficher seulement : à traiter";
-            color: Theme.text;
-            font-size: Theme.text-help;
-            font-weight: Theme.weight-block-title;
-            vertical-alignment: center;
-        }
-        VerticalLayout {
-            alignment: center;
-            Image {
-                source: Icons.x;
-                colorize: Theme.text-secondary;
-                width: Theme.badge-icon;
-                height: Theme.badge-icon;
-            }
-        }
-    }
-    TouchArea {
-        mouse-cursor: pointer;
-        clicked => { Live.toggle-to-handle(); }
-    }
-}
-
 // The feed. The titles stay at the top: only the rows scroll.
 component LiveTable {
     in property <length> available-width;

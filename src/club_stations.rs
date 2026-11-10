@@ -4,7 +4,7 @@
 use crate::cards::plural;
 use crate::home::badge;
 use crate::test_data::{CLOCK_MAX_GAP, Generated, Kind, Label, StockState, StockStation, UNIDENTIFIED_PARK};
-use crate::{App, BatteryDueItem, CardAction, CardEntry, CardParkItem, ClubStationRow, ClubStations, LiveFilter, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, BatteryDueItem, CardAction, CardEntry, CardParkItem, ClubStationRow, ClubStations, LiveFilter, model};
 use slint::{ComponentHandle, SharedString};
 
 const FILTERS: [&str; 6] = ["Tous", "En service", "À vérifier", "Pile à changer", "En réparation", "Perdus"];
@@ -110,6 +110,15 @@ impl ClubStationsState {
         self.filter = filter;
     }
 
+    // The Filtres bubble (brief zones-onglets § 5): one group, the choices after « Tous ».
+    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
+        self.filter = if self.filter == choice + 1 { 0 } else { choice + 1 };
+    }
+
+    pub fn clear_filters(&mut self) {
+        self.filter = 0;
+    }
+
     pub fn set_search(&mut self, text: &str) {
         self.search = text.trim().to_lowercase();
     }
@@ -189,6 +198,26 @@ impl ClubStationsState {
         ));
         page.set_active_park(self.park as i32);
         page.set_active_filter(self.filter as i32);
+        page.set_filter_groups(model(vec![FilterGroup {
+            key: 0,
+            title: "État".into(),
+            choices: model(
+                FILTERS
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .map(|(i, label)| FilterChoice { label: (*label).into(), tone: -1, active: self.filter == i })
+                    .collect(),
+            ),
+        }]));
+        page.set_active_filters(model(
+            FILTERS
+                .get(self.filter)
+                .filter(|_| self.filter > 0)
+                .map(|label| ActiveFilter { label: (*label).into(), tone: -1, group: 0, choice: self.filter as i32 - 1 })
+                .into_iter()
+                .collect(),
+        ));
         page.set_search_text(self.search.as_str().into());
 
         let park = parks.get(self.park);

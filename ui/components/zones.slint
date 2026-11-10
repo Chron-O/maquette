@@ -87,6 +87,7 @@ export component SettingsTab inherits Rectangle {
     in property <string> summary;
     in property <bool> narrow;
     in-out property <bool> open;
+    in property <length> tuck: Theme.settings-tab-tuck;   // the part hidden under what it hangs from
 
     property <length> head-height: max(Theme.settings-tab-height, head.preferred-height);
     property <length> body-height: root.open ? body.preferred-height : 0px;
@@ -130,7 +131,7 @@ export component SettingsTab inherits Rectangle {
         head := HorizontalLayout {
             y: 0;
             height: root.head-height;
-            padding-top: Theme.settings-tab-tuck;
+            padding-top: root.tuck;
             padding-left: Theme.button-margin;
             padding-right: Theme.button-margin;
             alignment: center;

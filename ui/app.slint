@@ -10,8 +10,8 @@ import { Icons } from "components/icons.slint";
 import { Readers, ReaderInfo, ReaderMode } from "components/reader-tile.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
 import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue } from "pages/runner-base.slint";
-import { ClubStations, ClubStationsPage, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
-import { Cards, CardsPage, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
+import { ClubStations, ClubStationsPage, ClubStationsSettings, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
+import { Cards, CardsPage, CardsSettings, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
 import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
@@ -394,6 +394,11 @@ export component App inherits Window {
             vertical-stretch: 0;
             height: Theme.tab-bubble-height / 2 + Theme.settings-tab-height - Theme.settings-tab-tuck;
         }
+        // A club page: no tabs, the Paramètres tab hangs under the header (brief zones-onglets).
+        if Navigation.cards-page || Navigation.stations-page || Navigation.runners-page: Rectangle {
+            vertical-stretch: 0;
+            height: Theme.settings-tab-height;
+        }
         Page {
             vertical-stretch: 1;
             layout-mode: root.layout-mode;
@@ -567,6 +572,18 @@ export component App inherits Window {
     // The Paramètres tab, hung under the bubble; open, it lies over the content. The Direct and
     // a tab without settings have none, but their content starts at the same height.
     property <int> settings-tab: !Navigation.in-event || Navigation.live-open ? -1 : Navigation.active-tab;
+    property <int> club-settings: Navigation.cards-page ? 0 : Navigation.stations-page ? 1 : -1;
+    if root.club-settings >= 0: SettingsTab {
+        x: (root.width - self.width) / 2;
+        y: header.height;
+        width: min(root.width - root.left-margin - root.right-margin, Theme.club-settings-width);
+        tuck: 0px;
+        summary: root.club-settings == 0 ? Zones.join(Cards.chips) : Zones.join(ClubStations.chips);
+        narrow: root.layout-mode == LayoutMode.narrow;
+        open <=> Navigation.settings-open;
+        if root.club-settings == 0: CardsSettings { }
+        if root.club-settings == 1: ClubStationsSettings { }
+    }
     if root.settings-tab >= 0: SettingsTab {
         x: (root.width - self.width) / 2;
         y: header.height + Theme.tab-bubble-height - Theme.settings-tab-tuck;
@@ -664,7 +681,7 @@ export component App inherits Window {
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.runners-page && RunnerBase.detail-open && root.layout-mode != LayoutMode.wide: BaseRunnerOverlay {
+    if Navigation.runners-page && root.layout-mode == LayoutMode.narrow: BaseRunnerOverlay {
         width: 100%;
         height: 100%;
     }
@@ -675,7 +692,7 @@ export component App inherits Window {
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.stations-page && ClubStations.detail-open && root.layout-mode != LayoutMode.wide: ClubStationOverlay {
+    if Navigation.stations-page && root.layout-mode == LayoutMode.narrow: ClubStationOverlay {
         width: 100%;
         height: 100%;
     }
@@ -686,7 +703,7 @@ export component App inherits Window {
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.cards-page && Cards.detail-open && root.layout-mode != LayoutMode.wide: CardOverlay {
+    if Navigation.cards-page && root.layout-mode == LayoutMode.narrow: CardOverlay {
         width: 100%;
         height: 100%;
     }

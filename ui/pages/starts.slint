@@ -528,20 +528,6 @@ component StartsFrise {
     }
 }
 
-component PointChips {
-    HorizontalLayout {
-        alignment: start;
-        spacing: Theme.space-small;
-        for item[i] in Starts.points: HighlightChip {
-            width: Theme.participant-chip-width;
-            label: item.label;
-            tone: -1;
-            active: Starts.active-point == i;
-            clicked => { Starts.select-point(i); }
-        }
-    }
-}
-
 // A draw that is not applied yet: nothing changes before « Appliquer ».
 component DrawPreview inherits Rectangle {
     in property <bool> narrow;
@@ -581,46 +567,6 @@ component DrawPreview inherits Rectangle {
             PrimaryButton { label: "Appliquer"; in-row: true; clicked => { Starts.apply(); } }
         }
         if root.narrow: SmallText { text: Starts.preview-detail; }
-    }
-}
-
-// The chosen group, as a filter: « ✕ » shows everyone again (prototype: tabDeparts, S.dfg).
-component GroupChip inherits Rectangle {
-    property <string> label: "Groupe : " + Starts.groups[Starts.active-group].name;
-
-    height: Theme.zone;
-    horizontal-stretch: 0;
-    accessible-role: button;
-    accessible-label: root.label;
-    Rectangle {
-        height: Theme.highlight-chip-height;
-        border-radius: self.height / 2;
-        background: zone.has-hover ? Theme.tab-hover : Theme.surface;
-        HorizontalLayout {
-            padding-left: Theme.space;
-            padding-right: Theme.space;
-            spacing: Theme.space-small;
-            Text {
-                text: root.label;
-                color: Theme.text;
-                font-size: Theme.text-help;
-                font-weight: Theme.weight-block-title;
-                vertical-alignment: center;
-            }
-            VerticalLayout {
-                alignment: center;
-                Image {
-                    source: Icons.x;
-                    colorize: Theme.text;
-                    width: Theme.badge-icon;
-                    height: Theme.badge-icon;
-                }
-            }
-        }
-    }
-    zone := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { Starts.select-group(Starts.active-group); }
     }
 }
 

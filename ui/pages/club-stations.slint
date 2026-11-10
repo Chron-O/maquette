@@ -6,7 +6,8 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { QuietButton, SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -42,6 +43,10 @@ export global ClubStations {
     in property <int> active-park;
     in property <[LiveFilter]> filters;
     in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    callback toggle-filter(int, int);
+    callback clear-filters();
     in property <[ClubStationRow]> rows;
     in property <[string]> chips;
     in property <string> title;
@@ -271,15 +276,6 @@ component ClubStationsContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            padding-top: root.narrow ? 0 : Theme.space;
-            // The screen's one orange button, outside the rows (lot1b-boitiers-serie.md § 7).
-            if ClubStations.can-add: PrimaryButton { label: "Ajouter des boîtiers…"; }
-            // Keeps the place of the button, so that the table does not move.
-            if !ClubStations.can-add: Rectangle { height: Theme.primary-button-height; }
-            Rectangle { horizontal-stretch: 1; }
-        }
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
             background: Theme.card;
@@ -292,9 +288,12 @@ component ClubStationsContent {
                     vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space-small;
+                    // The add action in orange; on the right, the alert, the filters and the search
+                    // (brief zones-onglets § 6).
                     HorizontalLayout {
                         spacing: Theme.space;
-                        VerticalLayout {
+                        if ClubStations.can-add: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow ? "Ajouter" : "Ajouter des boîtiers…"; }
+                        if !root.narrow: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
@@ -305,6 +304,30 @@ component ClubStationsContent {
                                 wrap: word-wrap;
                             }
                             SmallText { text: ClubStations.state; }
+                        }
+                        if root.narrow: Rectangle { horizontal-stretch: 1; }
+                        if ClubStations.alert-title != "": VerticalLayout {
+                            alignment: center;
+                            AlertPill {
+                                title: ClubStations.alert-title;
+                                count: ClubStations.alert-count;
+                                bubble: 18;
+                                compact: root.narrow;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            FilterButton {
+                                filters: ClubStations.active-filters;
+                                narrow: root.narrow;
+                                open: Courses.open-bubble == 29;
+                                open-down: Courses.bubble-down;
+                                clicked => {
+                                    Courses.open-at(29, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                                }
+                                remove(g, c) => { ClubStations.toggle-filter(g, c); }
+                                clear => { ClubStations.clear-filters(); }
+                            }
                         }
                         if root.narrow: VerticalLayout {
                             alignment: start;
@@ -328,17 +351,22 @@ component ClubStationsContent {
                             }
                         }
                     }
+                    // A phone: the title under the buttons, which keep the width.
+                    if root.narrow: VerticalLayout {
+                        Text {
+                            text: ClubStations.title;
+                            color: Theme.text;
+                            font-size: Theme.text-body;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: ClubStations.state; }
+                    }
                     if root.narrow && root.search-open: InputField {
                         placeholder: "Code, n° ou note…";
                         text: ClubStations.search-text;
                         init => { self.take-focus(); }
                         edited(text) => { ClubStations.search(text); }
-                    }
-                    ChipFlow {
-                        items: ClubStations.filters;
-                        active: ClubStations.active-filter;
-                        chip-width: Theme.stock-chip-width;
-                        clicked(i) => { ClubStations.select-filter(i); }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -353,9 +381,11 @@ component ClubStationsContent {
 }
 
 export component ClubStationDetail inherits Rectangle {
-    background: Theme.card;
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
     border-radius: Theme.card-radius;
-    border-width: Theme.thin-outline-width;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
     // Behind the content, so that a click in the detail does not close it.
@@ -486,31 +516,12 @@ export component ClubStationsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && ClubStations.detail-open;
-    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
 
     VerticalLayout {
-        spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
             ReadingBox { compact: true; }
-            HorizontalLayout {
-                spacing: Theme.space;
-                SummaryZone {
-                    horizontal-stretch: 1;
-                    title: "";
-                    chips: ClubStations.chips;
-                    bubble: 17;
-                    compact: true;
-                }
-                if ClubStations.alert-title != "": AlertPill {
-                    title: ClubStations.alert-title;
-                    count: ClubStations.alert-count;
-                    bubble: 18;
-                    compact: true;
-                }
-            }
             ChipFlow {
                 items: ClubStations.park-chips;
                 active: ClubStations.active-park;
@@ -522,75 +533,49 @@ export component ClubStationsPage {
                 available-width: root.available-width;
             }
         }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.button-margin;
-            SummaryZone {
-                title: "";
-                chips: ClubStations.chips;
-                bubble: 17;
-                compact: root.layout-mode == LayoutMode.medium;
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if ClubStations.alert-title != "": AlertPill {
-                title: ClubStations.alert-title;
-                count: ClubStations.alert-count;
-                bubble: 18;
-            }
-        }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
-            VerticalLayout {
-                width: Theme.course-list-width;
-                spacing: Theme.space;
-                ReadingBox { vertical-stretch: 0; }
-                ParkColumn {
-                    vertical-stretch: 1;
-                    parks: ClubStations.parks;
-                    active: ClubStations.active-park;
-                    selected(i) => { ClubStations.select-park(i); }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left (brief zones-onglets § 3).
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.space;
+                        spacing: Theme.space;
+                        ReadingBox { vertical-stretch: 0; }
+                        ParkColumn {
+                            vertical-stretch: 1;
+                            parks: ClubStations.parks;
+                            active: ClubStations.active-park;
+                            selected(i) => { ClubStations.select-park(i); }
+                        }
+                    }
+                }
+                ClubStationsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
                 }
             }
-            ClubStationsContent {
-                horizontal-stretch: 1;
-                layout-mode: root.layout-mode;
-                available-width: root.content-width;
-            }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := ClubStationDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
-                }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: ClubStations.detail-open;
+                close => { ClubStations.close-detail(); }
+                ClubStationDetail { in-sheet: true; }
             }
         }
     }
 }
 
-// On medium and narrow layouts, the detail opens over the page, and scrolls when it is long.
+// On a phone, the detail rises from the bottom.
 export component ClubStationOverlay {
-    TouchArea {
-        clicked => { ClubStations.close-detail(); }
-    }
-    Rectangle {
-        background: Theme.overlay-veil;
-        Flickable {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
-            height: min(detail.preferred-height, parent.height - 2 * Theme.narrow-margin);
-            content-height: detail.preferred-height;
-            detail := ClubStationDetail {
-                x: 0;
-                y: 0;
-                width: parent.width;
-                height: self.preferred-height;
-            }
-        }
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: ClubStations.detail-open;
+        close => { ClubStations.close-detail(); }
+        ClubStationDetail { in-sheet: true; }
     }
 }
 
@@ -616,9 +601,8 @@ component BatteriesContent {
             }
             VerticalLayout {
                 alignment: center;
-                PrimaryButton {
+                QuietButton {
                     label: "Voir";
-                    in-row: true;
                     clicked => {
                         Courses.open-bubble = 0;
                         ClubStations.open-station(item.serial);
@@ -629,7 +613,8 @@ component BatteriesContent {
     }
 }
 
-component ParkSettings {
+// The rows of the Paramètres tab: the description of the park.
+export component ClubStationsSettings {
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.space-small;
@@ -645,7 +630,13 @@ export component ClubStationsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        if Courses.open-bubble == 17: ParkSettings { }
+        wanted-width: Courses.open-bubble == 29 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 29: FiltersContent {
+            groups: ClubStations.filter-groups;
+            toggle(g, c) => { ClubStations.toggle-filter(g, c); }
+            clear => { ClubStations.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
+        }
         if Courses.open-bubble == 18: BatteriesContent { }
     }
 }

@@ -5,7 +5,8 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { QuietButton, SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -55,6 +56,10 @@ export global Cards {
     in property <int> active-park;
     in property <[LiveFilter]> filters;
     in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    callback toggle-filter(int, int);
+    callback clear-filters();
     in property <[CardRow]> rows;
     in property <[string]> chips;
     in property <string> title;
@@ -351,15 +356,6 @@ component CardsContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            padding-top: root.narrow ? 0 : Theme.space;
-            // The screen's one orange button, outside the rows, as « Ajouter des boîtiers… »;
-            // white while the reader asks about an unknown card.
-            if !Cards.read-unknown: PrimaryButton { label: "Ajouter des puces…"; }
-            if Cards.read-unknown: SecondaryButton { label: "Ajouter des puces…"; }
-            Rectangle { horizontal-stretch: 1; }
-        }
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
             background: Theme.card;
@@ -372,9 +368,13 @@ component CardsContent {
                     vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space-small;
+                    // The add action in orange; on the right, the alert, the filters and the search
+                    // (brief zones-onglets § 6).
                     HorizontalLayout {
                         spacing: Theme.space;
-                        VerticalLayout {
+                        if !Cards.read-unknown: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
+                        if Cards.read-unknown: SecondaryButton { label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
+                        if !root.narrow: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
@@ -385,6 +385,30 @@ component CardsContent {
                                 wrap: word-wrap;
                             }
                             SmallText { text: Cards.state; }
+                        }
+                        if root.narrow: Rectangle { horizontal-stretch: 1; }
+                        if Cards.alert-title != "": VerticalLayout {
+                            alignment: center;
+                            AlertPill {
+                                title: Cards.alert-title;
+                                count: Cards.alert-count;
+                                bubble: 16;
+                                compact: root.narrow;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            FilterButton {
+                                filters: Cards.active-filters;
+                                narrow: root.narrow;
+                                open: Courses.open-bubble == 28;
+                                open-down: Courses.bubble-down;
+                                clicked => {
+                                    Courses.open-at(28, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                                }
+                                remove(g, c) => { Cards.toggle-filter(g, c); }
+                                clear => { Cards.clear-filters(); }
+                            }
                         }
                         if root.narrow: VerticalLayout {
                             alignment: start;
@@ -408,17 +432,22 @@ component CardsContent {
                             }
                         }
                     }
+                    // A phone: the title under the buttons, which keep the width.
+                    if root.narrow: VerticalLayout {
+                        Text {
+                            text: Cards.title;
+                            color: Theme.text;
+                            font-size: Theme.text-body;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: Cards.state; }
+                    }
                     if root.narrow && root.search-open: InputField {
                         placeholder: "Numéro, nom ou note…";
                         text: Cards.search-text;
                         init => { self.take-focus(); }
                         edited(text) => { Cards.search(text); }
-                    }
-                    ChipFlow {
-                        items: Cards.filters;
-                        active: Cards.active-filter;
-                        chip-width: Theme.card-chip-width;
-                        clicked(i) => { Cards.select-filter(i); }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -450,9 +479,11 @@ export component DetailTitle inherits Text {
 }
 
 export component CardDetail inherits Rectangle {
-    background: Theme.card;
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
     border-radius: Theme.card-radius;
-    border-width: Theme.thin-outline-width;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
     border-color: Theme.thin-outline;
 
     // Behind the content, so that a click in the detail does not close it.
@@ -580,31 +611,12 @@ export component CardsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
 
-    property <bool> detail-beside: root.layout-mode == LayoutMode.wide && Cards.detail-open;
-    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin
-        - (root.detail-beside ? Theme.control-detail-width + Theme.button-margin : 0px);
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
 
     VerticalLayout {
-        spacing: Theme.button-margin;
         if root.layout-mode == LayoutMode.narrow: VerticalLayout {
             spacing: Theme.button-margin;
             CardReader { compact: true; }
-            HorizontalLayout {
-                spacing: Theme.space;
-                SummaryZone {
-                    horizontal-stretch: 1;
-                    title: "";
-                    chips: Cards.chips;
-                    bubble: 15;
-                    compact: true;
-                }
-                if Cards.alert-title != "": AlertPill {
-                    title: Cards.alert-title;
-                    count: Cards.alert-count;
-                    bubble: 16;
-                    compact: true;
-                }
-            }
             ChipFlow {
                 items: Cards.park-chips;
                 active: Cards.active-park;
@@ -616,75 +628,49 @@ export component CardsPage {
                 available-width: root.available-width;
             }
         }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.button-margin;
-            SummaryZone {
-                title: "";
-                chips: Cards.chips;
-                bubble: 15;
-                compact: root.layout-mode == LayoutMode.medium;
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if Cards.alert-title != "": AlertPill {
-                title: Cards.alert-title;
-                count: Cards.alert-count;
-                bubble: 16;
-            }
-        }
-        if root.layout-mode != LayoutMode.narrow: HorizontalLayout {
-            vertical-stretch: 1;
-            spacing: Theme.button-margin;
-            VerticalLayout {
-                width: Theme.course-list-width;
-                spacing: Theme.space;
-                CardReader { vertical-stretch: 0; }
-                ParkColumn {
-                    vertical-stretch: 1;
-                    parks: Cards.parks;
-                    active: Cards.active-park;
-                    selected(i) => { Cards.select-park(i); }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left (brief zones-onglets § 3).
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.space;
+                        spacing: Theme.space;
+                        CardReader { vertical-stretch: 0; }
+                        ParkColumn {
+                            vertical-stretch: 1;
+                            parks: Cards.parks;
+                            active: Cards.active-park;
+                            selected(i) => { Cards.select-park(i); }
+                        }
+                    }
+                }
+                CardsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
                 }
             }
-            CardsContent {
-                horizontal-stretch: 1;
-                layout-mode: root.layout-mode;
-                available-width: root.content-width;
-            }
-            if root.detail-beside: Flickable {
-                width: Theme.control-detail-width;
-                content-height: detail.preferred-height;
-                detail := CardDetail {
-                    x: 0;
-                    y: 0;
-                    width: Theme.control-detail-width;
-                    height: self.preferred-height;
-                }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Cards.detail-open;
+                close => { Cards.close-detail(); }
+                CardDetail { in-sheet: true; }
             }
         }
     }
 }
 
-// On medium and narrow layouts, the detail opens over the page, and scrolls when it is long.
+// On a phone, the detail rises from the bottom.
 export component CardOverlay {
-    TouchArea {
-        clicked => { Cards.close-detail(); }
-    }
-    Rectangle {
-        background: Theme.overlay-veil;
-        Flickable {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: min(Theme.detail-overlay-width, parent.width - 2 * Theme.narrow-margin);
-            height: min(detail.preferred-height, parent.height - 2 * Theme.narrow-margin);
-            content-height: detail.preferred-height;
-            detail := CardDetail {
-                x: 0;
-                y: 0;
-                width: parent.width;
-                height: self.preferred-height;
-            }
-        }
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: Cards.detail-open;
+        close => { Cards.close-detail(); }
+        CardDetail { in-sheet: true; }
     }
 }
 
@@ -710,9 +696,8 @@ component OverdueContent {
             }
             VerticalLayout {
                 alignment: center;
-                PrimaryButton {
+                QuietButton {
                     label: "Voir";
-                    in-row: true;
                     clicked => {
                         Courses.open-bubble = 0;
                         Cards.open-card(card.number);
@@ -723,7 +708,8 @@ component OverdueContent {
     }
 }
 
-component ParkSettings {
+// The rows of the Paramètres tab: the description of the park.
+export component CardsSettings {
     VerticalLayout {
         padding: Theme.space-medium;
         spacing: Theme.space-small;
@@ -739,7 +725,13 @@ export component CardsBubble {
         width: 100%;
         height: 100%;
         margin: root.margin;
-        if Courses.open-bubble == 15: ParkSettings { }
+        wanted-width: Courses.open-bubble == 28 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 28: FiltersContent {
+            groups: Cards.filter-groups;
+            toggle(g, c) => { Cards.toggle-filter(g, c); }
+            clear => { Cards.clear-filters(); }
+            close => { Courses.open-bubble = 0; }
+        }
         if Courses.open-bubble == 16: OverdueContent { }
     }
 }
