@@ -377,6 +377,32 @@ pub struct Reader {
     pub course: usize,          // in Generated::reader_courses
 }
 
+// A device linked to the course (prototype: DEVS).
+#[derive(Clone, Copy, PartialEq)]
+pub enum DeviceKind {
+    Laptop,
+    Phone,
+    Tablet,
+}
+
+pub struct LinkedDevice {
+    pub kind: DeviceKind,
+    pub name: String,
+    pub role: usize,              // in DEVICE_ROLES
+    pub waiting: Option<u32>,     // offline: how many readings wait to be sent
+}
+
+// A device asking to join, with the word it shows, to check it is the right one.
+pub struct DeviceRequest {
+    pub kind: DeviceKind,
+    pub name: String,
+    pub role: usize,
+    pub word: &'static str,
+}
+
+pub const DEVICE_ROLES: [&str; 5] = ["GEC", "Départ", "Arrivée", "Poste radio", "Écran public"];
+const CHECK_WORDS: [&str; 4] = ["SAPIN", "CHÊNE", "BOULEAU", "ÉRABLE"];
+
 // What a reader is used for (prototype: USES); its name follows.
 pub const READER_USAGES: [&str; 4] = ["Arrivée", "Accueil", "Départ", "Boîtiers"];
 
@@ -406,7 +432,8 @@ pub struct Generated {
     pub archive_date_numeric: String,   // dd/mm/yyyy
     pub card_parks: Vec<CardPark>,
     pub station_parks: Vec<StationPark>,
-    pub devices_asking: u32,
+    pub devices: Vec<LinkedDevice>,
+    pub request: Option<DeviceRequest>,   // a device asking to join the course
     pub screens: u32,
     today: u32,
     clock_seconds: u32,
@@ -1275,6 +1302,22 @@ impl Generated {
             reader(None, serial + 2, false),
         ];
         name_readers(&mut readers);
+        // Two devices linked to the course, one offline; sometimes a tablet asks to join.
+        let devices = vec![
+            LinkedDevice { kind: DeviceKind::Laptop, name: format!("Ordinateur de {}", random.pick(&FIRST_NAMES)), role: 1, waiting: None },
+            LinkedDevice {
+                kind: DeviceKind::Phone,
+                name: format!("Téléphone de {}", random.pick(&FIRST_NAMES)),
+                role: 3,
+                waiting: Some(random.between(2, 8)),
+            },
+        ];
+        let request = (random.below(2) == 1).then(|| DeviceRequest {
+            kind: DeviceKind::Tablet,
+            name: format!("Tablette de {}", random.pick(&FIRST_NAMES)),
+            role: 4,
+            word: random.pick(&CHECK_WORDS),
+        });
         Generated {
             events,
             upcoming,
@@ -1285,7 +1328,8 @@ impl Generated {
             archive_date_numeric,
             card_parks,
             station_parks,
-            devices_asking: random.below(2),
+            devices,
+            request,
             screens: random.below(3),
             today,
             clock_seconds,
@@ -1365,6 +1409,29 @@ impl Generated {
         let mut courses = vec![self.events[CURRENT_EVENT].name.clone()];
         courses.extend(self.upcoming.first().map(|&e| self.events[e].name.clone()));
         courses
+    }
+
+    // The device asking to join: accepted, it is linked with the role it asked for.
+    pub fn accept_request(&mut self) {
+        if let Some(request) = self.request.take() {
+            self.devices.push(LinkedDevice { kind: request.kind, name: request.name, role: request.role, waiting: None });
+        }
+    }
+
+    pub fn refuse_request(&mut self) {
+        self.request = None;
+    }
+
+    pub fn set_device_role(&mut self, device: usize, role: usize) {
+        if let Some(device) = self.devices.get_mut(device) {
+            device.role = role.min(DEVICE_ROLES.len() - 1);
+        }
+    }
+
+    pub fn remove_device(&mut self, device: usize) {
+        if device < self.devices.len() {
+            self.devices.remove(device);
+        }
     }
 
     pub fn toggle_unplugged(&mut self, reader: usize) {

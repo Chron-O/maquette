@@ -6,6 +6,7 @@ import { Theme } from "../theme.slint";
 import { Icons } from "../components/icons.slint";
 import { ReaderInfo, ReaderMode, Readers } from "../components/reader-tile.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
+import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Status, StatusBadge } from "../components/status.slint";
 import { BubbleFrame, Courses, RowLine } from "courses.slint";
 
@@ -16,6 +17,15 @@ export struct EquipmentReader {
     course-choice: int,    // in Equipment.courses
 }
 
+export struct LinkedDeviceRow {
+    kind: int,           // 0 laptop, 1 phone, 2 tablet
+    name: string,
+    role: string,
+    role-choice: int,    // in Equipment.roles
+    offline: bool,
+    state: string,       // « Synchronisé », « Hors ligne · 6 en attente »
+}
+
 export global Equipment {
     in property <[EquipmentReader]> readers;
     in property <[string]> usages;    // Arrivée, Accueil, Départ, Boîtiers
@@ -23,6 +33,34 @@ export global Equipment {
     in-out property <int> open-reader: -1;
     callback set-usage(int, int);     // reader, usage
     callback set-course(int, int);    // reader, course
+
+    // Role and devices.
+    in property <string> this-role;            // « Rôle GEC (toute la course) »
+    in property <string> course-state;         // « Course en ligne · 3 appareils »
+    in property <[LinkedDeviceRow]> devices;
+    in property <[string]> roles;
+    in property <bool> has-request;
+    in property <LinkedDeviceRow> request;     // its role: the one it asks for
+    in property <string> request-word;         // the word the asking device shows
+    in-out property <int> open-device: -1;
+    callback accept-request();
+    callback refuse-request();
+    callback set-device-role(int, int);
+    callback remove-device(int);
+
+    public pure function device-icon(kind: int) -> image {
+        if kind == 0 {
+            return Icons.laptop;
+        }
+        return Icons.smartphone;
+    }
+
+    public pure function device-status(device: LinkedDeviceRow) -> Status {
+        if device.offline {
+            return { word: device.state, state: Theme.to-check, icon: Icons.triangle-alert };
+        }
+        return { word: device.state, state: Theme.valid, icon: Icons.check };
+    }
 
     public pure function reader-status(reader: ReaderInfo) -> Status {
         if reader.mode == ReaderMode.unplugged {
@@ -232,6 +270,206 @@ component ReadersContent {
     }
 }
 
+// The device asking to join: who, the role it asks for, the word it shows; refuse or accept.
+component RequestRow inherits Rectangle {
+    background: Theme.to-check.badge-background;
+    HorizontalLayout {
+        padding-left: Theme.space-medium;
+        padding-right: Theme.space-medium;
+        padding-top: Theme.space;
+        padding-bottom: Theme.space;
+        spacing: Theme.button-margin;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Equipment.device-icon(Equipment.request.kind);
+                colorize: Theme.to-check.badge-text;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: Theme.space-small;
+            Text {
+                text: Equipment.request.name + " · demande le rôle " + Equipment.request.role;
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "Mot affiché sur l'appareil : " + Equipment.request-word;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            SecondaryButton {
+                label: "Refuser";
+                clicked => { Equipment.refuse-request(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                label: "Accepter";
+                in-row: true;
+                clicked => { Equipment.accept-request(); }
+            }
+        }
+    }
+}
+
+// A linked device: its name, role and state; « ··· » unfolds its role and « Retirer de la course ».
+component DeviceRow inherits Rectangle {
+    in property <LinkedDeviceRow> device;
+    in property <int> index;
+
+    property <bool> open: Equipment.open-device == root.index;
+
+    background: root.open ? Theme.page-background : transparent;
+    VerticalLayout {
+        padding-left: Theme.space-medium;
+        padding-right: Theme.space-medium;
+        padding-bottom: root.open ? Theme.space-medium : 0px;
+        spacing: Theme.space;
+        HorizontalLayout {
+            padding-top: Theme.space;
+            padding-bottom: root.open ? 0px : Theme.space;
+            spacing: Theme.button-margin;
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Equipment.device-icon(root.device.kind);
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: Theme.space-small;
+                Text {
+                    text: root.device.name + " · " + root.device.role;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-block-title;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    StatusBadge { status: Equipment.device-status(root.device); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                MoreButton {
+                    open: false;
+                    clicked => { Equipment.open-device = root.open ? -1 : root.index; }
+                }
+            }
+        }
+        if root.open: ChoiceLine {
+            label: "Rôle";
+            choices: Equipment.roles;
+            active: root.device.role-choice;
+            clicked(i) => { Equipment.set-device-role(root.index, i); }
+        }
+        if root.open: HorizontalLayout {
+            alignment: start;
+            SecondaryButton {
+                label: "Retirer de la course";
+                danger: true;
+                clicked => {
+                    Equipment.open-device = -1;
+                    Equipment.remove-device(root.index);
+                }
+            }
+        }
+    }
+}
+
+component DevicesContent {
+    VerticalLayout {
+        padding-top: Theme.space-medium;
+        padding-bottom: Theme.space-medium;
+        spacing: Theme.space;
+        HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            BubbleTitle { text: "Cet appareil"; }
+        }
+        HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            spacing: Theme.button-margin;
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.laptop;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Theme.space-small;
+                Text {
+                    text: Equipment.this-role;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-block-title;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    StatusBadge { status: { word: Equipment.course-state, state: Theme.valid, icon: Icons.check }; }
+                }
+            }
+        }
+        RowLine { }
+        HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                BubbleTitle { text: "Appareils reliés"; }
+            }
+            SecondaryButton {
+                label: "Ajouter un appareil";
+                icon: Icons.qr-code;
+                has-icon: true;
+            }
+        }
+        VerticalLayout {
+            if Equipment.has-request: VerticalLayout {
+                RowLine { }
+                RequestRow { }
+            }
+            for device[i] in Equipment.devices: VerticalLayout {
+                RowLine { }
+                DeviceRow {
+                    device: device;
+                    index: i;
+                }
+            }
+        }
+        if Equipment.devices.length == 0 && !Equipment.has-request: HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            BubbleNote { text: "Aucun appareil relié."; }
+        }
+    }
+}
+
 // The bubble of an indicator, joined to its pill.
 export component EquipmentBubble {
     in property <length> margin;
@@ -242,5 +480,6 @@ export component EquipmentBubble {
         margin: root.margin;
         wanted-width: Theme.equipment-bubble-width;
         if Courses.open-bubble == 31: ReadersContent { }
+        if Courses.open-bubble == 32: DevicesContent { }
     }
 }

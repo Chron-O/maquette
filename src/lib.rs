@@ -676,6 +676,13 @@ fn connect_readers(window: &App, state: &Rc<RefCell<AppState>>) {
     let equipment = window.global::<Equipment>();
     equipment.on_set_usage(on_choice(window, state, Generated::set_reader_usage));
     equipment.on_set_course(on_choice(window, state, Generated::set_reader_course));
+    // The devices' bubble.
+    equipment.on_set_device_role(on_choice(window, state, Generated::set_device_role));
+    equipment.on_remove_device(on_reader(window, state, Generated::remove_device));
+    let accept = on_reader(window, state, |data, _| data.accept_request());
+    equipment.on_accept_request(move || accept(0));
+    let refuse = on_reader(window, state, |data, _| data.refuse_request());
+    equipment.on_refuse_request(move || refuse(0));
     let unplug = on_reader(window, state, Generated::toggle_unplugged);
     window.global::<Demo>().on_toggle_unplugged(move || unplug(0));
 }

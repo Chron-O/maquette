@@ -98,7 +98,10 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
 
 fn indicators(window: &App, data: Option<&Generated>) -> Vec<IndicatorItem> {
     let icons = window.global::<Icons>();
-    let (readers, asking, screens) = data.map_or((0, 0, 0), |d| (d.readers.len() as u32, d.devices_asking, d.screens));
+    let (readers, screens) = data.map_or((0, 0), |d| (d.readers.len() as u32, d.screens));
+    let asking = data.is_some_and(|d| d.request.is_some());
+    let devices = data.map_or(0, |d| d.devices.len() as u32);
+    let offline = data.map_or(0, |d| d.devices.iter().filter(|x| x.waiting.is_some()).count() as u32);
     let unplugged = data.and_then(|d| d.readers.iter().find(|r| r.unplugged));
     // A small pill: icon, dot and a number (Robin, 11/11); the sentence goes to screen readers.
     // Each pill keeps the width of the longest number it may show by itself during the race: a
@@ -121,8 +124,12 @@ fn indicators(window: &App, data: Option<&Generated>) -> Vec<IndicatorItem> {
         } else {
             item(icons.get_co_station(), "Lecteurs : aucun branché".into(), 0, 0, false, false)
         },
-        if asking > 0 {
-            item(icons.get_monitor_smartphone(), "1 appareil demande à rejoindre".into(), asking, asking, true, true)
+        if asking {
+            item(icons.get_monitor_smartphone(), "1 appareil demande à rejoindre".into(), 1, devices, true, true)
+        } else if offline > 0 {
+            item(icons.get_monitor_smartphone(), format!("{devices} appareils · {offline} hors ligne"), devices, devices, true, true)
+        } else if devices > 0 {
+            item(icons.get_monitor_smartphone(), format!("{devices} appareils synchronisés"), devices, devices, true, false)
         } else {
             item(icons.get_monitor_smartphone(), "Rôle et appareils : aucun appareil relié".into(), 0, 0, false, false)
         },
