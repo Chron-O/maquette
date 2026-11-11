@@ -274,19 +274,19 @@ export component FilterButton inherits Rectangle {
     in property <[ActiveFilter]> filters;
     in property <bool> narrow;
     in property <bool> open;
-    in property <bool> open-down: true;
+    in property <bool> open-down: true;   // no longer used: the bubble points at it
 
     property <bool> in-use: root.filters.length > 0;
     property <length> radius: self.height / 2;
 
+    // Open: lit, dark green, while its bubble points at it.
+    property <color> tint: root.open ? Theme.active-tab-text : Theme.text;
+
     height: Theme.zone;
-    border-top-left-radius: root.open && !root.open-down ? 0px : root.radius;
-    border-top-right-radius: self.border-top-left-radius;
-    border-bottom-left-radius: root.open && root.open-down ? 0px : root.radius;
-    border-bottom-right-radius: self.border-bottom-left-radius;
+    border-radius: root.radius;
     border-width: root.in-use ? Theme.filter-in-use-outline : Theme.thin-outline-width;
-    border-color: root.in-use ? Theme.active-tab-background : Theme.thin-outline;
-    background: root.open ? Theme.card : root.in-use ? Theme.filter-in-use : zone.has-hover ? Theme.secondary-button-hover : Theme.secondary-button;
+    border-color: root.in-use || root.open ? Theme.active-tab-background : Theme.thin-outline;
+    background: root.open ? Theme.active-tab-background : root.in-use ? Theme.filter-in-use : zone.has-hover ? Theme.secondary-button-hover : Theme.secondary-button;
     animate background { duration: Theme.tint-duration; }
     accessible-role: button;
     accessible-label: root.in-use ? "Filtres : " + root.filters.length : "Filtres";
@@ -304,21 +304,21 @@ export component FilterButton inherits Rectangle {
             alignment: center;
             Image {
                 source: Icons.funnel;
-                colorize: Theme.text;
+                colorize: root.tint;
                 width: Theme.button-icon;
                 height: Theme.button-icon;
             }
         }
         if !root.narrow && !root.in-use: Text {
             text: "Filtres";
-            color: Theme.text;
+            color: root.tint;
             font-size: Theme.text-help;
             font-weight: Theme.weight-block-title;
             vertical-alignment: center;
         }
         if root.narrow && root.in-use: Text {
             text: root.filters.length;
-            color: Theme.text;
+            color: root.tint;
             font-size: Theme.text-help;
             font-weight: Theme.weight-block-title;
             vertical-alignment: center;

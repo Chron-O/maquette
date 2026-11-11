@@ -15,17 +15,14 @@ export component Indicator inherits Rectangle {
     accessible-label: root.sentence;
     in property <bool> attention: false;
     in property <bool> has-dot: true;
-    in property <bool> open;          // its bubble is open: white, joined to it
+    in property <bool> open;          // its bubble is open: lit, white
     in property <bool> open-down: true;
     callback clicked();
 
     property <color> tint: root.open ? Theme.text : Theme.header-text;
 
     height: Theme.indicator-height;
-    border-top-left-radius: root.open && !root.open-down ? 0px : self.height / 2;
-    border-top-right-radius: self.border-top-left-radius;
-    border-bottom-left-radius: root.open && root.open-down ? 0px : self.height / 2;
-    border-bottom-right-radius: self.border-bottom-left-radius;
+    border-radius: self.height / 2;
     border-width: root.attention ? Theme.attention-outline : Theme.thin-outline-width;
     border-color: root.attention ? Theme.attention : root.open ? Theme.card : Theme.header-outline;
     background: root.open ? Theme.card : zone.has-hover ? Theme.header-button-hover : transparent;

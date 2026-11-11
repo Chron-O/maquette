@@ -114,7 +114,7 @@ export component HomeIndicators {
     in property <LayoutMode> layout-mode;
     in property <int> open-bubble;      // the bubble open in the window
     in property <bool> open-down: true;
-    // A click opens its bubble (31, 32, 33), joined to the pill.
+    // A click opens its bubble (31, 32, 33), which points at the pill.
     callback opened(int, length, length, length, length);
 
     // Always on the right, a phone included (Robin, 11/11).
@@ -243,7 +243,7 @@ component CurrentEventCard inherits Rectangle {
 export component ToHandleButton {
     callback clicked();
     in property <string> label;
-    // Its bubble is open: white, joined to it by a square side (`joined-down`: under it).
+    // Its bubble is open: lit, pale red, while the bubble points at it.
     in property <bool> joined;
     in property <bool> joined-down: true;
     // Where the drawn pill is, inside the touch zone: the bubble is joined to the pill.
@@ -259,11 +259,8 @@ export component ToHandleButton {
             alignment: center;
             Rectangle {
                 height: root.pill-height;
-                border-top-left-radius: root.joined && !root.joined-down ? 0px : self.height / 2;
-                border-top-right-radius: self.border-top-left-radius;
-                border-bottom-left-radius: root.joined && root.joined-down ? 0px : self.height / 2;
-                border-bottom-right-radius: self.border-bottom-left-radius;
-                background: !root.joined && zone.has-hover ? Theme.tab-hover : Theme.card;
+                border-radius: self.height / 2;
+                background: root.joined ? Theme.problem.badge-background : zone.has-hover ? Theme.tab-hover : Theme.card;
                 border-width: Theme.attention-outline;
                 border-color: Theme.to-handle-outline;
                 HorizontalLayout {

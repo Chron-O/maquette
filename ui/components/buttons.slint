@@ -153,13 +153,11 @@ export component MoreButton {
         property <length> radius: self.height / 2;
         width: Theme.small-button-width;
         height: Theme.small-button-height;
-        border-top-left-radius: root.open && !root.down ? 0px : self.radius;
-        border-top-right-radius: self.border-top-left-radius;
-        border-bottom-left-radius: root.open && root.down ? 0px : self.radius;
-        border-bottom-right-radius: self.border-bottom-left-radius;
+        border-radius: self.radius;
         border-width: Theme.thin-outline-width;
-        border-color: Theme.thin-outline;
-        background: root.open ? Theme.card
+        border-color: root.open ? Theme.active-tab-background : Theme.thin-outline;
+        // Open: lit, dark green, while its menu points at it.
+        background: root.open ? Theme.active-tab-background
             : zone.pressed ? Theme.secondary-button-pressed
             : zone.has-hover ? Theme.secondary-button-hover
             : Theme.secondary-button;
@@ -167,7 +165,7 @@ export component MoreButton {
     }
     Text {
         text: "···";
-        color: Theme.text;
+        color: root.open ? Theme.active-tab-text : Theme.text;
         font-size: Theme.text-label;
         font-weight: Theme.weight-screen-title;
     }

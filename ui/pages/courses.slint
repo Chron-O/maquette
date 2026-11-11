@@ -562,18 +562,14 @@ export component AlertPill inherits Rectangle {
     in property <string> count: Courses.alert-count;
     in property <int> bubble: 2;
 
-    // Open: white, joined to its bubble by a square side.
+    // Open: lit, pale red, while its bubble points at it.
     property <bool> open: Courses.open-bubble == root.bubble;
-    property <length> radius: self.height / 2;
 
     height: Theme.zone;
-    border-top-left-radius: root.open && !Courses.bubble-down ? 0px : root.radius;
-    border-top-right-radius: self.border-top-left-radius;
-    border-bottom-left-radius: root.open && Courses.bubble-down ? 0px : root.radius;
-    border-bottom-right-radius: self.border-bottom-left-radius;
+    border-radius: self.height / 2;
     border-width: Theme.attention-outline;
     border-color: Theme.to-handle-outline;
-    background: !root.open && zone.has-hover ? Theme.tab-hover : Theme.card;
+    background: root.open ? Theme.problem.badge-background : zone.has-hover ? Theme.tab-hover : Theme.card;
     accessible-role: button;
     accessible-label: root.title;
     HorizontalLayout {
@@ -615,7 +611,7 @@ export component SummaryZone inherits Rectangle {
     in property <int> tone: -1;
     in property <string> subtitle;     // compact, under the title: what the chips would say
 
-    // Open: white, joined to its bubble by a square side.
+    // Open: lit, while its bubble points at it.
     property <bool> open: Courses.open-bubble == root.bubble;
 
     // A phone has no room for the chips: they are said in one text, which wraps (prototype: mZone).
@@ -626,13 +622,10 @@ export component SummaryZone inherits Rectangle {
         : root.chips[0] + " · " + root.chips[1] + " · " + root.chips[2] + " · " + root.chips[3];
 
     min-height: Theme.zone;
-    border-top-left-radius: root.open && !Courses.bubble-down ? 0px : Theme.field-radius;
-    border-top-right-radius: self.border-top-left-radius;
-    border-bottom-left-radius: root.open && Courses.bubble-down ? 0px : Theme.field-radius;
-    border-bottom-right-radius: self.border-bottom-left-radius;
+    border-radius: Theme.field-radius;
     border-width: Theme.thin-outline-width;
     border-color: Theme.thin-outline;
-    background: root.open ? Theme.card : zone.has-hover ? Theme.tab-hover : transparent;
+    background: root.open ? Theme.tab-hover : zone.has-hover ? Theme.tab-hover : transparent;
     accessible-role: button;
     accessible-label: "Réglages";
     HorizontalLayout {
@@ -2555,7 +2548,7 @@ component AlertBubble {
 }
 
 // A bubble (prototype: popPlace, « Bulles, variante B »): no arrow, the button that opened it
-// turns white and is joined to it, the touching corner square. It opens under the button, or
+// lights up and the bubble points at it (Robin, 11/11). It opens under the button, or
 // above when there is more room there, aligned on the button's side nearest to the window's
 // edge, and its content scrolls when it is too tall for the room.
 export component BubbleFrame {
@@ -2575,8 +2568,11 @@ export component BubbleFrame {
     property <length> bubble-x: clamp(root.wanted-x, root.margin, root.width - root.bubble-width - root.margin);
     property <length> bubble-y: root.down ? Courses.anchor-y + Courses.anchor-height + Theme.bubble-gap
         : Courses.anchor-y - Theme.bubble-gap - root.bubble-height;
-    // The corner touching the button is square, when the bubble is aligned on it.
-    property <bool> aligned: root.bubble-x == root.wanted-x;
+    // The pointer, under the button's middle, kept clear of the rounded corners (Robin, 11/11).
+    property <length> pointer-x: clamp(Courses.anchor-x + Courses.anchor-width / 2,
+        root.bubble-x + Theme.card-radius + Theme.bubble-pointer,
+        root.bubble-x + root.bubble-width - Theme.card-radius - Theme.bubble-pointer);
+    property <length> pointer-half: Theme.bubble-pointer * 0.71;   // half its diagonal
 
     init => { Courses.bubble-down = root.down; }
     changed down => { Courses.bubble-down = root.down; }
@@ -2590,10 +2586,7 @@ export component BubbleFrame {
         width: root.bubble-width;
         height: root.bubble-height;
         background: Theme.card;
-        border-top-left-radius: root.aligned && root.down && !root.from-right ? 0px : Theme.card-radius;
-        border-top-right-radius: root.aligned && root.down && root.from-right ? 0px : Theme.card-radius;
-        border-bottom-left-radius: root.aligned && !root.down && !root.from-right ? 0px : Theme.card-radius;
-        border-bottom-right-radius: root.aligned && !root.down && root.from-right ? 0px : Theme.card-radius;
+        border-radius: Theme.card-radius;
         border-width: Theme.thin-outline-width;
         border-color: Theme.thin-outline;
         drop-shadow-blur: Theme.demo-shadow;
@@ -2612,13 +2605,24 @@ export component BubbleFrame {
             }
         }
     }
-    // The joint: as wide as the button, white, over the gap and the two outlines it crosses.
+    // The pointer: a white square turned a quarter, with the bubble's outline on its outer sides;
+    // its inner half and the outline under it are covered, so it is one shape with the bubble.
     Rectangle {
-        x: Courses.anchor-x + Theme.thin-outline-width;
-        y: root.down ? Courses.anchor-y + Courses.anchor-height - Theme.bubble-joint
-            : root.bubble-y + root.bubble-height - Theme.thin-outline-width;
-        width: Courses.anchor-width - 2 * Theme.thin-outline-width;
-        height: Theme.bubble-gap + Theme.bubble-joint + Theme.thin-outline-width;
+        x: root.pointer-x - self.width / 2;
+        y: root.down ? root.bubble-y - self.height / 2 : root.bubble-y + root.bubble-height - self.height / 2;
+        width: Theme.bubble-pointer;
+        height: Theme.bubble-pointer;
+        background: Theme.card;
+        border-width: Theme.thin-outline-width;
+        border-color: Theme.thin-outline;
+        transform-rotation: 45deg;
+    }
+    Rectangle {
+        // As wide as the pointer's base inside its outline: the bubble's outline meets the pointer's.
+        x: root.pointer-x - self.width / 2;
+        y: root.down ? root.bubble-y : root.bubble-y + root.bubble-height - self.height;
+        width: 2 * root.pointer-half - 2 * Theme.thin-outline-width;
+        height: root.pointer-half + Theme.thin-outline-width;
         background: Theme.card;
     }
 }
