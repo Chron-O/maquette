@@ -27,6 +27,8 @@ Appliqué aux écrans 2 à 10 : bulle d'onglets à cheval sur l'en-tête, langue
 - **Filtres actifs sur téléphone** : l'entonnoir et leur nombre, sans les étiquettes, qui ne tiendraient pas.
 - **Groupes de filtres ajoutés** (validés par Robin le 11/11) : Participants « À vérifier » (Doublons possibles, Catégorie inconnue) et l'état « PM », pour que chaque « Voir » de l'alerte ait son filtre ; Direct « Lectures : À traiter » ; Coureurs, un seul groupe « Coureurs » (licence et pratique mêlées, un seul choix).
 - **Bulles des filtres et de l'alerte** : collées à leur bouton, comme les autres bulles (variante B). Ramenées à 340 px de large, comme les captures du brief ; chaque pastille de filtre a la largeur de son mot et passe à la ligne s'il le faut (Robin, 11/11 : « beaucoup trop grandes »). Sur téléphone, la bulle des filtres défile si elle touche la bande du bas.
+- **Bulle d'onglets** : affinée (Robin, 11/11) : 4 px de blanc autour des onglets, ombre plus douce ; la zone de toucher garde 48 px.
+- **Circuits sur téléphone** : Tableau / Lignes passent sous l'action, une seule ligne débordait de l'écran.
 - **Indicateurs sur iPad portrait** : sous le nom de l'événement, sinon la bulle cachait la 2ᵉ ligne du nom.
 - **Boîtiers** : « Boîtier spécial » en orange (Robin, 11/11 : l'orange va aux boutons importants et souvent utilisés). Contrôle / Ramassage reste un affichage, dans le volet.
 - **Circuits** : pas de filtre ; « Mettre en avant » reste un affichage. Les réglages d'un circuit restent dans sa carte.

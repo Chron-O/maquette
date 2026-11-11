@@ -563,10 +563,10 @@ export global Theme {
 
     // Zones of a tab (brief zones-onglets, 10/11/2026). The prototype's values are a guide.
     // The tab bubble, astride the header and the page.
-    out property <length> tab-bubble-padding: 6px;
-    out property <length> tab-bubble-height: tab-bar-height + 2 * tab-bubble-padding;
-    out property <length> tab-bubble-shadow-blur: 18px;
-    out property <length> tab-bubble-shadow-offset: 4px;
+    out property <length> tab-bubble-padding: 4px;   // thin, Robin 11/11
+    out property <length> tab-bubble-height: tab-height + 2 * tab-bubble-padding;
+    out property <length> tab-bubble-shadow-blur: 12px;
+    out property <length> tab-bubble-shadow-offset: 3px;
     // The Paramètres tab, hung under the bubble.
     out property <length> settings-tab-height: touch ? 48px : 46px;
     out property <length> settings-tab-tuck: 10px;        // how far it goes under the bubble

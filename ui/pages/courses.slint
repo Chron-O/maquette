@@ -1423,9 +1423,9 @@ component ViewRow {
                 icon: Icons.plus;
                 has-icon: true;
             }
-            Tabs {
-                tabs: root.narrow ? Courses.views-narrow : Courses.views;
-                active: root.narrow ? Courses.active-view-narrow : Courses.active-view;
+            if !root.narrow: Tabs {
+                tabs: Courses.views;
+                active: Courses.active-view;
                 clicked(i) => { Courses.select-view(i); }
             }
             Rectangle { horizontal-stretch: 1; }
@@ -1455,6 +1455,15 @@ component ViewRow {
             input-kind: InputType.number;
             text: Courses.code-search-text;
             edited(text) => { Courses.code-search(text); }
+        }
+        // On a phone, the views go on their own row: one row would not fit.
+        if root.narrow: HorizontalLayout {
+            alignment: start;
+            Tabs {
+                tabs: Courses.views-narrow;
+                active: Courses.active-view-narrow;
+                clicked(i) => { Courses.select-view(i); }
+            }
         }
         if root.narrow && root.search-open: InputField {
             placeholder: "Chercher un code…";

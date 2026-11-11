@@ -1423,12 +1423,14 @@ export component LiveTabButton inherits Rectangle {
     property <color> tint: root.open ? Theme.active-tab-text : Theme.tab-text;
     animate tint { duration: Theme.tab-duration; }
 
-    height: Theme.tab-bar-height;
+    height: Theme.tab-height;   // in the tab bubble, as high as a tab
     border-radius: self.height / 2;
     background: root.open ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : Theme.tabs-background;
     animate background { duration: Theme.tab-duration; }
 
     zone := TouchArea {
+        y: (root.height - self.height) / 2;
+        height: max(root.height, Theme.zone);
         mouse-cursor: pointer;
         clicked => { Navigation.toggle-live(); }
     }

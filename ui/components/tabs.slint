@@ -19,7 +19,8 @@ component Tab {
     property <length> icon-room: root.with-icon ? Theme.tab-icon + Theme.space : 0px;
 
     // Width reserved for the bold text: tabs do not move when the selection changes.
-    min-height: Theme.zone;
+    // As high as its pill; the touch zone reaches beyond it (Theme.zone).
+    min-height: Theme.tab-height;
     min-width: reference.preferred-width + root.icon-room + 2 * Theme.tab-margin;
 
     function report() {
@@ -65,6 +66,8 @@ component Tab {
         }
     }
     zone := TouchArea {
+        y: (root.height - self.height) / 2;
+        height: max(root.height, Theme.zone);
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
@@ -85,7 +88,8 @@ export component Tabs inherits Rectangle {
     property <length> pill-width;
     property <bool> ready: false;   // no animation while everything settles at launch
 
-    height: Theme.tab-bar-height;
+    // In the bubble, no margin of its own: the bubble gives it (Robin, 11/11: thinner).
+    height: root.bare ? Theme.tab-height : Theme.tab-bar-height;
     border-radius: self.height / 2;
     background: root.bare ? transparent : Theme.tabs-background;
 
@@ -169,6 +173,8 @@ component IconTab {
         }
     }
     TouchArea {
+        y: (root.height - self.height) / 2;
+        height: max(root.height, Theme.zone);
         clicked => { root.clicked(); }
     }
 }
@@ -187,7 +193,8 @@ export component IconTabs inherits Rectangle {
     property <length> base: (root.width - 2 * root.margin - root.extra) / root.tabs.length;
     property <bool> ready: false;   // no animation while everything settles at launch
 
-    height: Theme.tab-bar-height;
+    // In the bubble, no margin of its own: the bubble gives it (Robin, 11/11: thinner).
+    height: root.bare ? Theme.tab-height : Theme.tab-bar-height;
     border-radius: self.height / 2;
     background: root.bare ? transparent : Theme.tabs-background;
 
