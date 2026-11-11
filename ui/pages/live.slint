@@ -11,7 +11,7 @@ import { BarReader, ReaderMode, ReaderTile, Readers } from "../components/reader
 import { MoreButton, PrimaryButton, SecondaryButton } from "../components/buttons.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, BadgeKind, Home, ToHandleButton } from "home.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText } from "courses.slint";
 import { CategoryCell, Cell, NameCell } from "participants.slint";
 
@@ -915,11 +915,21 @@ component LiveContent {
                     text: Live.search-text;
                     edited(text) => { Live.search(text); }
                 }
-                if root.narrow && root.search-open: InputField {
-                    placeholder: "Chercher un coureur, une puce…";
-                    text: Live.search-text;
-                    init => { self.take-focus(); }
-                    edited(text) => { Live.search(text); }
+                // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                if root.narrow: Unfold {
+                    open: root.search-open;
+                    InputField {
+                        // Opened, it takes the keyboard.
+                        property <bool> wanted: root.search-open;
+                        changed wanted => {
+                            if self.wanted {
+                                self.take-focus();
+                            }
+                        }
+                        placeholder: "Chercher un coureur, une puce…";
+                        text: Live.search-text;
+                        edited(text) => { Live.search(text); }
+                    }
                 }
             }
             RowLine { vertical-stretch: 0; }
@@ -1379,7 +1389,7 @@ export component LiveBubble {
             groups: Live.filter-groups;
             toggle(g, c) => { Live.toggle-filter(g, c); }
             clear => { Live.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
         if Courses.open-bubble == 13: VerticalLayout {
             padding: Theme.space-medium;
@@ -1398,7 +1408,7 @@ export component LiveBubble {
                     label: problem.action;
                     in-row: true;
                     clicked => {
-                        Courses.open-bubble = 0;
+                        Courses.close-bubble();
                         Live.open-row(problem.index);
                     }
                 }

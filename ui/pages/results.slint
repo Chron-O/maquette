@@ -7,7 +7,7 @@ import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
 import { MoreButton } from "../components/buttons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { BubbleFrame, BubbleLabel, CourseChip, Courses, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -414,11 +414,21 @@ component ResultsContent {
                         }
                     }
                 }
-                if root.narrow && root.search-open: InputField {
-                    placeholder: "Nom, club ou puce…";
-                    text: Results.search-text;
-                    init => { self.take-focus(); }
-                    edited(text) => { Results.search(text); }
+                // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                if root.narrow: Unfold {
+                    open: root.search-open;
+                    InputField {
+                        // Opened, it takes the keyboard.
+                        property <bool> wanted: root.search-open;
+                        changed wanted => {
+                            if self.wanted {
+                                self.take-focus();
+                            }
+                        }
+                        placeholder: "Nom, club ou puce…";
+                        text: Results.search-text;
+                        edited(text) => { Results.search(text); }
+                    }
                 }
             }
             RowLine { vertical-stretch: 0; }
@@ -517,7 +527,7 @@ export component ResultsBubble {
             groups: Results.filter-groups;
             toggle(g, c) => { Results.toggle-filter(g, c); }
             clear => { Results.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
     }
 }

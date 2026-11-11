@@ -5,7 +5,7 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
 import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Home } from "home.slint";
@@ -313,11 +313,21 @@ component RunnerBaseContent {
                         }
                         SmallText { text: RunnerBase.state; }
                     }
-                    if root.narrow && root.search-open: InputField {
-                        placeholder: "Nom, club, licence ou puce…";
-                        text: RunnerBase.search-text;
-                        init => { self.take-focus(); }
-                        edited(text) => { RunnerBase.search(text); }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Nom, club, licence ou puce…";
+                            text: RunnerBase.search-text;
+                            edited(text) => { RunnerBase.search(text); }
+                        }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -518,7 +528,7 @@ component IssueLine {
             SecondaryButton {
                 label: "Voir";
                 clicked => {
-                    Courses.open-bubble = 0;
+                    Courses.close-bubble();
                     RunnerBase.open-runner(root.issue.id);
                 }
             }
@@ -567,7 +577,7 @@ export component RunnerBaseBubble {
             groups: RunnerBase.filter-groups;
             toggle(g, c) => { RunnerBase.toggle-filter(g, c); }
             clear => { RunnerBase.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
     }
 }

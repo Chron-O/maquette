@@ -8,7 +8,7 @@ import { Icons } from "../components/icons.slint";
 import { ReaderTile, Readers } from "../components/reader-tile.slint";
 import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
-import { ActiveFilter, FilterButton, FilterGroup, FiltersContent, SettingRow, Sheet, SheetTitle } from "../components/zones.slint";
+import { ActiveFilter, FilterButton, FilterGroup, FiltersContent, SettingRow, Sheet, SheetTitle, Unfold } from "../components/zones.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SequenceStop, SmallText, SortMark, StopsFlow, SummaryZone, Switch } from "courses.slint";
@@ -386,11 +386,21 @@ component ParticipantsHead {
             text: Participants.search-text;
             edited(text) => { Participants.search(text); }
         }
-        if root.narrow && root.search-open: InputField {
-            placeholder: "Nom, club ou puce…";
-            text: Participants.search-text;
-            init => { self.take-focus(); }
-            edited(text) => { Participants.search(text); }
+        // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+        if root.narrow: Unfold {
+            open: root.search-open;
+            InputField {
+                // Opened, it takes the keyboard.
+                property <bool> wanted: root.search-open;
+                changed wanted => {
+                    if self.wanted {
+                        self.take-focus();
+                    }
+                }
+                placeholder: "Nom, club ou puce…";
+                text: Participants.search-text;
+                edited(text) => { Participants.search(text); }
+            }
         }
     }
 }
@@ -707,7 +717,7 @@ component ProblemsContent {
                 label: "Voir";
                 clicked => {
                     Participants.show-problem(i);
-                    Courses.open-bubble = 0;
+                    Courses.close-bubble();
                 }
             }
         }
@@ -727,7 +737,7 @@ export component ParticipantsBubble {
             groups: Participants.filter-groups;
             toggle(g, c) => { Participants.toggle-filter(g, c); }
             clear => { Participants.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
     }
 }

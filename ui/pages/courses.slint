@@ -10,7 +10,7 @@ import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
-import { BottomDetail, SettingRow, SideDetail } from "../components/zones.slint";
+import { BottomDetail, SettingRow, SideDetail, Unfold } from "../components/zones.slint";
 
 export struct CourseItem {
     index: int,
@@ -187,7 +187,16 @@ export global Courses {
     // Where a bubble must stop, in the window (the top of the band and Direct bar); 0: the window's end.
     in-out property <length> bubble-floor;
 
+    // Closing: the bubble fades out, then goes (BubbleFrame).
+    in-out property <bool> closing;
+    public function close-bubble() {
+        if root.open-bubble > 0 {
+            root.closing = true;
+        }
+    }
+
     public function open-at(bubble: int, x: length, y: length, width: length, height: length) {
+        root.closing = false;
         root.anchor-x = x;
         root.anchor-y = y;
         root.anchor-width = width;
@@ -1458,12 +1467,22 @@ component ViewRow {
                 clicked(i) => { Courses.select-view(i); }
             }
         }
-        if root.narrow && root.search-open: InputField {
-            placeholder: "Chercher un code…";
-            input-kind: InputType.number;
-            text: Courses.code-search-text;
-            init => { self.take-focus(); }
-            edited(text) => { Courses.code-search(text); }
+        // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+        if root.narrow: Unfold {
+            open: root.search-open;
+            InputField {
+                // Opened, it takes the keyboard.
+                property <bool> wanted: root.search-open;
+                changed wanted => {
+                    if self.wanted {
+                        self.take-focus();
+                    }
+                }
+                placeholder: "Chercher un code…";
+                input-kind: InputType.number;
+                text: Courses.code-search-text;
+                edited(text) => { Courses.code-search(text); }
+            }
         }
         if !root.narrow: HorizontalLayout {
             spacing: Theme.space;
@@ -2500,7 +2519,7 @@ export component MenuItem inherits Rectangle {
     accessible-label: root.text;
     zone := TouchArea {
         mouse-cursor: pointer;
-        clicked => { Courses.open-bubble = 0; }
+        clicked => { Courses.close-bubble(); }
     }
     HorizontalLayout {
         padding-left: Theme.space-medium;
@@ -2539,7 +2558,7 @@ component AlertBubble {
                 label: "Le voir";
                 in-row: true;
                 clicked => {
-                    Courses.open-bubble = 0;
+                    Courses.close-bubble();
                     Courses.select-control(code);
                 }
             }
@@ -2574,56 +2593,85 @@ export component BubbleFrame {
         root.bubble-x + root.bubble-width - Theme.card-radius - Theme.bubble-pointer);
     property <length> pointer-half: Theme.bubble-pointer * 0.71;   // half its diagonal
 
+    // It comes in a short fade, sliding towards its button, and leaves the same way (Robin, 11/11).
+    property <bool> appeared;
+    property <bool> shown: root.appeared && !Courses.closing;
+
     init => { Courses.bubble-down = root.down; }
+    // A change at creation is not animated: it comes a moment later.
+    Timer {
+        interval: 1ms;
+        running: !root.appeared;
+        triggered => { root.appeared = true; }
+    }
+    Timer {
+        interval: max(1ms, Theme.bubble-duration);
+        running: Courses.closing;
+        triggered => {
+            Courses.closing = false;
+            Courses.open-bubble = 0;
+        }
+    }
     changed down => { Courses.bubble-down = root.down; }
 
     TouchArea {
-        clicked => { Courses.open-bubble = 0; }
+        clicked => { Courses.close-bubble(); }
     }
-    bubble := Rectangle {
-        x: root.bubble-x;
-        y: root.bubble-y;
-        width: root.bubble-width;
-        height: root.bubble-height;
-        background: Theme.card;
-        border-radius: Theme.card-radius;
-        border-width: Theme.thin-outline-width;
-        border-color: Theme.thin-outline;
-        drop-shadow-blur: Theme.demo-shadow;
-        drop-shadow-color: Theme.bubble-shadow;
-        clip: true;
-        TouchArea { }
-        Flickable {
-            width: parent.width;
-            height: parent.height;
-            // As wide as the bubble: a too wide line never widens the whole content.
-            content-width: self.width;
-            content-height: root.wanted-height;
-            content := VerticalLayout {
-                width: bubble.width;
-                @children
+    Rectangle {
+        y: root.shown ? 0px : root.down ? -Theme.bubble-travel : Theme.bubble-travel;
+        animate y {
+            duration: Theme.bubble-duration;
+            easing: ease-out;
+        }
+        width: root.width;
+        height: root.height;
+        opacity: root.shown ? 1 : 0;
+        animate opacity { duration: Theme.bubble-duration; }
+        bubble := Rectangle {
+            x: root.bubble-x;
+            y: root.bubble-y;
+            width: root.bubble-width;
+            height: root.bubble-height;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.thin-outline-width;
+            border-color: Theme.thin-outline;
+            drop-shadow-blur: Theme.demo-shadow;
+            drop-shadow-color: Theme.bubble-shadow;
+            clip: true;
+            TouchArea { }
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                // As wide as the bubble: a too wide line never widens the whole content.
+                content-width: self.width;
+                content-height: root.wanted-height;
+                content := VerticalLayout {
+                    width: bubble.width;
+                    @children
+                }
             }
         }
-    }
-    // The pointer: a white square turned a quarter, with the bubble's outline on its outer sides;
-    // its inner half and the outline under it are covered, so it is one shape with the bubble.
-    Rectangle {
-        x: root.pointer-x - self.width / 2;
-        y: root.down ? root.bubble-y - self.height / 2 : root.bubble-y + root.bubble-height - self.height / 2;
-        width: Theme.bubble-pointer;
-        height: Theme.bubble-pointer;
-        background: Theme.card;
-        border-width: Theme.thin-outline-width;
-        border-color: Theme.thin-outline;
-        transform-rotation: 45deg;
-    }
-    Rectangle {
-        // As wide as the pointer's base inside its outline: the bubble's outline meets the pointer's.
-        x: root.pointer-x - self.width / 2;
-        y: root.down ? root.bubble-y : root.bubble-y + root.bubble-height - self.height;
-        width: 2 * root.pointer-half - 2 * Theme.thin-outline-width;
-        height: root.pointer-half + Theme.thin-outline-width;
-        background: Theme.card;
+        // The pointer: a white square turned a quarter, with the bubble's outline on its outer sides;
+        // its inner half and the outline under it are covered, so it is one shape with the bubble.
+        Rectangle {
+            x: root.pointer-x - self.width / 2;
+            y: root.down ? root.bubble-y - self.height / 2 : root.bubble-y + root.bubble-height - self.height / 2;
+            width: Theme.bubble-pointer;
+            height: Theme.bubble-pointer;
+            background: Theme.card;
+            border-width: Theme.thin-outline-width;
+            border-color: Theme.thin-outline;
+            transform-rotation: 45deg;
+        }
+        Rectangle {
+            // As wide as the pointer's base inside its outline: the bubble's outline meets the pointer's.
+            x: root.pointer-x - self.width / 2;
+            y: root.down ? root.bubble-y : root.bubble-y + root.bubble-height - self.height;
+            width: 2 * root.pointer-half - 2 * Theme.thin-outline-width;
+            height: root.pointer-half + Theme.thin-outline-width;
+            background: Theme.card;
+        }
     }
 }
 

@@ -600,6 +600,9 @@ export global Theme {
     out property <length> sheet-shadow-offset: 4px;
     out property <color> sheet-shadow: dark ? transparent : #16362824;
     out property <duration> sheet-duration: reduced-motion ? 0ms : 300ms;
+    out property <duration> unfold-duration: reduced-motion ? 0ms : 220ms;   // a row that unfolds (Robin, 11/11)
+    out property <duration> bubble-duration: reduced-motion ? 0ms : 140ms;   // a bubble that opens or closes
+    out property <length> bubble-travel: 6px;                                // how far it slides as it comes
     out property <length> side-sheet-width: 380px;
     out property <length> bottom-sheet-top: 96px;         // a phone: what stays seen above it
     // The Filtres button and its bubble.

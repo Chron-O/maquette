@@ -530,3 +530,24 @@ export component BottomDetail {
         }
     }
 }
+
+// What a row unfolds: it opens and closes smoothly, never in one go (Robin, 11/11). Always
+// there, of no height while closed; its content fades in as it opens.
+export component Unfold inherits Rectangle {
+    in property <bool> open;
+
+    clip: true;
+    height: root.open ? inner.preferred-height : 0px;
+    animate height {
+        duration: Theme.unfold-duration;
+        easing: ease-in-out;
+    }
+    inner := VerticalLayout {
+        y: 0;
+        width: root.width;
+        height: self.preferred-height;
+        opacity: root.open ? 1 : 0;
+        animate opacity { duration: Theme.unfold-duration; }
+        @children
+    }
+}

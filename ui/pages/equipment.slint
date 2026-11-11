@@ -9,6 +9,7 @@ import { ChoiceSegments } from "../components/choice-segments.slint";
 import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Status, StatusBadge } from "../components/status.slint";
 import { BubbleFrame, Courses, RowLine, Switch } from "courses.slint";
+import { Unfold } from "../components/zones.slint";
 import { ReaderRings } from "../components/dot.slint";
 
 export struct EquipmentReader {
@@ -219,10 +220,10 @@ component ReaderRow inherits Rectangle {
     property <length> middle: root.width - 2 * Theme.space-medium - 2 * Theme.button-icon - Theme.zone - 3 * Theme.button-margin;
 
     background: root.open ? Theme.page-background : transparent;
+    animate background { duration: Theme.unfold-duration; }
     VerticalLayout {
         padding-left: Theme.space-medium;
         padding-right: Theme.space-medium;
-        padding-bottom: root.open ? Theme.space-medium : 0px;
         Rectangle {
             min-height: Theme.zone + Theme.space;
             HorizontalLayout {
@@ -274,20 +275,24 @@ component ReaderRow inherits Rectangle {
                 clicked => { Equipment.open-reader = root.open ? -1 : root.reader.info.index; }
             }
         }
-        if root.open: VerticalLayout {
-            spacing: Theme.button-margin;
-            ChoiceLine {
-                label: "Usage";   // short words: one row, which fits a phone
-                choices: Equipment.usages;
-                active: root.reader.usage;
-                clicked(i) => { Equipment.set-usage(root.reader.info.index, i); }
-            }
-            ChoiceLine {
-                label: "Course";
-                stacked: root.width < Theme.bubble-narrow-below;
-                choices: Equipment.courses;
-                active: root.reader.course-choice;
-                clicked(i) => { Equipment.set-course(root.reader.info.index, i); }
+        Unfold {
+            open: root.open;
+            VerticalLayout {
+                padding-bottom: Theme.space-medium;
+                spacing: Theme.button-margin;
+                ChoiceLine {
+                    label: "Usage";   // short words: one row, which fits a phone
+                    choices: Equipment.usages;
+                    active: root.reader.usage;
+                    clicked(i) => { Equipment.set-usage(root.reader.info.index, i); }
+                }
+                ChoiceLine {
+                    label: "Course";
+                    stacked: root.width < Theme.bubble-narrow-below;
+                    choices: Equipment.courses;
+                    active: root.reader.course-choice;
+                    clicked(i) => { Equipment.set-course(root.reader.info.index, i); }
+                }
             }
         }
     }
@@ -399,14 +404,13 @@ component DeviceRow inherits Rectangle {
     property <length> middle: root.width - 2 * Theme.space-medium - Theme.button-icon - max(Theme.small-button-width, more.preferred-width) - 2 * Theme.button-margin;
 
     background: root.open ? Theme.page-background : transparent;
+    animate background { duration: Theme.unfold-duration; }
     VerticalLayout {
         padding-left: Theme.space-medium;
         padding-right: Theme.space-medium;
-        padding-bottom: root.open ? Theme.space-medium : 0px;
-        spacing: Theme.space;
         HorizontalLayout {
             padding-top: Theme.space;
-            padding-bottom: root.open ? 0px : Theme.space;
+            padding-bottom: Theme.space;
             spacing: Theme.button-margin;
             VerticalLayout {
                 alignment: center;
@@ -441,21 +445,28 @@ component DeviceRow inherits Rectangle {
                 }
             }
         }
-        if root.open: ChoiceLine {
-            label: "Rôle";
-            stacked: root.width < Theme.bubble-narrow-below;
-            choices: Equipment.roles;
-            active: root.device.role-choice;
-            clicked(i) => { Equipment.set-device-role(root.index, i); }
-        }
-        if root.open: HorizontalLayout {
-            alignment: start;
-            SecondaryButton {
-                label: "Retirer de la course";
-                danger: true;
-                clicked => {
-                    Equipment.open-device = -1;
-                    Equipment.remove-device(root.index);
+        Unfold {
+            open: root.open;
+            VerticalLayout {
+                padding-bottom: Theme.space-medium;
+                spacing: Theme.space;
+                ChoiceLine {
+                    label: "Rôle";
+                    stacked: root.width < Theme.bubble-narrow-below;
+                    choices: Equipment.roles;
+                    active: root.device.role-choice;
+                    clicked(i) => { Equipment.set-device-role(root.index, i); }
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    SecondaryButton {
+                        label: "Retirer de la course";
+                        danger: true;
+                        clicked => {
+                            Equipment.open-device = -1;
+                            Equipment.remove-device(root.index);
+                        }
+                    }
                 }
             }
         }
@@ -758,15 +769,14 @@ component ScreenRow inherits Rectangle {
     property <length> middle: root.width - 2 * Theme.space-medium - 2 * Theme.button-icon - toggle.preferred-width - 3 * Theme.button-margin;
 
     background: root.open ? Theme.page-background : transparent;
+    animate background { duration: Theme.unfold-duration; }
     VerticalLayout {
         padding-left: Theme.space-medium;
         padding-right: Theme.space-medium;
-        padding-bottom: root.open ? Theme.space-medium : 0px;
-        spacing: Theme.space;
         Rectangle {
             HorizontalLayout {
                 padding-top: Theme.space;
-                padding-bottom: root.open ? 0px : Theme.space;
+                padding-bottom: Theme.space;
                 spacing: Theme.button-margin;
                 VerticalLayout {
                     alignment: center;
@@ -825,50 +835,57 @@ component ScreenRow inherits Rectangle {
                 clicked => { Equipment.open-screen = root.open ? -1 : root.index; }
             }
         }
-        if root.open: ChoiceLine {
-            label: "Contenu";
-            stacked: root.width < Theme.bubble-narrow-below;
-            choices: Equipment.contents;
-            active: root.screen.content;
-            clicked(i) => { Equipment.set-content(root.index, i); }
-        }
-        if root.open && !root.stacked: HorizontalLayout {
-            spacing: Theme.space-medium;
+        Unfold {
+            open: root.open;
             VerticalLayout {
-                spacing: Theme.space-small;
-                alignment: start;
-                ScreenMiniature { screen: root.screen; }
-                BubbleNote {
-                    width: Theme.screen-preview-width;
-                    text: root.screen.on ? "Ce que montre l'écran en ce moment" : "Désactivé : l'écran ne montre rien";
+                padding-bottom: Theme.space-medium;
+                spacing: Theme.space;
+                ChoiceLine {
+                    label: "Contenu";
+                    stacked: root.width < Theme.bubble-narrow-below;
+                    choices: Equipment.contents;
+                    active: root.screen.content;
+                    clicked(i) => { Equipment.set-content(root.index, i); }
                 }
-            }
-            ScreenSettings {
-                horizontal-stretch: 1;
-                screen: root.screen;
-                index: root.index;
-            }
-        }
-        if root.open && root.stacked: VerticalLayout {
-            spacing: Theme.space-small;
-            HorizontalLayout {
-                alignment: start;
-                ScreenMiniature { screen: root.screen; }
-            }
-            BubbleNote { text: root.screen.on ? "Ce que montre l'écran en ce moment" : "Désactivé : l'écran ne montre rien"; }
-            ScreenSettings {
-                screen: root.screen;
-                index: root.index;
-            }
-        }
-        if root.open && root.screen.window: HorizontalLayout {
-            alignment: start;
-            SecondaryButton {
-                label: "Supprimer la fenêtre";
-                danger: true;
-                clicked => {
-                    Equipment.open-screen = -1;
-                    Equipment.remove-window(root.index);
+                if !root.stacked: HorizontalLayout {
+                    spacing: Theme.space-medium;
+                    VerticalLayout {
+                        spacing: Theme.space-small;
+                        alignment: start;
+                        ScreenMiniature { screen: root.screen; }
+                        BubbleNote {
+                            width: Theme.screen-preview-width;
+                            text: root.screen.on ? "Ce que montre l'écran en ce moment" : "Désactivé : l'écran ne montre rien";
+                        }
+                    }
+                    ScreenSettings {
+                        horizontal-stretch: 1;
+                        screen: root.screen;
+                        index: root.index;
+                    }
+                }
+                if root.stacked: VerticalLayout {
+                    spacing: Theme.space-small;
+                    HorizontalLayout {
+                        alignment: start;
+                        ScreenMiniature { screen: root.screen; }
+                    }
+                    BubbleNote { text: root.screen.on ? "Ce que montre l'écran en ce moment" : "Désactivé : l'écran ne montre rien"; }
+                    ScreenSettings {
+                        screen: root.screen;
+                        index: root.index;
+                    }
+                }
+                if root.screen.window: HorizontalLayout {
+                    alignment: start;
+                    SecondaryButton {
+                        label: "Supprimer la fenêtre";
+                        danger: true;
+                        clicked => {
+                            Equipment.open-screen = -1;
+                            Equipment.remove-window(root.index);
+                        }
+                    }
                 }
             }
         }

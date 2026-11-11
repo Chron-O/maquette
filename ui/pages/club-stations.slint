@@ -7,7 +7,7 @@ import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { QuietButton, SecondaryButton, PrimaryButton } from "../components/buttons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -362,11 +362,21 @@ component ClubStationsContent {
                         }
                         SmallText { text: ClubStations.state; }
                     }
-                    if root.narrow && root.search-open: InputField {
-                        placeholder: "Code, n° ou note…";
-                        text: ClubStations.search-text;
-                        init => { self.take-focus(); }
-                        edited(text) => { ClubStations.search(text); }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Code, n° ou note…";
+                            text: ClubStations.search-text;
+                            edited(text) => { ClubStations.search(text); }
+                        }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -604,7 +614,7 @@ component BatteriesContent {
                 QuietButton {
                     label: "Voir";
                     clicked => {
-                        Courses.open-bubble = 0;
+                        Courses.close-bubble();
                         ClubStations.open-station(item.serial);
                     }
                 }
@@ -635,7 +645,7 @@ export component ClubStationsBubble {
             groups: ClubStations.filter-groups;
             toggle(g, c) => { ClubStations.toggle-filter(g, c); }
             clear => { ClubStations.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
         if Courses.open-bubble == 18: BatteriesContent { }
     }

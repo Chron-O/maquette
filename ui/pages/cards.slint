@@ -6,7 +6,7 @@ import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { QuietButton, SecondaryButton, PrimaryButton } from "../components/buttons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -443,11 +443,21 @@ component CardsContent {
                         }
                         SmallText { text: Cards.state; }
                     }
-                    if root.narrow && root.search-open: InputField {
-                        placeholder: "Numéro, nom ou note…";
-                        text: Cards.search-text;
-                        init => { self.take-focus(); }
-                        edited(text) => { Cards.search(text); }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Numéro, nom ou note…";
+                            text: Cards.search-text;
+                            edited(text) => { Cards.search(text); }
+                        }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -699,7 +709,7 @@ component OverdueContent {
                 QuietButton {
                     label: "Voir";
                     clicked => {
-                        Courses.open-bubble = 0;
+                        Courses.close-bubble();
                         Cards.open-card(card.number);
                     }
                 }
@@ -730,7 +740,7 @@ export component CardsBubble {
             groups: Cards.filter-groups;
             toggle(g, c) => { Cards.toggle-filter(g, c); }
             clear => { Cards.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
         if Courses.open-bubble == 16: OverdueContent { }
     }

@@ -17,7 +17,7 @@ import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRo
 import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
 import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
 import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
-import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Zones } from "components/zones.slint";
+import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Unfold, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
 import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
 import { Home, HomePage, HomeIndicators, IndicatorDots, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
@@ -108,6 +108,7 @@ component Header inherits Rectangle {
                     text: Navigation.header-title;
                     color: Theme.header-text;
                     font-size: root.compact ? Theme.header-compact-title : Theme.text-screen-title;
+                    animate font-size { duration: Theme.header-compact-duration; }
                     font-weight: Theme.weight-screen-title;
                     wrap: word-wrap;
                 }
@@ -138,13 +139,16 @@ component Header inherits Rectangle {
         }
         // A phone or iPad portrait: the indicators under the name, on the right, unless they fit
         // beside it.
-        if ((Navigation.home && root.layout-mode == LayoutMode.narrow)
-            || (Navigation.in-event && root.layout-mode != LayoutMode.wide && !root.indicators-beside))
-            && !root.compact: HomeIndicators {
-            layout-mode: root.layout-mode;
-            open-bubble: Courses.open-bubble;
-            open-down: Courses.bubble-down;
-            opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
+        // Tucked, the row folds up smoothly (Robin, 11/11).
+        if (Navigation.home && root.layout-mode == LayoutMode.narrow)
+            || (Navigation.in-event && root.layout-mode != LayoutMode.wide && !root.indicators-beside): Unfold {
+            open: !root.compact;
+            HomeIndicators {
+                layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
+            }
         }
     }
 }

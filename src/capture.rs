@@ -5,6 +5,7 @@
 // CAPTURE_COURSE and CAPTURE_COURSE_VIEW open a course and one of its views.
 // CAPTURE_CLICKS="x,y;x,y" clicks these points first, to test the navigation without a mouse;
 // "~x,y,dy" scrolls by dy points there instead (a negative dy goes down the page).
+// CAPTURE_AFTER_MS takes the image that long after the last step, in the middle of an animation.
 // Without these arguments, the app starts normally.
 
 use crate::device::{self, Device};
@@ -92,7 +93,12 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
     slint::Timer::single_shot(WAIT / 2, move || {
         set_logical_size(&resize.unwrap(), width, height);
     });
-    let click_time = WAIT * (clicks.len() as u32 + 2);
+    // CAPTURE_AFTER_MS: the image this many milliseconds after the last step, to see an animation.
+    let after = std::env::var("CAPTURE_AFTER_MS").ok().and_then(|ms| ms.parse().ok()).map(std::time::Duration::from_millis);
+    let click_time = match after {
+        Some(after) if !clicks.is_empty() => WAIT * clicks.len() as u32 + after,
+        _ => WAIT * (clicks.len() as u32 + 2),
+    };
     for (i, (position, scroll)) in clicks.into_iter().enumerate() {
         let weak = window.as_weak();
         slint::Timer::single_shot(WAIT * (i as u32 + 1), move || {

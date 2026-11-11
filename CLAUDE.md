@@ -48,6 +48,7 @@ Une place par fonction, à tous les écrans :
 - Seul le contenu défile, et les titres d'un tableau restent en haut. Sur téléphone, c'est la page qui défile, jamais de côté ; la recherche est une loupe qui se déplie.
 - Un aspect = un usage : ne pas donner le même dessin à un affichage et à un filtre.
 - Rien ne change de taille tout seul (lecture, alerte, appareil) : place réservée.
+- Ce qui s'ouvre ou se ferme est animé, jamais d'un coup (Robin, 11/11) : `Unfold` pour une ligne qui se déplie, fondu et glissé court pour une bulle (`Courses.close-bubble()` pour la fermer), `Theme.*-duration` (0 si mouvements réduits).
 - Avant de concevoir un écran : lire le prototype et les specs de chrono-swift (`docs/specs/`), en lecture seule.
 
 ## Design

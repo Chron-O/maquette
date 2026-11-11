@@ -9,7 +9,7 @@ import { PrimaryButton, QuietButton, SecondaryButton } from "../components/butto
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
 import { Cell, Title } from "participants.slint";
 import { ReaderTile, Readers } from "../components/reader-tile.slint";
@@ -477,11 +477,21 @@ component StationsContent {
                         text: Stations.search-text;
                         edited(text) => { Stations.search(text); }
                     }
-                    if root.narrow && root.search-open: InputField {
-                        placeholder: "Poste ou n°…";
-                        text: Stations.search-text;
-                        init => { self.take-focus(); }
-                        edited(text) => { Stations.search(text); }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Poste ou n°…";
+                            text: Stations.search-text;
+                            edited(text) => { Stations.search(text); }
+                        }
                     }
                 }
                 RowLine { vertical-stretch: 0; }
@@ -926,7 +936,7 @@ component ProblemsContent {
             QuietButton {
                 label: Stations.alert-button;
                 clicked => {
-                    Courses.open-bubble = 0;
+                    Courses.close-bubble();
                     Stations.alert-action();
                 }
             }
@@ -948,7 +958,7 @@ export component StationsBubble {
             groups: Stations.filter-groups;
             toggle(g, c) => { Stations.toggle-filter(g, c); }
             clear => { Stations.clear-filters(); }
-            close => { Courses.open-bubble = 0; }
+            close => { Courses.close-bubble(); }
         }
     }
 }
