@@ -4,7 +4,7 @@ use crate::test_data::{ENTRY_READER, FINISH_READERS, FREE_READER, Generated, Rea
 use crate::{App, ReaderInfo, ReaderMode, Readers, model};
 use slint::ComponentHandle;
 
-fn info(data: &Generated, index: usize) -> ReaderInfo {
+pub fn info(data: &Generated, index: usize) -> ReaderInfo {
     let reader = &data.readers[index];
     ReaderInfo {
         index: index as i32,

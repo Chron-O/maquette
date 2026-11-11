@@ -8,6 +8,7 @@ mod cards;
 mod club_stations;
 mod courses;
 mod device;
+mod equipment;
 mod home;
 mod live;
 mod navigation;
@@ -57,6 +58,7 @@ impl AppState {
         self.navigator.show(window, self.data.as_ref());
         home::show(window, self.data.as_ref());
         readers::show(window, self.data.as_ref());
+        equipment::show(window, self.data.as_ref());
         let event = self.navigator.event().and_then(|e| self.data.as_ref().map(|d| &d.events[e]));
         self.courses.show(window, event, &self.stations);
         let cards_free = self.data.as_ref().map_or(0, Generated::cards_free);
@@ -655,6 +657,25 @@ fn connect_readers(window: &App, state: &Rc<RefCell<AppState>>) {
         }
     }
     window.global::<Readers>().on_toggle_pin(on_reader(window, state, Generated::toggle_pin));
+    // The readers' bubble: a usage or a course, chosen for one reader.
+    fn on_choice(
+        window: &App,
+        state: &Rc<RefCell<AppState>>,
+        action: fn(&mut Generated, usize, usize),
+    ) -> impl Fn(i32, i32) + 'static {
+        let (weak, state) = (window.as_weak(), state.clone());
+        move |reader, choice| {
+            if let Some(data) = state.borrow_mut().data.as_mut() {
+                action(data, reader as usize, choice as usize);
+            }
+            if let Some(window) = weak.upgrade() {
+                state.borrow().show(&window);
+            }
+        }
+    }
+    let equipment = window.global::<Equipment>();
+    equipment.on_set_usage(on_choice(window, state, Generated::set_reader_usage));
+    equipment.on_set_course(on_choice(window, state, Generated::set_reader_course));
     let unplug = on_reader(window, state, Generated::toggle_unplugged);
     window.global::<Demo>().on_toggle_unplugged(move || unplug(0));
 }

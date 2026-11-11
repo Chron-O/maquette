@@ -112,14 +112,23 @@ export global Home {
 
 export component HomeIndicators {
     in property <LayoutMode> layout-mode;
+    in property <int> open-bubble;      // the bubble open in the window
+    in property <bool> open-down: true;
+    // A click opens its bubble (31, 32, 33), joined to the pill.
+    callback opened(int, length, length, length, length);
 
     // Always on the right, a phone included (Robin, 11/11).
     HorizontalLayout {
         alignment: end;
         spacing: Theme.indicator-compact-gap;
-        for item in Home.indicators: VerticalLayout {
+        for item[i] in Home.indicators: VerticalLayout {
             alignment: center;
             Indicator {
+                open: root.open-bubble == 31 + i;
+                open-down: root.open-down;
+                clicked => {
+                    root.opened(31 + i, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                }
                 icon: item.icon;
                 text: item.short-text;
                 reserve: item.short-reserve;

@@ -373,7 +373,12 @@ pub struct Reader {
     pub serial: u32,
     pub pinned: bool,
     pub unplugged: bool,
+    pub usage: Option<usize>,   // in READER_USAGES; None: a free reader
+    pub course: usize,          // in Generated::reader_courses
 }
+
+// What a reader is used for (prototype: USES); its name follows.
+pub const READER_USAGES: [&str; 4] = ["Arrivée", "Accueil", "Départ", "Boîtiers"];
 
 // What a reader is doing now.
 #[derive(Clone, Copy, PartialEq)]
@@ -1255,13 +1260,21 @@ impl Generated {
         let clock_seconds = clock_seconds.unwrap_or_else(|| random.between(10, 14) * 3600);
         // Invented serial numbers, close to the event's own station.
         let serial = events[CURRENT_EVENT].station;
-        let reader = |name: &str, serial: u32, pinned: bool| Reader { name: name.into(), serial, pinned, unplugged: false };
-        let readers = vec![
-            reader("Arrivée 1", serial, true),
-            reader("Arrivée 2", serial + 6, true),
-            reader("Accueil", serial + 11, false),
-            reader("Lecteur libre", serial + 2, false),
+        let reader = |usage: Option<usize>, serial: u32, pinned: bool| Reader {
+            name: String::new(),
+            serial,
+            pinned,
+            unplugged: false,
+            usage,
+            course: 0,
+        };
+        let mut readers = vec![
+            reader(Some(0), serial, true),
+            reader(Some(0), serial + 6, true),
+            reader(Some(1), serial + 11, false),
+            reader(None, serial + 2, false),
         ];
+        name_readers(&mut readers);
         Generated {
             events,
             upcoming,
@@ -1331,6 +1344,27 @@ impl Generated {
         if let Some(reader) = self.readers.get_mut(reader) {
             reader.pinned = !reader.pinned;
         }
+    }
+
+    // A reader takes another use: the readers are named again (Arrivée 1, Arrivée 2…).
+    pub fn set_reader_usage(&mut self, reader: usize, usage: usize) {
+        if let Some(reader) = self.readers.get_mut(reader) {
+            reader.usage = (usage < READER_USAGES.len()).then_some(usage);
+        }
+        name_readers(&mut self.readers);
+    }
+
+    pub fn set_reader_course(&mut self, reader: usize, course: usize) {
+        if let Some(reader) = self.readers.get_mut(reader) {
+            reader.course = course;
+        }
+    }
+
+    // The courses a reader may read for: today's, then the next one.
+    pub fn reader_courses(&self) -> Vec<String> {
+        let mut courses = vec![self.events[CURRENT_EVENT].name.clone()];
+        courses.extend(self.upcoming.first().map(|&e| self.events[e].name.clone()));
+        courses
     }
 
     pub fn toggle_unplugged(&mut self, reader: usize) {
@@ -1545,5 +1579,25 @@ impl Generated {
             Reading { runner: Some(index), course: run.course, card: runner.card.unwrap_or_default(), seconds, valid, at, reader, issue: None, settled_at: None }
         };
         event.readings.push(reading);
+    }
+}
+
+// A reader is named by its use, numbered when several share it; without one, « Lecteur libre ».
+fn name_readers(readers: &mut [Reader]) {
+    let usages: Vec<Option<usize>> = readers.iter().map(|r| r.usage).collect();
+    for (i, reader) in readers.iter_mut().enumerate() {
+        reader.name = match reader.usage {
+            None => "Lecteur libre".to_string(),
+            Some(usage) => {
+                let same: Vec<usize> = (0..usages.len()).filter(|&j| usages[j] == Some(usage)).collect();
+                let word = READER_USAGES[usage];
+                if same.len() > 1 {
+                    let rank = same.iter().position(|&j| j == i).map_or(1, |p| p + 1);
+                    format!("{word} {rank}")
+                } else {
+                    word.to_string()
+                }
+            }
+        };
     }
 }

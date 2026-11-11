@@ -1,0 +1,246 @@
+// The three header indicators open a bubble each (prototype 06 and 07, 21/10): the readers of
+// this device, the role and the linked devices, the public screens. Any choice takes effect at
+// once. Bubbles 31, 32 and 33.
+
+import { Theme } from "../theme.slint";
+import { Icons } from "../components/icons.slint";
+import { ReaderInfo, ReaderMode, Readers } from "../components/reader-tile.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
+import { Status, StatusBadge } from "../components/status.slint";
+import { BubbleFrame, Courses, RowLine } from "courses.slint";
+
+export struct EquipmentReader {
+    info: ReaderInfo,
+    course: string,        // the course it reads for, or « aucune course »
+    usage: int,            // in Equipment.usages; -1: none
+    course-choice: int,    // in Equipment.courses
+}
+
+export global Equipment {
+    in property <[EquipmentReader]> readers;
+    in property <[string]> usages;    // Arrivée, Accueil, Départ, Boîtiers
+    in property <[string]> courses;   // the courses a reader may read for
+    in-out property <int> open-reader: -1;
+    callback set-usage(int, int);     // reader, usage
+    callback set-course(int, int);    // reader, course
+
+    public pure function reader-status(reader: ReaderInfo) -> Status {
+        if reader.mode == ReaderMode.unplugged {
+            return { word: "Débranché", state: Theme.problem, icon: Icons.x };
+        }
+        if reader.mode == ReaderMode.reading {
+            return { word: "Lecture en cours", state: Theme.in-progress, dot: true };
+        }
+        return { word: "Prêt", state: Theme.valid, icon: Icons.check };
+    }
+}
+
+// A small title in a bubble, in grey (prototype: st2).
+component BubbleTitle inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    wrap: word-wrap;
+}
+
+// A line of explanation under a list, in grey.
+component BubbleNote inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-help;
+    wrap: word-wrap;
+}
+
+// The pin of a reader, as a round button: pinned, a window waiting for a card does not take it.
+component PinButton inherits Rectangle {
+    in property <ReaderInfo> reader;
+
+    width: Theme.zone;
+    height: Theme.zone;
+    accessible-role: button;
+    accessible-checkable: true;
+    accessible-checked: root.reader.pinned;
+    accessible-label: root.reader.pinned ? "Épinglé : une fenêtre ne le prend pas toute seule" : "Non épinglé : une fenêtre peut l'emprunter";
+    accessible-action-default => { Readers.toggle-pin(root.reader.index); }
+    Rectangle {
+        width: Theme.small-button-height;
+        height: Theme.small-button-height;
+        border-radius: self.height / 2;
+        background: root.reader.pinned ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : Theme.card;
+        border-width: root.reader.pinned ? 0px : Theme.thin-outline-width;
+        border-color: Theme.thin-outline;
+        Image {
+            source: root.reader.pinned ? Icons.pin : Icons.pin-off;
+            colorize: root.reader.pinned ? Theme.active-tab-text : Theme.text-secondary;
+            width: Theme.button-icon;
+            height: Theme.button-icon;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Readers.toggle-pin(root.reader.index); }
+    }
+}
+
+// The open mark of a row that unfolds.
+component UnfoldMark inherits Image {
+    in property <bool> open;
+
+    source: Icons.chevron-down;
+    colorize: Theme.text-secondary;
+    width: Theme.button-icon;
+    height: Theme.button-icon;
+    transform-rotation: root.open ? 180deg : 0deg;
+    animate transform-rotation { duration: Theme.tint-duration; }
+}
+
+// A labelled line of choices, in an unfolded row.
+component ChoiceLine {
+    callback clicked(int);
+    in property <string> label;
+    in property <[string]> choices;
+    in property <int> active;
+
+    VerticalLayout {
+        spacing: Theme.space-small;
+        BubbleTitle { text: root.label; }
+        HorizontalLayout {
+            alignment: start;
+            ChoiceSegments {
+                choices: root.choices;
+                active: root.active;
+                clicked(i) => { root.clicked(i); }
+            }
+        }
+    }
+}
+
+// One reader: its name, number and course, its state, its pin. A click unfolds its usage and course.
+component ReaderRow inherits Rectangle {
+    in property <EquipmentReader> reader;
+
+    property <bool> open: Equipment.open-reader == root.reader.info.index;
+
+    background: root.open ? Theme.page-background : transparent;
+    VerticalLayout {
+        padding-left: Theme.space-medium;
+        padding-right: Theme.space-medium;
+        padding-bottom: root.open ? Theme.space-medium : 0px;
+        Rectangle {
+            min-height: Theme.zone + Theme.space;
+            HorizontalLayout {
+                padding-top: Theme.space;
+                padding-bottom: Theme.space;
+                spacing: Theme.button-margin;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: Icons.co-station;
+                        colorize: Theme.text-secondary;
+                        width: Theme.button-icon;
+                        height: Theme.button-icon;
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: Theme.space-small;
+                    Text {
+                        text: root.reader.info.name + " · " + root.reader.info.serial + " · " + root.reader.course;
+                        color: Theme.text;
+                        font-size: Theme.text-help;
+                        font-weight: Theme.weight-block-title;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        StatusBadge { status: Equipment.reader-status(root.reader.info); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    PinButton { reader: root.reader.info; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    UnfoldMark { open: root.open; }
+                }
+            }
+            TouchArea {
+                // Leaves the pin its own clicks.
+                width: parent.width - Theme.zone - Theme.button-icon - 2 * Theme.button-margin;
+                x: 0;
+                mouse-cursor: pointer;
+                clicked => { Equipment.open-reader = root.open ? -1 : root.reader.info.index; }
+            }
+        }
+        if root.open: VerticalLayout {
+            spacing: Theme.button-margin;
+            ChoiceLine {
+                label: "Usage";
+                choices: Equipment.usages;
+                active: root.reader.usage;
+                clicked(i) => { Equipment.set-usage(root.reader.info.index, i); }
+            }
+            ChoiceLine {
+                label: "Course";
+                choices: Equipment.courses;
+                active: root.reader.course-choice;
+                clicked(i) => { Equipment.set-course(root.reader.info.index, i); }
+            }
+        }
+    }
+}
+
+component ReadersContent {
+    VerticalLayout {
+        padding-top: Theme.space-medium;
+        padding-bottom: Theme.space-medium;
+        spacing: Theme.space;
+        HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            BubbleTitle { text: "Lecteurs branchés sur cet appareil"; }
+        }
+        if Equipment.readers.length == 0: HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            BubbleNote { text: "Aucun lecteur branché."; }
+        }
+        VerticalLayout {
+            for reader in Equipment.readers: VerticalLayout {
+                RowLine { }
+                ReaderRow { reader: reader; }
+            }
+        }
+        if Equipment.readers.length > 0: HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            spacing: Theme.space-small;
+            VerticalLayout {
+                alignment: start;
+                Image {
+                    source: Icons.pin;
+                    colorize: Theme.text-secondary;
+                    width: Theme.badge-icon;
+                    height: Theme.badge-icon;
+                }
+            }
+            BubbleNote {
+                text: "Épinglé : une fenêtre qui attend une puce ne le prend pas toute seule (on peut le prendre d'un clic sur son encart).";
+            }
+        }
+    }
+}
+
+// The bubble of an indicator, joined to its pill.
+export component EquipmentBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Theme.equipment-bubble-width;
+        if Courses.open-bubble == 31: ReadersContent { }
+    }
+}

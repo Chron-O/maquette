@@ -19,6 +19,7 @@ import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRo
 import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
 import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
+import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
 import { Home, HomePage, HomeIndicators, IndicatorDots, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
 export { RunnerBase, BaseRunnerRow, BaseIssue }
 export { ClubStations, ClubStationRow, BatteryDueItem }
@@ -31,6 +32,7 @@ export { Participants, ParticipantRow, Passage, FilterChoice, FilterGroup, Activ
 export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
 export { Readers, ReaderInfo, ReaderMode }
+export { Equipment, EquipmentReader }
 
 component Header inherits Rectangle {
     in property <LayoutMode> layout-mode;
@@ -114,15 +116,24 @@ component Header inherits Rectangle {
             if root.indicators-beside && !root.compact: HomeIndicators {
                 horizontal-stretch: 0;
                 layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
             }
             if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.wide: HomeIndicators {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
             }
             // iPad portrait: next to the name when it fits, so the header keeps one row (Robin, 11/11).
             if Navigation.home && root.layout-mode == LayoutMode.medium: HomeIndicators {
                 horizontal-stretch: 0;
                 layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
             }
         }
         // A phone or iPad portrait: the indicators under the name, on the right, unless they fit
@@ -131,6 +142,9 @@ component Header inherits Rectangle {
             || (Navigation.in-event && root.layout-mode != LayoutMode.wide && !root.indicators-beside))
             && !root.compact: HomeIndicators {
             layout-mode: root.layout-mode;
+            open-bubble: Courses.open-bubble;
+            open-down: Courses.bubble-down;
+            opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
         }
     }
 }
@@ -395,6 +409,8 @@ export component App inherits Window {
         : LayoutMode.wide;
     property <length> margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    // A bubble of the page; 31 to 33 are the header indicators' own (equipment.slint).
+    property <bool> page-bubble: Courses.open-bubble > 0 && Courses.open-bubble < 31;
     // A computer: the name and the indicators are centred in the whole green band, the bubble's
     // upper half included, which they never reach (Robin, 11/11). The bubble's top is then inside
     // the header.
@@ -766,7 +782,7 @@ export component App inherits Window {
         clicked => { root.demo-open = !root.demo-open; }
     }
 
-    if Navigation.runners-page && Courses.open-bubble > 0: RunnerBaseBubble {
+    if Navigation.runners-page && root.page-bubble: RunnerBaseBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -777,7 +793,7 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.stations-page && Courses.open-bubble > 0: ClubStationsBubble {
+    if Navigation.stations-page && root.page-bubble: ClubStationsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -788,7 +804,7 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.cards-page && Courses.open-bubble > 0: CardsBubble {
+    if Navigation.cards-page && root.page-bubble: CardsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -799,13 +815,13 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 4 && Courses.open-bubble > 0: ResultsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 4 && root.page-bubble: ResultsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 
-    if Navigation.in-event && Navigation.live-open && Courses.open-bubble > 0: LiveBubble {
+    if Navigation.in-event && Navigation.live-open && root.page-bubble: LiveBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -816,7 +832,7 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 3 && Courses.open-bubble > 0: StationsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 3 && root.page-bubble: StationsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -828,7 +844,7 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && Courses.open-bubble > 0: StartsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && root.page-bubble: StartsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -839,7 +855,7 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && Courses.open-bubble > 0: ParticipantsBubble {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && root.page-bubble: ParticipantsBubble {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -850,7 +866,7 @@ export component App inherits Window {
         height: 100%;
     }
 
-    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && Courses.open-bubble > 0: BubbleOverlay {
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && root.page-bubble: BubbleOverlay {
         width: 100%;
         height: 100%;
         margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
@@ -859,5 +875,11 @@ export component App inherits Window {
     if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && root.layout-mode == LayoutMode.narrow: DetailOverlay {
         width: 100%;
         height: 100%;
+    }
+
+    if Courses.open-bubble >= 31 && Courses.open-bubble <= 33: EquipmentBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
     }
 }

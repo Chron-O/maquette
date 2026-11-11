@@ -11,15 +11,25 @@ export component Indicator inherits Rectangle {
     in property <string> sentence;   // the whole state, for screen readers
     in property <bool> compact;      // on a phone: tighter, so the three always fit
 
-    accessible-role: AccessibleRole.text;
+    accessible-role: button;
     accessible-label: root.sentence;
     in property <bool> attention: false;
     in property <bool> has-dot: true;
+    in property <bool> open;          // its bubble is open: white, joined to it
+    in property <bool> open-down: true;
+    callback clicked();
+
+    property <color> tint: root.open ? Theme.text : Theme.header-text;
 
     height: Theme.indicator-height;
-    border-radius: self.height / 2;
+    border-top-left-radius: root.open && !root.open-down ? 0px : self.height / 2;
+    border-top-right-radius: self.border-top-left-radius;
+    border-bottom-left-radius: root.open && root.open-down ? 0px : self.height / 2;
+    border-bottom-right-radius: self.border-bottom-left-radius;
     border-width: root.attention ? Theme.attention-outline : Theme.thin-outline-width;
-    border-color: root.attention ? Theme.attention : Theme.header-outline;
+    border-color: root.attention ? Theme.attention : root.open ? Theme.card : Theme.header-outline;
+    background: root.open ? Theme.card : zone.has-hover ? Theme.header-button-hover : transparent;
+    accessible-action-default => { root.clicked(); }
 
     HorizontalLayout {
         padding-left: root.compact ? Theme.indicator-compact-margin : Theme.indicator-margin;
@@ -29,7 +39,7 @@ export component Indicator inherits Rectangle {
             alignment: center;
             Image {
                 source: root.icon;
-                colorize: Theme.header-text;
+                colorize: root.tint;
                 width: Theme.indicator-icon;
                 height: Theme.indicator-icon;
             }
@@ -47,11 +57,15 @@ export component Indicator inherits Rectangle {
         if root.text != "" || root.reserve != "": Text {
             min-width: probe.preferred-width;
             text: root.text;
-            color: Theme.header-text;
+            color: root.tint;
             font-size: Theme.text-help;
             font-weight: Theme.weight-block-title;
             vertical-alignment: center;
         }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
     // Measures the reserved text; never shown.
     probe := Text {
