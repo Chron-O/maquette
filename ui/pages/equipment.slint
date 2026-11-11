@@ -418,7 +418,7 @@ component DeviceRow inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 more := MoreButton {
-                    open: false;
+                    open: root.open;   // lit while its role and « Retirer » are unfolded
                     clicked => { Equipment.open-device = root.open ? -1 : root.index; }
                 }
             }
