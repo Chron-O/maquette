@@ -105,6 +105,7 @@ export global ClubStations {
 component ReadingBox inherits ReaderTile {
     reader: Readers.free;
     with-result: true;
+    stations: true;
     message: "Posez un boîtier sur la station";
     state: ClubStations.has-reading ? ReaderState.read : ReaderState.waiting;
     code: ClubStations.read-code;

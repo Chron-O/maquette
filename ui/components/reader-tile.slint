@@ -1,6 +1,6 @@
 // The reader tile (prototype: tile, .tile): one dark green tile wherever a reader is shown.
 // Line 1 names the reader and its serial number, with its pin; line 2 says what it does now.
-// Where a page shows what was read, a result zone of fixed height comes under the two lines:
+// In a left panel, a zone of fixed height comes under the two lines (the medium format):
 // the tile never changes height with its state (encart-lecture.md § 11).
 
 import { Theme } from "../theme.slint";
@@ -77,22 +77,32 @@ component PinToggle {
 }
 
 // The two lines of a reader: its name and number with its pin, then what it does now.
+// One line each, ended by "…" if too long (encart-lecture.md § 11).
 component ReaderLines inherits VerticalLayout {
     in property <ReaderInfo> reader;
+    in property <string> second;          // replaces the state word: a number read with a question
+    in property <color> second-color: Theme.header-text;
 
     alignment: center;
     spacing: Theme.reader-line-gap;
-    // The pin always at the right end, whether the name takes one line or two.
+    Text {
+        text: root.reader.name == "" ? "" : root.reader.name + " · " + root.reader.serial;
+        color: Theme.reader-detail;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-block-title;
+        overflow: elide;
+    }
+    // The pin at the end of the short line, so that the name and its number keep the width.
     HorizontalLayout {
         spacing: Theme.space-small;
         Text {
             horizontal-stretch: 1;
-            text: root.reader.name == "" ? "" : root.reader.name + " · " + root.reader.serial;
-            color: Theme.reader-detail;
-            font-size: Theme.text-help;
-            font-weight: Theme.weight-block-title;
+            text: root.second != "" ? root.second : Readers.state-word(root.reader);
+            color: root.reader.mode == ReaderMode.unplugged ? Theme.reader-error : root.second != "" ? root.second-color : Theme.header-text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
             vertical-alignment: center;
-            wrap: word-wrap;
+            overflow: elide;
         }
         if root.reader.name != "": VerticalLayout {
             alignment: center;
@@ -102,28 +112,25 @@ component ReaderLines inherits VerticalLayout {
             }
         }
     }
-    Text {
-        text: Readers.state-word(root.reader);
-        color: root.reader.mode == ReaderMode.unplugged ? Theme.reader-error : Theme.header-text;
-        font-size: Theme.text-label;
-        font-weight: Theme.weight-screen-title;
-        wrap: word-wrap;
-    }
 }
 
+// The reader tile of a left panel (Robin, 11/11: the medium format, the same on every screen).
+// Under the two lines, one zone of fixed height: what to do, or the number read and its verdict,
+// or the buttons of a question; then the number goes up in place of the state word.
+// The tile never changes height (encart-lecture.md § 11).
 export component ReaderTile inherits Rectangle {
     callback primary-clicked();
     callback secondary-clicked();
 
     in property <ReaderInfo> reader;
     in property <bool> compact;          // the Direct, phones
-    in property <bool> with-result;      // the page shows what was read, under the two lines
-    in property <bool> with-buttons;     // a question may come with what was read: its row is kept
+    in property <bool> with-result;      // the zone under the two lines
+    in property <bool> stations;         // reads stations, not cards: a thick orange outline (Robin, 11/11)
     in property <ReaderState> state: ReaderState.waiting;
     in property <string> message;        // waiting: what to do
     in property <string> code;           // read, unknown: the number, in big
-    in property <string> identity;       // one line: who or what it is
-    in property <string> verdict;        // one line, in the state's color
+    in property <string> identity;       // who or what it is
+    in property <string> verdict;        // in the state's color
     in property <string> primary-label;  // a question to settle now: two buttons at most
     in property <string> secondary-label;
 
@@ -131,16 +138,23 @@ export component ReaderTile inherits Rectangle {
     property <bool> has-buttons: root.primary-label != "" || root.secondary-label != "";
     property <bool> shows-result: root.state != ReaderState.waiting;
     property <color> accent: root.unplugged ? Theme.reader-error : Theme.reader-ring;
-    property <length> result-height: root.compact ? Theme.reader-compact-result-height : Theme.reader-result-height;
-    property <length> body-height: root.result-height + (root.with-buttons ? Theme.space + Theme.zone : 0px);
-    property <length> code-size: root.has-buttons || root.compact ? Theme.reader-code-small-size : Theme.reader-code-size;
-    animate code-size { duration: Theme.reader-shift-duration; }
+    property <color> state-color: root.state == ReaderState.unknown ? Theme.reader-unknown : Theme.reader-ring;
+    // The state's outline wins over the stations' one.
+    property <bool> state-outline: root.unplugged || root.reader.mode == ReaderMode.reading || root.state == ReaderState.unknown;
+    property <string> summary: root.verdict != "" ? root.verdict : root.identity;
 
     background: root.unplugged ? Theme.reader-error-background : Theme.header;
     border-radius: Theme.card-radius;
     // Light: a clear shadow all around, no outline. Dark: the light green outline.
-    border-width: Theme.reader-outline-width;
-    border-color: root.accent;
+    // A screen of stations: a thick orange outline, unless a state shows its own.
+    border-width: root.stations ? Theme.reader-stations-outline-width
+        : root.state-outline ? max(Theme.reader-outline-width, Theme.reader-state-outline-width)
+        : Theme.reader-outline-width;
+    border-color: root.unplugged ? Theme.reader-error
+        : root.reader.mode == ReaderMode.reading ? Theme.reader-ring
+        : root.state == ReaderState.unknown ? Theme.reader-unknown
+        : root.stations ? Theme.reader-stations-outline
+        : root.accent;
     drop-shadow-blur: Theme.reader-shadow-blur;
     drop-shadow-color: Theme.reader-shadow;
     accessible-role: groupbox;
@@ -153,7 +167,7 @@ export component ReaderTile inherits Rectangle {
         padding-bottom: self.padding-top;
         spacing: Theme.space;
         HorizontalLayout {
-            spacing: Theme.button-margin;
+            spacing: Theme.space;
             // Not clipped: the waves leave the target.
             VerticalLayout {
                 alignment: center;
@@ -168,55 +182,44 @@ export component ReaderTile inherits Rectangle {
             ReaderLines {
                 horizontal-stretch: 1;
                 reader: root.reader;
+                second: root.has-buttons && root.shows-result ? root.code + " · " + root.summary : "";
+                second-color: root.state-color;
             }
         }
-        if root.with-result: body := Rectangle {
-            height: root.body-height;
-            HorizontalLayout {
-                x: 0;
-                y: 0;
-                width: body.width;
-                height: root.has-buttons ? root.result-height : root.body-height;
-                animate height { duration: Theme.reader-shift-duration; }
-                if !root.shows-result: Text {
-                    text: root.message;
-                    color: Theme.reader-detail;
-                    font-size: Theme.text-label;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
+        if root.with-result: Rectangle {
+            height: Theme.reader-zone-height;
+            if !root.shows-result && !root.has-buttons: Text {
+                width: parent.width;
+                height: parent.height;
+                text: root.message;
+                color: Theme.reader-detail;
+                font-size: Theme.text-label;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if root.shows-result && !root.has-buttons: VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.code;
+                    color: root.state == ReaderState.unknown ? Theme.reader-unknown : Theme.header-text;
+                    font-size: Theme.reader-code-small-size;
+                    font-weight: Theme.weight-screen-title;
+                    overflow: elide;
                 }
-                // Three lines (§ 8). Never cut (CLAUDE.md): a long line goes on to the next one,
-                // inside the result zone, which is kept for two lines of identity and of verdict.
-                if root.shows-result: VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: root.code;
-                        color: root.state == ReaderState.unknown ? Theme.reader-unknown : Theme.header-text;
-                        font-size: root.code-size;
-                        font-weight: Theme.weight-screen-title;
-                        wrap: word-wrap;
-                    }
-                    Text {
-                        text: root.identity;
-                        color: Theme.reader-detail;
-                        font-size: Theme.text-help;
-                        wrap: word-wrap;
-                    }
-                    Text {
-                        text: root.verdict;
-                        color: root.state == ReaderState.unknown ? Theme.reader-unknown : Theme.reader-ring;
-                        font-size: Theme.text-help;
-                        font-weight: Theme.weight-block-title;
-                        wrap: word-wrap;
-                    }
+                Text {
+                    text: root.summary;
+                    color: root.state-color;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-block-title;
+                    overflow: elide;
                 }
             }
-            if root.with-buttons: HorizontalLayout {
-                x: 0;
-                y: root.result-height + Theme.space;
+            // A question: its buttons slide into the zone.
+            HorizontalLayout {
+                y: root.has-buttons ? (parent.height - Theme.zone) / 2 : parent.height;
+                animate y { duration: Theme.reader-shift-duration; }
                 opacity: root.has-buttons ? 1 : 0;
                 animate opacity { duration: Theme.reader-shift-duration; }
-                width: body.width;
                 height: Theme.zone;
                 alignment: start;
                 spacing: Theme.space;

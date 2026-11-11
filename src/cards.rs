@@ -292,7 +292,7 @@ impl CardsState {
             page.set_has_reading(true);
             page.set_read_code(number.to_string().into());
             page.set_read_identity("Dans aucun parc du club".into());
-            page.set_read_verdict("Puce inconnue".into());
+            page.set_read_verdict("Inconnue".into());
             return;
         }
         let found = self.last_read.and_then(|number| {

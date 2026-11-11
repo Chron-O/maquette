@@ -296,12 +296,9 @@ export global Theme {
     out property <color> reader-error: #FF6B5E;
     out property <color> reader-error-background: #2A1B1A;   // prototype: .tile with a problem
     out property <length> reader-icon: 40px;
-    out property <length> reader-icon-large: 52px;   // no button: the result takes all the room
-    out property <length> reader-code-size: 36px;
     out property <length> reader-code-small-size: 28px;
     // Fixed height in every state: the result zone and one button row are always kept.
-    out property <length> reader-result-height: 98px;
-    out property <length> reader-compact-result-height: 56px;
+    out property <length> reader-zone-height: 56px;   // the medium format: two lines, or a row of buttons
     out property <length> reader-padding: 14px;   // prototype: .tile padding 11px 14px
     out property <duration> reader-shift-duration: reduced-motion ? 0ms : 350ms;
     // Reader ready (prototype: .tile, .wave): a ring leaving the two others.
@@ -316,6 +313,9 @@ export global Theme {
     // Light: a clear shadow all around, no outline. Dark: a shadow does not show, so a light green outline.
     out property <length> reader-outline-width: dark ? 2px : 0px;
     out property <length> reader-state-outline-width: 2px;   // reading (green), unknown (amber)
+    // A screen of stations: a thick orange outline (Robin, 11/11).
+    out property <length> reader-stations-outline-width: 4px;
+    out property <color> reader-stations-outline: primary-button;
     out property <length> reader-shadow-blur: 24px;
     out property <color> reader-shadow: dark ? transparent : #16362866;
     out property <length> reader-compact-icon: 18px;

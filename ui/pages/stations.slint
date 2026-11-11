@@ -12,7 +12,7 @@ import { Badge, Home } from "home.slint";
 import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
 import { Cell, Title } from "participants.slint";
-import { ReaderTile, Readers } from "../components/reader-tile.slint";
+import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
 
 export struct CourseMark {
     letter: string,
@@ -550,10 +550,16 @@ component GaugeCard inherits Rectangle {
     }
 }
 
-// The reader of the tab: its two lines only. What it reads goes in the reading card,
-// above the table (prototype: tile(3) and bxBig).
+// The reader of the tab: the code read and its label. The question and the detail go in
+// the reading card, above the table (prototype: tile(3) and bxBig).
 component StationsReader inherits ReaderTile {
     reader: Readers.free;
+    with-result: true;
+    stations: true;
+    message: "Posez un boîtier sur la station";
+    state: Stations.reading ? ReaderState.read : ReaderState.waiting;
+    code: Stations.reading-code;
+    verdict: Stations.reading-label;
 }
 
 // While collecting: the stations worth reading to settle a doubt, ticked once read.

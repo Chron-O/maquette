@@ -613,11 +613,10 @@ export component CardDetail inherits Rectangle {
 component CardReader inherits ReaderTile {
     reader: Readers.free;
     with-result: true;
-    // An unknown card asks a question (encart-lecture.md § 5, § 9): its row is kept.
-    with-buttons: true;
+    // An unknown card asks a question (encart-lecture.md § 5, § 9): its buttons take the zone.
     message: "Posez une puce sur la station";
     state: !Cards.has-reading ? ReaderState.waiting : Cards.read-unknown ? ReaderState.unknown : ReaderState.read;
-    primary-label: Cards.read-unknown ? "Ajouter à un parc ▾" : "";
+    primary-label: Cards.read-unknown ? "Ajouter ▾" : "";   // to a park: the menu lists them
     secondary-label: Cards.read-unknown ? "Ignorer" : "";
     code: Cards.read-code;
     identity: Cards.read-identity;

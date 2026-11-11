@@ -542,6 +542,8 @@ export component ParticipantsPage {
             ReaderTile {
                 reader: Readers.entry;
                 compact: true;
+                with-result: true;
+                message: "Posez une puce sur la station";
             }
             ParticipantsContent {
                 layout-mode: root.layout-mode;
@@ -558,7 +560,11 @@ export component ParticipantsPage {
                         padding: Theme.button-margin;   // the reader close to the edges (Robin, 11/11)
                         spacing: Theme.space;
                         alignment: start;
-                        ReaderTile { reader: Readers.entry; }
+                        ReaderTile {
+                            reader: Readers.entry;
+                            with-result: true;
+                            message: "Posez une puce sur la station";
+                        }
                         Rectangle { height: Theme.space; }
                         SheetTitle { text: "Puces prêtées"; }
                         LentCards { }
