@@ -7,15 +7,34 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 |---|---|---|
 | 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester à la première fusion sur `main` |
 | 1 | Accueil | validé par Robin |
-| 2 | Course › Circuits | accepté par Robin sans relecture détaillée ; Mixte à maquetter, modification des circuits à faire plus tard |
-| 3 | Course › Participants | accepté par Robin sans relecture détaillée ; nouveau participant et attribution de puce à faire plus tard |
-| 4 | Course › Départs | accepté par Robin sans relecture détaillée ; réglage des groupes, vrai tirage et modifications à faire plus tard |
-| 5 | Course › Boîtiers | accepté par Robin sans relecture détaillée ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
-| 6 | Course › Direct | accepté par Robin sans relecture détaillée ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
-| 7 | Course › Résultats | accepté par Robin sans relecture détaillée ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
-| 8 | Puces (stock de prêt) | accepté par Robin sans relecture détaillée ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
-| 9 | Boîtiers (inventaire du club) | accepté par Robin sans relecture détaillée ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
-| 10 | Coureurs et clubs (base fédérale) | accepté par Robin sans relecture détaillée ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
+| 2 | Course › Circuits | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Mixte à maquetter, modification des circuits à faire plus tard |
+| 3 | Course › Participants | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; nouveau participant et attribution de puce à faire plus tard |
+| 4 | Course › Départs | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; réglage des groupes, vrai tirage et modifications à faire plus tard |
+| 5 | Course › Boîtiers | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
+| 6 | Course › Direct | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
+| 7 | Course › Résultats | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
+| 8 | Puces (stock de prêt) | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
+| 9 | Boîtiers (inventaire du club) | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
+| 10 | Coureurs et clubs (base fédérale) | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
+
+
+## Zones et onglets (brief du 10/11/2026, `../consignes-maquette/zones-onglets/`)
+Appliqué aux écrans 2 à 10 : bulle d'onglets à cheval sur l'en-tête, languette « Paramètres : … », volet gauche flottant, fiche qui glisse depuis la droite (du bas sur téléphone), bouton Filtres avec sa bulle, action d'ajout orange à gauche dans la carte, alerte · Filtres · recherche à droite.
+
+### Choix et écarts à relire
+- **Direct** : gardé en volet (décision de Robin du 10/11), donc 5 onglets dans la bulle et le bouton Direct à son bout ; pas de languette.
+- **Languette sur téléphone** : « Paramètres » seul, le résumé se lit en l'ouvrant (Robin, 10/11) ; flèche `chevron-down` ajoutée à la charte avec `funnel`.
+- **Filtres actifs sur téléphone** : l'entonnoir et leur nombre, sans les étiquettes, qui ne tiendraient pas.
+- **Groupes de filtres ajoutés** : Participants « À vérifier » (Doublons possibles, Catégorie inconnue) et l'état « PM », pour que chaque « Voir » de l'alerte ait son filtre ; Direct « Lectures : À traiter » ; Coureurs, un seul groupe « Coureurs » (licence et pratique mêlées, un seul choix).
+- **Bulles des filtres et de l'alerte** : collées à leur bouton, comme les autres bulles (variante B), au lieu de flotter dessous comme sur les captures du brief.
+- **Indicateurs sur iPad portrait** : sous le nom de l'événement, sinon la bulle cachait la 2ᵉ ligne du nom.
+- **Boîtiers** : « Boîtier spécial » reste blanc, la carte de lecture ayant déjà son bouton orange. Contrôle / Ramassage reste un affichage, dans le volet.
+- **Circuits** : pas de filtre ; « Mettre en avant » reste un affichage. Les réglages d'un circuit restent dans sa carte.
+- **Résultats** : le choix du classement reste dans le volet ; seules les catégories d'un classement par circuit passent dans les Filtres.
+- **Puces et Boîtiers du club** : le choix du parc reste un affichage (volet, ou pastilles sur téléphone) ; la languette donne la description du parc.
+- **Coureurs et clubs** : pas de paramètres, donc pas de languette ; « Ajouter un coureur » passe en orange.
+- **Fiche** : ses boutons orange passent en blanc (« Garder le premier résultat ») ; les actions de ligne restent orange.
+- **Non testé** : Échap au clavier, iPad paysage, la fiche ouverte sur toutes les pages du club.
 
 ## 0 — Mise en place
 - Ranger le prototype HTML dans `html/` (il reste en ligne à `…/maquette/html/`) ; mettre à jour le README.
@@ -132,12 +151,12 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 - Captures : `06-live-*` (tirage fixe).
 
 ### Écarts et points ouverts de l'écran 6
-- **Onglet, pas tiroir** : décision du cadrage ; le prototype ouvre le Direct en tiroir, avec sa barre en bas.
+- **Volet, pas onglet** (Robin, 5/11, confirmé le 10/11) : le Direct monte d'en bas, comme le prototype ; sa barre reste visible, son bouton est au bout de la bulle des onglets.
 - **La course en direct** : vient de la spec, absente du prototype. « À régler » reste seulement dans l'alerte, pour ne pas le montrer deux fois.
 - **« en course »** comme le prototype, au lieu de « en forêt » de la spec.
 - **Noter l'heure, Arrivée sans puce, Mémoire des boîtiers** (`live-barre-actions.md`) : absents, comme le prototype. Pas de bouton orange hors des lignes.
 - **Dernière lecture** : reste jusqu'à la suivante, comme la spec. Le prototype l'efface après 15 s.
-- **Fiche** : à droite en large, par-dessus sinon, comme les autres écrans (décision de Robin). La spec prévoit presque toute la fenêtre, avec Pourquoi ?, décisions d'arbitre et Passer, non faits.
+- **Fiche** : glisse depuis la droite par-dessus le fil, à toutes les largeurs ; monte du bas sur téléphone (brief zones-onglets). La spec prévoit presque toute la fenêtre, avec Pourquoi ?, décisions d'arbitre et Passer, non faits.
 - **Temps de passage** : le générateur ne garde pas les poinçons. Temps répartis régulièrement sur le temps total ; poste manquant d'un PM tiré d'après ce temps.
 - **« réglée à 10:22 »** sans « par <nom> » : pas de personnes dans la maquette.
 - **Attribuer et Régler** : les mots du prototype, au lieu de « Qui est-ce ?… » de la spec.

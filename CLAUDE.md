@@ -22,29 +22,31 @@ Le code pourra servir de point de départ à l'app (à confirmer avec Severin) :
 ## Navigation (cadrage validé)
 - Comme le prototype : l'**Accueil** est une page qui défile, **sans onglets**, avec deux sections : Événements et Le club.
 - Depuis Le club : Puces de prêt (stock de prêt), Boîtiers (inventaire du club), Coureurs et clubs (base fédérale). Retour par « ‹ Accueil » (« ‹ » seul en largeur étroite).
-- Réglages : emplacement à décider, le prototype n'en a pas.
-- Un événement : 6 onglets **toujours présents**, dans l'ordre : Circuits · Participants · Départs · Boîtiers · Direct · Résultats.
-- Deux niveaux de navigation, pas plus. Le détail s'ouvre à côté (large) ou par-dessus (étroit, moyen).
+- Paramètres (brief zones-onglets, 10/11/2026) : une languette « ⚙ Paramètres : résumé » centrée, accrochée sous la bulle des onglets (sous l'en-tête sur les pages du club), qui se déplie par-dessus le contenu. Sans paramètres : pas de languette, le contenu commence à la même hauteur. Les réglages d'un circuit ou d'un point de départ restent dans leur carte.
+- Un événement : 5 onglets **toujours présents**, dans l'ordre : Circuits · Participants · Départs · Boîtiers · Résultats, dans une bulle blanche à cheval sur l'en-tête. Le **Direct** est un volet qui monte d'en bas (sa barre reste visible) ; son bouton est au bout de la bulle (Robin, 5/11 et 10/11).
+- Deux niveaux de navigation, pas plus. Le détail (fiche) glisse depuis la droite par-dessus le contenu, à toutes les largeurs, sans voile ; sur téléphone il monte du bas, avec un voile.
 
 ## Disposition adaptative
 La **largeur** décide de la disposition :
-- **Étroite** (< 600 px, téléphone) : ligne pavé › nom › temps ; détail par-dessus ; onglets en icônes, mot sur l'actif seulement.
-- **Moyenne** (600–1000 px, iPad portrait) : tableau allégé ; détail par-dessus ; onglets avec libellés.
-- **Large** (> 1000 px, ordinateur, iPad paysage) : tableau complet ; détail à côté.
+- **Étroite** (< 600 px, téléphone) : ligne pavé › nom › temps ; fiche qui monte du bas ; onglets en icônes, mot sur l'actif seulement.
+- **Moyenne** (600–1000 px, iPad portrait) : tableau allégé ; fiche par-dessus, à droite ; onglets avec libellés ; indicateurs sous le nom de l'événement.
+- **Large** (> 1000 px, ordinateur, iPad paysage) : tableau complet ; fiche par-dessus, à droite ; onglets avec icône et mot.
 
 L'**appareil** décide des tailles, indépendamment : tactile (iOS, Android, web sur téléphone) 48 px, souris 36 px.
 La largeur suit la taille réelle de la fenêtre, le clair/sombre suit le réglage du système.
 Le panneau Démo permet seulement de forcer tactile/souris pour comparer, et de lancer le générateur.
 
-## Placement (validé par Robin sur l'écran Circuits)
-Une place par fonction, à tous les écrans, d'après `mise-en-page-universelle.md` et `departs-tirage-v2.md` § A de chrono-swift :
-- **Ligne du haut** : réglages à gauche, alerte à droite, même hauteur, fixe. Le détail s'ouvre dans une bulle, par-dessus, sans rien décaler.
-- **Colonne** (carte, fixe, s'il y a une navigation) : ses boutons à gauche, sa loupe à droite.
-- **Au-dessus de la carte du contenu** : l'action d'ajout, seule.
-- **En tête de la carte du contenu**, ce qui change ce qu'elle montre : affichage à gauche, recherche à droite, puis les filtres en petites pastilles. Une recherche est dans la zone où elle cherche.
+## Placement (brief zones-onglets, 10/11/2026 ; remplace la version validée sur Circuits)
+Une place par fonction, à tous les écrans :
+- **Languette Paramètres** sous la bulle des onglets : le résumé des paramètres de la page ; elle se déplie par-dessus, rien ne se décale.
+- **Volet gauche** flottant (marges, rayon 16, ombre légère ; contour fin en sombre) : la colonne de l'onglet, avec ses petits titres gris.
+- **En tête de la carte du contenu** : à gauche l'action d'ajout en orange, puis les segments d'affichage ; à droite, dans cet ordre, l'alerte, le bouton Filtres (entonnoir), la recherche. Le « Voir » de l'alerte applique son filtre.
+- **Filtres** : tous dans le bouton Filtres et sa bulle (un groupe par critère) ; les filtres actifs dans le bouton, chacun avec sa croix. Les affichages (Tableau / Lignes / Carte, Liste / Frise, Contrôle / Ramassage, « Mettre en avant ») restent des segments.
 - **Bande du bas**, collée à la fenêtre : chiffres à gauche, actions de la page à droite.
+- Un seul bouton orange par écran, hors actions de ligne.
 - Seul le contenu défile, et les titres d'un tableau restent en haut. Sur téléphone, c'est la page qui défile, jamais de côté ; la recherche est une loupe qui se déplie.
 - Un aspect = un usage : ne pas donner le même dessin à un affichage et à un filtre.
+- Rien ne change de taille tout seul (lecture, alerte, appareil) : place réservée.
 - Avant de concevoir un écran : lire le prototype et les specs de chrono-swift (`docs/specs/`), en lecture seule.
 
 ## Design

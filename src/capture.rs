@@ -29,7 +29,7 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
 
     let width: f32 = args[4].parse().expect("width");
     let height: f32 = args[5].parse().expect("height");
-    window.window().set_size(slint::LogicalSize::new(width, height));
+    set_logical_size(window, width, height);
 
     choice.set(if args[6] == "touch" { Device::Touch } else { Device::Mouse });
     device::apply(window, choice.get());
@@ -81,8 +81,7 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
     // The system may shrink the window when it opens: its size is given again once it is shown.
     let resize = window.as_weak();
     slint::Timer::single_shot(WAIT / 2, move || {
-        let window = resize.unwrap();
-        window.window().set_size(slint::LogicalSize::new(width, height));
+        set_logical_size(&resize.unwrap(), width, height);
     });
     let click_time = WAIT * (clicks.len() as u32 + 2);
     for (i, position) in clicks.into_iter().enumerate() {
@@ -112,4 +111,11 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
         .expect("saving failed");
         slint::quit_event_loop().unwrap();
     });
+}
+
+// The window in the app's own points, whatever scale the system gives the window: a forced scale
+// factor (SLINT_SCALE_FACTOR) and the screen's own can differ.
+fn set_logical_size(window: &App, width: f32, height: f32) {
+    let scale = window.window().scale_factor();
+    window.window().set_size(slint::PhysicalSize::new((width * scale).round() as u32, (height * scale).round() as u32));
 }
