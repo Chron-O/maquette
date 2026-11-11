@@ -160,16 +160,31 @@ component PinButton inherits Rectangle {
     }
 }
 
-// The open mark of a row that unfolds.
-component UnfoldMark inherits Image {
+// The open mark of a row that unfolds; a click on it unfolds the row too (Robin, 11/11).
+component UnfoldMark inherits Rectangle {
+    callback clicked();
     in property <bool> open;
 
-    source: Icons.chevron-down;
-    colorize: Theme.text-secondary;
     width: Theme.button-icon;
-    height: Theme.button-icon;
-    transform-rotation: root.open ? 180deg : 0deg;
-    animate transform-rotation { duration: Theme.tint-duration; }
+    height: Theme.zone;
+    accessible-role: button;
+    accessible-label: root.open ? "Replier" : "Déplier";
+    accessible-action-default => { root.clicked(); }
+    Image {
+        source: Icons.chevron-down;
+        colorize: Theme.text-secondary;
+        width: Theme.button-icon;
+        height: Theme.button-icon;
+        transform-rotation: root.open ? 180deg : 0deg;
+        animate transform-rotation { duration: Theme.tint-duration; }
+    }
+    TouchArea {
+        // A wider zone than the mark itself, as for any button.
+        x: (root.width - self.width) / 2;
+        width: Theme.zone;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
 }
 
 // A labelled line of choices, in an unfolded row.
@@ -245,7 +260,10 @@ component ReaderRow inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    UnfoldMark { open: root.open; }
+                    UnfoldMark {
+                        open: root.open;
+                        clicked => { Equipment.open-reader = root.open ? -1 : root.reader.info.index; }
+                    }
                 }
             }
             TouchArea {
@@ -794,7 +812,10 @@ component ScreenRow inherits Rectangle {
                 }
                 VerticalLayout {
                     alignment: center;
-                    UnfoldMark { open: root.open; }
+                    UnfoldMark {
+                        open: root.open;
+                        clicked => { Equipment.open-screen = root.open ? -1 : root.index; }
+                    }
                 }
             }
             TouchArea {

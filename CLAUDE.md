@@ -39,7 +39,7 @@ Le panneau Démo permet seulement de forcer tactile/souris pour comparer, et de 
 
 ## Placement (brief zones-onglets, 10/11/2026 ; remplace la version validée sur Circuits)
 Une place par fonction, à tous les écrans :
-- **Languette Paramètres** sous la bulle des onglets : le résumé des paramètres de la page ; elle se déplie par-dessus, rien ne se décale.
+- **Languette Paramètres** sous la bulle des onglets : le résumé des paramètres de la page ; elle se déplie par-dessus, rien ne se décale. Ouverte, un clic ailleurs la referme sans rien sélectionner (Robin, 11/11).
 - **Volet gauche** flottant (marges, rayon 16, ombre légère ; contour fin en sombre) : la colonne de l'onglet, avec ses petits titres gris.
 - **En tête de la carte du contenu** : à gauche l'action d'ajout en orange, puis les segments d'affichage ; à droite, dans cet ordre, l'alerte, le bouton Filtres (entonnoir), la recherche. Le « Voir » de l'alerte applique son filtre.
 - **Filtres** : tous dans le bouton Filtres et sa bulle (un groupe par critère) ; les filtres actifs dans le bouton, chacun avec sa croix. Les affichages (Tableau / Lignes / Carte, Liste / Frise, Contrôle / Ramassage, « Mettre en avant ») restent des segments.

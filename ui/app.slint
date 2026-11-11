@@ -670,6 +670,15 @@ export component App inherits Window {
         }
     }
 
+    // Paramètres open: a click anywhere else only closes it, and selects nothing (Robin, 11/11).
+    if Navigation.settings-open: TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        clicked => { Navigation.settings-open = false; }
+    }
+
     // The Paramètres tab, hung under the bubble; open, it lies over the content. The Direct and
     // a tab without settings have none, but their content starts at the same height.
     property <int> settings-tab: !Navigation.in-event || Navigation.live-open ? -1 : Navigation.active-tab;
@@ -754,6 +763,10 @@ export component App inherits Window {
                     horizontal-stretch: 0;
                     narrow: root.layout-mode == LayoutMode.narrow;
                 }
+            }
+            // Paramètres open: the tabs and the Direct button only close it.
+            if Navigation.settings-open: TouchArea {
+                clicked => { Navigation.settings-open = false; }
             }
         }
     }
