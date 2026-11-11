@@ -19,7 +19,7 @@ import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRo
 import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
 import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
-import { Home, HomePage, HomeIndicators, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
+import { Home, HomePage, HomeIndicators, IndicatorDots, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
 export { RunnerBase, BaseRunnerRow, BaseIssue }
 export { ClubStations, ClubStationRow, BatteryDueItem }
 export { Cards, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard }
@@ -37,11 +37,13 @@ component Header inherits Rectangle {
     in property <length> left-margin;
     in property <length> right-margin;
     in property <length> top-margin;
+    in property <bool> compact;   // a phone, the page scrolled: smaller name, the indicators as dots
+    in property <length> extra;   // a computer: room for the bubble's upper half, above and below
 
     background: Theme.header;
     VerticalLayout {
-        padding-top: root.top-margin + Theme.space;
-        padding-bottom: Theme.space;
+        padding-top: root.top-margin + Theme.space + root.extra;
+        padding-bottom: Theme.space + root.extra;
         padding-left: root.left-margin;
         padding-right: root.right-margin;
         spacing: Theme.space;
@@ -80,18 +82,19 @@ component Header inherits Rectangle {
                 Text {
                     text: Navigation.header-title;
                     color: Theme.header-text;
-                    font-size: Theme.text-screen-title;
+                    font-size: root.compact ? Theme.header-compact-title : Theme.text-screen-title;
                     font-weight: Theme.weight-screen-title;
                     wrap: word-wrap;
                 }
             }
+            if root.compact: IndicatorDots { }
             if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.wide: HomeIndicators {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
         }
         // Narrower windows: the indicators under the name, which keeps its room (iPad portrait).
-        if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.wide: HomeIndicators {
+        if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.wide && !root.compact: HomeIndicators {
             layout-mode: root.layout-mode;
         }
     }
@@ -102,6 +105,8 @@ component Page {
     in property <length> left-margin;
     in property <length> right-margin;
     in property <length> bottom-margin;
+    in property <length> top-room;     // a phone: the room of the header, which lies over the page
+    out property <length> scrolled;    // how far the page has scrolled
 
     property <bool> on-courses: Navigation.in-event && Navigation.active-tab == 0;
     property <bool> on-participants: Navigation.in-event && Navigation.active-tab == 1;
@@ -161,9 +166,12 @@ component Page {
         y: 0;
         width: root.width;
         height: root.height;
+        init => { root.scrolled = 0; }
+        changed viewport-y => { root.scrolled = -self.viewport-y; }
         content := VerticalLayout {
             width: scroller.width;
             alignment: start;
+            padding-top: root.top-room;
             padding-bottom: root.bottom-margin + Theme.space-medium;
             if root.on-courses: VerticalLayout {
                 padding-top: Theme.space-medium;
@@ -351,6 +359,19 @@ export component App inherits Window {
         : root.width <= Theme.wide-threshold ? LayoutMode.medium
         : LayoutMode.wide;
     property <length> margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    // A computer: the name and the indicators are centred in the whole green band, the bubble's
+    // upper half included, which they never reach (Robin, 11/11). The bubble's top is then inside
+    // the header.
+    property <bool> header-centred: root.layout-mode == LayoutMode.wide && Navigation.in-event;
+    property <length> bubble-top: root.header-centred ? header.height - Theme.tab-bubble-height / 2 : header.height;
+    // A phone: the header's full height, kept while it is tucked, so the page never jumps.
+    property <length> header-rest;
+    property <bool> header-compact: root.narrow && Navigation.in-event && !Navigation.live-open
+        && page.scrolled > Theme.header-compact-after;
+    property <length> header-room: root.header-rest
+        + (Navigation.in-event ? Theme.tab-bubble-height + Theme.settings-tab-height - Theme.settings-tab-tuck
+            : Navigation.cards-page || Navigation.stations-page ? Theme.settings-tab-height : 0px);
     property <length> left-margin: root.margin + root.safe-area-insets.left;
     property <length> right-margin: root.margin + root.safe-area-insets.right;
     // On a phone, a bubble stops above the band and the Direct bar, never over them.
@@ -375,33 +396,33 @@ export component App inherits Window {
         y: 0;
         width: root.width;
         height: root.height;
-        header := Header {
+        // The header's room. On a phone the header lies over the page instead, which scrolls
+        // under it (Robin, 11/11).
+        if !root.narrow: Rectangle {
             vertical-stretch: 0;
-            layout-mode: root.layout-mode;
-            left-margin: root.left-margin;
-            right-margin: root.right-margin;
-            top-margin: root.safe-area-insets.top;
+            height: header.height;
         }
         // The lower part of the header, under the tab bubble (brief zones-onglets § 1), then the
         // room of the bubble's lower half and of the Paramètres tab: every tab starts at the
         // same height, with Paramètres or without.
-        if Navigation.in-event: Rectangle {
+        if Navigation.in-event && root.layout-mode == LayoutMode.medium: Rectangle {
             vertical-stretch: 0;
             height: Theme.tab-bubble-height / 2;
             background: Theme.header;
         }
-        if Navigation.in-event: Rectangle {
+        if Navigation.in-event && !root.narrow: Rectangle {
             vertical-stretch: 0;
             height: Theme.tab-bubble-height / 2 + Theme.settings-tab-height - Theme.settings-tab-tuck;
         }
         // A club page: no tabs, the Paramètres tab hangs under the header (brief zones-onglets).
         // Coureurs et clubs has no Paramètres: its content starts right under the header (Robin, 11/11).
-        if Navigation.cards-page || Navigation.stations-page: Rectangle {
+        if (Navigation.cards-page || Navigation.stations-page) && !root.narrow: Rectangle {
             vertical-stretch: 0;
             height: Theme.settings-tab-height;
         }
-        Page {
+        page := Page {
             vertical-stretch: 1;
+            top-room: root.narrow ? root.header-room : 0px;
             layout-mode: root.layout-mode;
             left-margin: root.left-margin;
             right-margin: root.right-margin;
@@ -489,6 +510,34 @@ export component App inherits Window {
         }
     }
 
+    // The header, over the page. On a phone the page scrolls under it, and once it has scrolled
+    // the header tucks: a smaller name, the indicators as dots, the Paramètres tab under the
+    // bubble. All comes back at the top of the page (Robin, 11/11).
+    if root.narrow && Navigation.in-event: Rectangle {
+        x: 0;
+        y: header.height;
+        width: root.width;
+        height: Theme.tab-bubble-height / 2;
+        background: Theme.header;
+    }
+    header := Header {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: self.preferred-height;
+        layout-mode: root.layout-mode;
+        left-margin: root.left-margin;
+        right-margin: root.right-margin;
+        top-margin: root.safe-area-insets.top;
+        compact: root.header-compact;
+        extra: root.header-centred ? Theme.tab-bubble-height / 2 : 0px;
+        changed height => {
+            if !self.compact {
+                root.header-rest = self.height;
+            }
+        }
+    }
+
     // Over the header: ‹ Accueil and the indicators only close the open Direct (26/10).
     if Navigation.in-event && Navigation.live-open: TouchArea {
         x: 0;
@@ -501,7 +550,7 @@ export component App inherits Window {
     // The Direct drawer (prototype: #dr): its bar at the bottom, over the band's last place;
     // open, it rises up to the tabs and covers the page.
     drawer := Rectangle {
-        property <length> open-y: header.height + Theme.tab-bubble-height + Theme.space;
+        property <length> open-y: root.bubble-top + Theme.tab-bubble-height + Theme.space;
         property <length> closed-y: root.height - live-bar.closed-height;
         property <bool> narrow: root.layout-mode == LayoutMode.narrow;
         // Keeps the end of the Direct clear of the Démo button.
@@ -586,8 +635,14 @@ export component App inherits Window {
         if root.club-settings == 1: ClubStationsSettings { }
     }
     if root.settings-tab >= 0: SettingsTab {
+        // Tucked: hidden under the bubble, until the page is back at its top.
+        property <bool> tucked: root.header-compact && !Navigation.settings-open;
         x: (root.width - self.width) / 2;
-        y: header.height + Theme.tab-bubble-height - Theme.settings-tab-tuck;
+        y: self.tucked ? root.bubble-top + Theme.tab-bubble-height - self.height
+            : root.bubble-top + Theme.tab-bubble-height - Theme.settings-tab-tuck;
+        animate y { duration: Theme.header-compact-duration; }
+        opacity: self.tucked ? 0 : 1;
+        animate opacity { duration: Theme.header-compact-duration; }
         width: bubble.width - 2 * (root.layout-mode == LayoutMode.narrow ? Theme.settings-tab-narrow-inset : Theme.settings-tab-inset);
         summary: root.settings-tab == 0 ? Zones.join(Courses.chips)
             : root.settings-tab == 1 ? Zones.join(Participants.chips)
@@ -612,7 +667,7 @@ export component App inherits Window {
         bubble := Rectangle {
             visible: Navigation.in-event;
             x: (root.width - self.width) / 2;
-            y: header.height;
+            y: root.bubble-top;
             // As wide as its tabs, centred; a phone gives it the whole width.
             width: root.layout-mode == LayoutMode.narrow
                 ? root.width - 2 * Theme.narrow-margin - root.safe-area-insets.left - root.safe-area-insets.right

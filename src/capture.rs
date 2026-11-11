@@ -3,7 +3,8 @@
 // « live » opens the Direct drawer over the tab INDEX.
 // With CAPTURE_TEST_DATA set, the test data comes from a fixed seed, so images stay comparable.
 // CAPTURE_COURSE and CAPTURE_COURSE_VIEW open a course and one of its views.
-// CAPTURE_CLICKS="x,y;x,y" clicks these points first, to test the navigation without a mouse.
+// CAPTURE_CLICKS="x,y;x,y" clicks these points first, to test the navigation without a mouse;
+// "~x,y,dy" scrolls by dy points there instead (a negative dy goes down the page).
 // Without these arguments, the app starts normally.
 
 use crate::device::{self, Device};
@@ -70,11 +71,19 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
     state_now.show(window);
 
     // Clicks one point after the other, then leaves time for the screen to update.
-    let clicks: Vec<LogicalPosition> = std::env::var("CAPTURE_CLICKS").map_or(Vec::new(), |list| {
+    // Each step: a point, and how far to scroll there (None: a click).
+    let clicks: Vec<(LogicalPosition, Option<f32>)> = std::env::var("CAPTURE_CLICKS").map_or(Vec::new(), |list| {
         list.split(';')
-            .map(|point| {
+            .map(|step| {
+                let (scroll, point) = match step.strip_prefix('~') {
+                    Some(rest) => {
+                        let (point, dy) = rest.rsplit_once(',').expect("x,y,dy");
+                        (Some(dy.parse().expect("dy")), point)
+                    }
+                    None => (None, step),
+                };
                 let (x, y) = point.split_once(',').expect("x,y");
-                LogicalPosition::new(x.parse().expect("x"), y.parse().expect("y"))
+                (LogicalPosition::new(x.parse().expect("x"), y.parse().expect("y")), scroll)
             })
             .collect()
     });
@@ -84,12 +93,16 @@ pub fn prepare(window: &App, state: &Rc<RefCell<AppState>>, choice: &Rc<Cell<Dev
         set_logical_size(&resize.unwrap(), width, height);
     });
     let click_time = WAIT * (clicks.len() as u32 + 2);
-    for (i, position) in clicks.into_iter().enumerate() {
+    for (i, (position, scroll)) in clicks.into_iter().enumerate() {
         let weak = window.as_weak();
         slint::Timer::single_shot(WAIT * (i as u32 + 1), move || {
             let window = weak.unwrap();
-            let button = PointerEventButton::Left;
             window.window().dispatch_event(WindowEvent::PointerMoved { position });
+            if let Some(delta_y) = scroll {
+                window.window().dispatch_event(WindowEvent::PointerScrolled { position, delta_x: 0.0, delta_y });
+                return;
+            }
+            let button = PointerEventButton::Left;
             window.window().dispatch_event(WindowEvent::PointerPressed { position, button });
             window.window().dispatch_event(WindowEvent::PointerReleased { position, button });
         });

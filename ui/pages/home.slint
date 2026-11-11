@@ -131,6 +131,27 @@ export component HomeIndicators {
     }
 }
 
+// A phone's tucked header: the three indicators as dots (Robin, 11/11). Their state stays
+// readable by screen readers; the whole pills come back at the top of the page.
+export component IndicatorDots {
+    HorizontalLayout {
+        spacing: Theme.header-compact-gap;
+        for item in Home.indicators: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.indicator-dot;
+                height: Theme.indicator-dot;
+                border-radius: self.width / 2;
+                border-width: item.has-dot ? 0px : Theme.thin-outline-width;
+                border-color: Theme.header-outline;
+                background: !item.has-dot ? transparent : item.attention ? Theme.attention : Theme.live;
+                accessible-role: AccessibleRole.text;
+                accessible-label: item.long-text;
+            }
+        }
+    }
+}
+
 component StatColumn {
     in property <Stat> stat;
 

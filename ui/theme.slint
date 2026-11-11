@@ -511,6 +511,11 @@ export global Theme {
     out property <length> indicator-compact-gap: 5px;
     out property <length> indicator-icon: 16px;
     out property <length> indicator-dot: 8px;
+    // A phone's header, tucked once the page has scrolled (Robin, 11/11).
+    out property <length> header-compact-after: 16px;   // how far the page scrolls before it tucks
+    out property <length> header-compact-title: 16px;
+    out property <length> header-compact-gap: 6px;      // between the three dots
+    out property <duration> header-compact-duration: reduced-motion ? 0ms : 200ms;
     out property <length> attention-outline: 2px;
 
     // Icons and markers
