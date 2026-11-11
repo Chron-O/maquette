@@ -82,10 +82,11 @@ component ReaderLines inherits VerticalLayout {
 
     alignment: center;
     spacing: Theme.reader-line-gap;
+    // The pin always at the right end, whether the name takes one line or two.
     HorizontalLayout {
-        alignment: start;
         spacing: Theme.space-small;
         Text {
+            horizontal-stretch: 1;
             text: root.reader.name == "" ? "" : root.reader.name + " · " + root.reader.serial;
             color: Theme.reader-detail;
             font-size: Theme.text-help;

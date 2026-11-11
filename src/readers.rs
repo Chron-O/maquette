@@ -9,7 +9,7 @@ fn info(data: &Generated, index: usize) -> ReaderInfo {
     ReaderInfo {
         index: index as i32,
         name: reader.name.as_str().into(),
-        serial: format!("n° {}", reader.serial).into(),
+        serial: format!("n°\u{a0}{}", reader.serial).into(),   // « n° » never alone at a line end
         pinned: reader.pinned,
         mode: match data.reader_status(index) {
             ReaderStatus::Ready => ReaderMode::Ready,
