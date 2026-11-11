@@ -459,7 +459,9 @@ impl CoursesState {
             Format::Free => "Ordre libre".to_string(),
             Format::Score => format!("Score · {}", plural(mandatory, "obligatoire")),
         };
-        courses.set_course_chips(model(vec![course.categories.into(), course.distance.as_str().into(), format_label.as_str().into()]));
+        courses.set_course_facts(format!("{} · {}", course.categories, course.distance).into());
+        let map = format!("Carte : {}", course.map.unwrap_or("—"));
+        courses.set_course_chips(model(vec![format_label.as_str().into(), map.as_str().into()]));
         courses.set_course_ordered(ordered);
         courses.set_course_scored(scored);
         courses.set_free_title(

@@ -10,7 +10,7 @@ import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
-import { BottomDetail, SettingRow, SideDetail, Unfold } from "../components/zones.slint";
+import { BottomDetail, SettingRow, SettingsTab, SideDetail, Unfold, Zones } from "../components/zones.slint";
 
 export struct CourseItem {
     index: int,
@@ -108,7 +108,9 @@ export global Courses {
     in property <bool> list-only;           // on a phone: nothing chosen yet
     in property <string> zone-title;
     in property <string> course-name;
-    in property <[string]> course-chips;
+    in property <[string]> course-chips;        // its settings, summed up in its Réglages tab
+    in property <string> course-facts;          // what it is: categories, length, climb
+    in-out property <bool> course-settings-open;
     in property <string> course-categories;
     in property <bool> course-ordered: true;
     in property <bool> course-scored;
@@ -2013,6 +2015,80 @@ component CourseMenuButton {
     }
 }
 
+// A course colour to choose (no effect yet): the current one carries a check, not only its colour.
+component ColourSwatch inherits Rectangle {
+    in property <int> tone;
+    in property <bool> current;
+
+    width: Theme.swatch-size;
+    height: Theme.swatch-size;
+    border-radius: self.height / 2;
+    background: Courses.tone-color(root.tone);
+    border-width: root.current ? Theme.tag-outline : 0px;
+    border-color: Theme.text;
+    if root.current: Image {
+        source: Icons.check;
+        colorize: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
+        width: Theme.swatch-icon;
+        height: Theme.swatch-icon;
+    }
+}
+
+// The settings of one course (prototype: tabCircuits, S.rg), in its Réglages tab:
+// the same rows as the Paramètres of the page.
+component CourseSettings inherits VerticalLayout {
+    padding-top: Theme.space-small;
+    SettingRow {
+        label: "Couleur";
+        HorizontalLayout {
+            spacing: Theme.space-small;
+            for tone in Courses.palette-size: VerticalLayout {
+                alignment: center;
+                ColourSwatch {
+                    tone: tone;
+                    current: tone == min(Courses.active-course, Courses.palette-size - 1);
+                }
+            }
+        }
+    }
+    SettingRow {
+        label: "Type";
+        ChoiceSegments {
+            choices: ["Classique", "Score"];
+            active: Courses.course-scored ? 1 : 0;
+        }
+    }
+    SettingRow {
+        label: "Ordre";
+        ChoiceSegments {
+            choices: ["Comme tous : imposé", "Libre"];
+            active: Courses.course-ordered ? 0 : 1;
+        }
+    }
+    SettingRow {
+        label: "Catégories";
+        Text {
+            text: Courses.course-categories;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            vertical-alignment: center;
+        }
+    }
+    SettingRow {
+        label: "Carte";
+        Text {
+            text: Courses.course-map;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            SecondaryButton { label: "Changer ▾"; }
+        }
+    }
+}
+
 component OneCourse {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -2020,6 +2096,9 @@ component OneCourse {
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> switch-below: root.narrow
         || root.available-width < 3 * Theme.space + Theme.course-views-width + Theme.others-switch-width;
+    // Another course: its Réglages tab starts folded.
+    property <int> course: Courses.active-course;
+    changed course => { Courses.course-settings-open = false; }
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
@@ -2031,23 +2110,55 @@ component OneCourse {
             border-width: Theme.card-outline-width;
             border-color: Theme.card-outline;
             clip: true;
-            VerticalLayout {
+            card := VerticalLayout {
                 VerticalLayout {
                     vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space;
                     HorizontalLayout {
-                        SummaryZone {
-                            title: Courses.course-name;
-                            chips: Courses.course-chips;
-                            bubble: 4;
-                            tone: Courses.active-course;
-                            compact: root.narrow;
-                            horizontal-stretch: root.narrow ? 1 : 0;
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            alignment: center;
+                            CourseChip { tone: Courses.active-course; }
                         }
-                        if !root.narrow: Rectangle { horizontal-stretch: 1; }
+                        // The name, then what the course is, on the same line while it fits.
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            if !root.narrow: HorizontalLayout {
+                                spacing: Theme.space;
+                                Text {
+                                    text: Courses.course-name;
+                                    color: Theme.text;
+                                    font-size: Theme.text-block-title;
+                                    font-weight: Theme.weight-block-title;
+                                    vertical-alignment: center;
+                                }
+                                SmallText {
+                                    horizontal-stretch: 1;
+                                    text: Courses.course-facts;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if root.narrow: Text {
+                                text: Courses.course-name;
+                                color: Theme.text;
+                                font-size: Theme.text-block-title;
+                                font-weight: Theme.weight-block-title;
+                                wrap: word-wrap;
+                            }
+                            if root.narrow: SmallText { text: Courses.course-facts; }
+                        }
                         CourseMenuButton { }
                     }
+                }
+                // The line the Réglages tab hangs from; under it, the room of the tab's head.
+                tab-line := RowLine { vertical-stretch: 0; }
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    padding-top: Theme.settings-tab-height + Theme.space;   // the head of the Réglages tab
+                    spacing: Theme.space;
                     HorizontalLayout {
                         spacing: Theme.space;
                         PrimaryButton {
@@ -2079,6 +2190,24 @@ component OneCourse {
                         tone: Courses.active-course;
                     }
                 }
+            }
+            // Open, a click elsewhere in the card only folds the tab back (as the Paramètres).
+            if Courses.course-settings-open: TouchArea {
+                clicked => { Courses.course-settings-open = false; }
+            }
+            // The Réglages of the course, hung under the line, unfolding over the content:
+            // the same tab as the Paramètres of the page (Robin, 11/11).
+            course-tab := SettingsTab {
+                x: Theme.space;
+                y: tab-line.y + tab-line.height;
+                width: root.narrow ? parent.width - 2 * Theme.space
+                    : min(parent.width - 2 * Theme.space, max(Theme.bubble-width, self.wanted-width));
+                label: "Réglages";
+                summary: Zones.join(Courses.course-chips);
+                narrow: root.narrow;
+                tuck: 0px;
+                open <=> Courses.course-settings-open;
+                CourseSettings { }
             }
         }
     }
@@ -2440,74 +2569,6 @@ export component CoursesSettings {
     }
 }
 
-// A course colour to choose (no effect yet): the current one carries a check, not only its colour.
-component ColourSwatch inherits Rectangle {
-    in property <int> tone;
-    in property <bool> current;
-
-    width: Theme.swatch-size;
-    height: Theme.swatch-size;
-    border-radius: self.height / 2;
-    background: Courses.tone-color(root.tone);
-    border-width: root.current ? Theme.tag-outline : 0px;
-    border-color: Theme.text;
-    if root.current: Image {
-        source: Icons.check;
-        colorize: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
-        width: Theme.swatch-icon;
-        height: Theme.swatch-icon;
-    }
-}
-
-// The settings of one course (prototype: tabCircuits, S.rg).
-component CourseBubble {
-    VerticalLayout {
-        padding: Theme.space-medium;
-        spacing: Theme.button-margin;
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Couleur"; }
-            HorizontalLayout {
-                spacing: Theme.space-small;
-                for tone in Courses.palette-size: VerticalLayout {
-                    alignment: center;
-                    ColourSwatch {
-                        tone: tone;
-                        current: tone == min(Courses.active-course, Courses.palette-size - 1);
-                    }
-                }
-            }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Type"; }
-            ChoiceSegments {
-                choices: ["Classique", "Score"];
-                active: Courses.course-scored ? 1 : 0;
-            }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Ordre"; }
-            ChoiceSegments {
-                choices: ["Comme tous : imposé", "Libre"];
-                active: Courses.course-ordered ? 0 : 1;
-            }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Catégories"; }
-            BubbleLabel { text: Courses.course-categories; wrap: no-wrap; }
-        }
-        HorizontalLayout {
-            spacing: Theme.space;
-            BubbleLabel { horizontal-stretch: 1; text: "Carte"; }
-            BubbleLabel { text: Courses.course-map; }
-            SecondaryButton { label: "Changer ▾"; }
-        }
-    }
-}
-
 // One choice of a small menu. `danger`: in red, with its word saying what it does.
 export component MenuItem inherits Rectangle {
     in property <string> text;
@@ -2683,7 +2744,6 @@ export component BubbleOverlay {
         height: 100%;
         margin: root.margin;
         wanted-width: Courses.open-bubble == 22 ? Theme.menu-bubble-width : Theme.bubble-width;
-        if Courses.open-bubble == 4: CourseBubble { }
         if Courses.open-bubble == 2: AlertBubble { }
         if Courses.open-bubble == 22: VerticalLayout {
             padding-top: Theme.space-small;

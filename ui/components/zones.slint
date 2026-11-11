@@ -84,12 +84,14 @@ export component SheetTitle inherits Text {
 // nothing moves. Escape, « Refermer » or a click on its head folds it back.
 // `narrow`: the word alone; the summary is seen by opening it (Robin, 10/11).
 export component SettingsTab inherits Rectangle {
+    in property <string> label: "Paramètres";   // « Réglages » for a course, in its card
     in property <string> summary;
+    out property <length> wanted-width: head.preferred-width;
     in property <bool> narrow;
     in-out property <bool> open;
     in property <length> tuck: Theme.settings-tab-tuck;   // the part hidden under what it hangs from
 
-    property <length> head-height: max(Theme.settings-tab-height, head.preferred-height);
+    out property <length> head-height: max(Theme.settings-tab-height, head.preferred-height);
     property <length> body-height: root.open ? body.preferred-height : 0px;
 
     height: root.head-height + root.shown-body;
@@ -137,7 +139,7 @@ export component SettingsTab inherits Rectangle {
             alignment: center;
             spacing: Theme.space;
             accessible-role: button;
-            accessible-label: "Paramètres : " + root.summary;
+            accessible-label: root.label + " : " + root.summary;
             VerticalLayout {
                 alignment: center;
                 Image {
@@ -148,7 +150,7 @@ export component SettingsTab inherits Rectangle {
                 }
             }
             Text {
-                text: root.narrow ? "Paramètres" : "Paramètres :";
+                text: root.narrow ? root.label : root.label + " :";
                 color: Theme.text;
                 font-size: Theme.text-help;
                 font-weight: Theme.weight-block-title;
