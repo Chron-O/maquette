@@ -4,7 +4,7 @@
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, Runner, START_STEP, format_clock};
 use crate::participants::card_label;
-use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, StartGroup, StartPoint, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
+use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, StartGroup, StartPoint, StartCourse, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 2] = ["Liste", "Frise"];
@@ -32,6 +32,7 @@ pub struct StartsState {
     sort: SortKey,
     ascending: bool,
     point: usize,       // 0 all, otherwise a start point
+    course: Option<usize>,   // the course chosen in the panel; none: all of them
     group: Option<usize>,
     search: String,
     selected: Option<usize>,
@@ -45,6 +46,7 @@ impl Default for StartsState {
             sort: SortKey::Time,
             ascending: true,
             point: 0,
+            course: None,
             group: None,
             search: String::new(),
             selected: None,
@@ -86,22 +88,23 @@ impl StartsState {
         self.point = point;
     }
 
+    // The panel: all the courses, or one (brief Cowork, 11/11).
+    pub fn select_course(&mut self, course: i32) {
+        self.course = usize::try_from(course).ok();
+    }
+
     pub fn select_group(&mut self, group: usize) {
         self.group = if self.group == Some(group) { None } else { Some(group) };
     }
 
-    // The Filtres bubble (brief zones-onglets § 5): group 0 the start point, group 1 the group.
-    // A second click on the chosen choice takes it away.
-    pub fn toggle_filter(&mut self, group: usize, choice: usize) {
-        match group {
-            0 => self.point = if self.point == choice + 1 { 0 } else { choice + 1 },
-            _ => self.select_group(choice),
-        }
+    // The Filtres bubble: the start point only. The groups are in the panel, and a choice has
+    // one place only (brief Cowork, 11/11). A second click on the chosen choice takes it away.
+    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
+        self.point = if self.point == choice + 1 { 0 } else { choice + 1 };
     }
 
     pub fn clear_filters(&mut self) {
         self.point = 0;
-        self.group = None;
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -263,11 +266,10 @@ impl StartsState {
         }
         page.set_points(model(chips));
 
-        // The filters: the start point (when there are several), then the group.
+        // The filters: the start point, when there are several.
         let point_names: Vec<String> = if points.len() > 1 { points.iter().map(|p| format!("Départ S{p}")).collect() } else { Vec::new() };
-        let group_names: Vec<String> = event.groups.iter().map(|g| g.name.clone()).collect();
-        let chosen = [self.point.checked_sub(1), self.group];
-        let lists = [("Point de départ", &point_names), ("Groupe", &group_names)];
+        let chosen = [self.point.checked_sub(1)];
+        let lists = [("Point de départ", &point_names)];
         page.set_filter_groups(model(
             lists
                 .iter()
@@ -330,12 +332,27 @@ impl StartsState {
 
         let filtering = self.group.is_some() || !self.search.is_empty();
         let in_point = |course: usize| self.point == 0 || event.courses[course].start_point == points[self.point - 1];
+        let entrants_of = |course: usize| runners.iter().filter(|r| r.runs.first().is_some_and(|run| run.course == course)).count();
+        page.set_courses(model(
+            event
+                .courses
+                .iter()
+                .enumerate()
+                .map(|(i, course)| StartCourse {
+                    index: i as i32,
+                    name: course.name.as_str().into(),
+                    detail: format!("S{} · {}", course.start_point, plural(entrants_of(i), "coureur")).into(),
+                })
+                .collect(),
+        ));
+        page.set_active_course(self.course.map_or(-1, |c| c as i32));
+        let shown_course = |course: usize| in_point(course) && self.course.is_none_or(|c| c == course);
         page.set_sections(model(
             event
                 .courses
                 .iter()
                 .enumerate()
-                .filter(|(i, _)| in_point(*i))
+                .filter(|(i, _)| shown_course(*i))
                 .map(|(i, course)| {
                     let rows = self.sorted(event, i);
                     let mut lines: Vec<StartRow> = rows.iter().map(|r| self.row(event, *r)).collect();
@@ -355,7 +372,7 @@ impl StartsState {
                             selected: false,
                         }));
                     }
-                    let entrants = runners.iter().filter(|r| r.runs.first().is_some_and(|run| run.course == i)).count();
+                    let entrants = entrants_of(i);
                     StartSection {
                         index: i as i32,
                         name: course.name.as_str().into(),
@@ -376,7 +393,7 @@ impl StartsState {
                 .map(|t| if t % FRISE_LABEL_EVERY == 0 { format_clock(t).into() } else { SharedString::new() })
                 .collect(),
         ));
-        let mut order: Vec<usize> = (0..event.courses.len()).filter(|i| in_point(*i)).collect();
+        let mut order: Vec<usize> = (0..event.courses.len()).filter(|i| shown_course(*i)).collect();
         order.sort_by_key(|i| event.courses[*i].start_point);
         page.set_frise_rows(model(
             order
