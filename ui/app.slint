@@ -171,142 +171,175 @@ component Page {
     property <bool> on-runner-base: Navigation.runners-page;
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
 
-    // These tabs keep their column and their titles in place: only the content scrolls.
-    if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) && !root.narrow: VerticalLayout {
-        x: 0;
-        y: 0;
-        width: root.width;
-        height: root.height;
-        padding-top: Theme.space-medium;
-        padding-bottom: Theme.space-medium;
-        padding-left: root.left-margin;
-        padding-right: root.right-margin;
-        if root.on-courses: CoursesPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-participants: ParticipantsPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-starts: StartsPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-stations: StationsPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-results: ResultsPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-cards: CardsPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-club-stations: ClubStationsPage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
-        if root.on-runner-base: RunnerBasePage {
-            layout-mode: root.layout-mode;
-            available-width: root.width - root.left-margin - root.right-margin;
-        }
+    // Another tab: its page comes in a short fade, sliding from the side of the tab chosen
+    // (Robin, 11/11). It starts from there at once, then moves into place.
+    property <int> tab: Navigation.in-event ? Navigation.active-tab : -1;
+    property <int> previous-tab: root.tab;
+    property <int> direction: 1;
+    property <bool> entering;
+    changed tab => {
+        root.direction = root.tab >= root.previous-tab ? 1 : -1;
+        root.entering = root.tab >= 0 && root.previous-tab >= 0;
+        root.previous-tab = root.tab;
     }
-    if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) || root.narrow: scroller := Flickable {
-        x: 0;
-        y: 0;
+    Timer {
+        interval: 1ms;
+        running: root.entering;
+        triggered => { root.entering = false; }
+    }
+
+    layer := Rectangle {
         width: root.width;
         height: root.height;
-        init => { root.scrolled = 0; }
-        changed content-y => { root.scrolled = -self.content-y; }
-        content := VerticalLayout {
-            width: scroller.width;
-            alignment: start;
-            padding-top: root.top-room;
-            padding-bottom: root.bottom-margin + Theme.space-medium;
-            if root.on-courses: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                CoursesPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-participants: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                ParticipantsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-stations: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                StationsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-runner-base: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                RunnerBasePage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-club-stations: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                ClubStationsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-cards: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                CardsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-results: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                ResultsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if root.on-starts: VerticalLayout {
-                padding-top: Theme.space-medium;
-                padding-left: root.left-margin;
-                padding-right: root.right-margin;
-                StartsPage {
-                    layout-mode: root.layout-mode;
-                    available-width: scroller.width - root.left-margin - root.right-margin;
-                }
-            }
-            if Navigation.home: HomePage {
+        // These tabs keep their column and their titles in place: only the content scrolls.
+        if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) && !root.narrow: VerticalLayout {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.height;
+            padding-top: Theme.space-medium;
+            padding-bottom: Theme.space-medium;
+            padding-left: root.left-margin;
+            padding-right: root.right-margin;
+            if root.on-courses: CoursesPage {
                 layout-mode: root.layout-mode;
-                available-width: scroller.width;
-                left-margin: root.left-margin;
-                right-margin: root.right-margin;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-participants: ParticipantsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-starts: StartsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-stations: StationsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-results: ResultsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-cards: CardsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-club-stations: ClubStationsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-runner-base: RunnerBasePage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
             }
         }
-        content-height: max(self.height, content.preferred-height);
+        if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) || root.narrow: scroller := Flickable {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.height;
+            init => { root.scrolled = 0; }
+            changed content-y => { root.scrolled = -self.content-y; }
+            content := VerticalLayout {
+                width: scroller.width;
+                alignment: start;
+                padding-top: root.top-room;
+                padding-bottom: root.bottom-margin + Theme.space-medium;
+                if root.on-courses: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    CoursesPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-participants: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    ParticipantsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-stations: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    StationsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-runner-base: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    RunnerBasePage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-club-stations: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    ClubStationsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-cards: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    CardsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-results: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    ResultsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-starts: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    StartsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if Navigation.home: HomePage {
+                    layout-mode: root.layout-mode;
+                    available-width: scroller.width;
+                    left-margin: root.left-margin;
+                    right-margin: root.right-margin;
+                }
+            }
+            content-height: max(self.height, content.preferred-height);
+        }
     }
+    states [
+        entering when root.entering: {
+            layer.opacity: 0;
+            layer.x: root.direction * Theme.page-travel;
+            out {
+                animate layer.opacity, layer.x {
+                    duration: Theme.page-duration;
+                    easing: ease-out;
+                }
+            }
+        }
+    ]
 }
 
 component DemoRow {
