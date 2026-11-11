@@ -5,7 +5,7 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 
 | # | Écran | Statut |
 |---|---|---|
-| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester à la première fusion sur `main` |
+| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web testée et validée le 11/11 (première fusion sur `main`) |
 | 1 | Accueil | validé par Robin |
 | 2 | Course › Circuits | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Mixte à maquetter, modification des circuits à faire plus tard |
 | 3 | Course › Participants | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; nouveau participant et attribution de puce à faire plus tard |

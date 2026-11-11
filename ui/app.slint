@@ -80,7 +80,16 @@ component Header inherits Rectangle {
                 HeaderButton {
                     label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
                     arrow-only: root.layout-mode == LayoutMode.narrow;
-                    clicked => { Navigation.go-back(); }
+                    // The Direct open: ‹ Accueil only closes it (26/10). The indicators keep
+                    // their bubble and leave the Direct open (Robin, 11/11); the rest of the
+                    // header falls through to the click that closes it.
+                    clicked => {
+                        if Navigation.in-event && Navigation.live-open {
+                            Navigation.toggle-live();
+                        } else {
+                            Navigation.go-back();
+                        }
+                    }
                 }
             }
             if Navigation.home: VerticalLayout {
@@ -624,15 +633,6 @@ export component App inherits Window {
                 root.header-rest = self.height;
             }
         }
-    }
-
-    // Over the header: ‹ Accueil and the indicators only close the open Direct (26/10).
-    if Navigation.in-event && Navigation.live-open: TouchArea {
-        x: 0;
-        y: 0;
-        width: root.width;
-        height: header.height;
-        clicked => { Navigation.toggle-live(); }
     }
 
     // The Direct drawer (prototype: #dr): its bar at the bottom, over the band's last place;
