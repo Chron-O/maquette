@@ -113,8 +113,9 @@ export global Home {
 export component HomeIndicators {
     in property <LayoutMode> layout-mode;
 
+    // Always on the right, a phone included (Robin, 11/11).
     HorizontalLayout {
-        alignment: root.layout-mode == LayoutMode.narrow ? start : end;
+        alignment: end;
         spacing: Theme.indicator-compact-gap;
         for item in Home.indicators: VerticalLayout {
             alignment: center;

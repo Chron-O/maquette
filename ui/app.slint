@@ -172,7 +172,7 @@ component Page {
         width: root.width;
         height: root.height;
         init => { root.scrolled = 0; }
-        changed viewport-y => { root.scrolled = -self.viewport-y; }
+        changed content-y => { root.scrolled = -self.content-y; }
         content := VerticalLayout {
             width: scroller.width;
             alignment: start;
