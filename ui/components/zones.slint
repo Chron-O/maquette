@@ -363,7 +363,7 @@ component Choice inherits Rectangle {
     in property <FilterChoice> choice;
 
     height: Theme.zone;
-    min-width: inner.preferred-width;
+    width: inner.preferred-width;
     accessible-role: checkbox;
     accessible-checked: root.choice.active;
     accessible-label: root.choice.label;
@@ -387,7 +387,7 @@ component Choice inherits Rectangle {
             text: root.choice.label;
             color: root.choice.active ? Theme.active-tab-text : Theme.text;
             font-size: Theme.text-help;
-            font-weight: Theme.weight-block-title;
+            font-weight: Theme.weight-label;
             vertical-alignment: center;
         }
     }
@@ -398,13 +398,12 @@ component Choice inherits Rectangle {
 }
 
 // The content of the Filtres bubble: a group per criterion, its choices in pills, then
-// « Tout effacer » and « Fermer ». The choices go to the next line when they do not fit.
+// « Tout effacer » and « Fermer ».
 export component FiltersContent {
     callback toggle(int, int);
     callback clear();
     callback close();
     in property <[FilterGroup]> groups;
-    in property <length> per-row-width: Theme.filter-choice-width;
 
     VerticalLayout {
         padding: Theme.space-medium;
@@ -423,14 +422,13 @@ export component FiltersContent {
                 font-size: Theme.text-help;
                 font-weight: Theme.weight-block-title;
             }
-            flow := Rectangle {
-                property <length> step: root.per-row-width + Theme.space-small;
-                property <int> per-row: max(1, floor((self.width + Theme.space-small) / self.step));
-                height: ceil(group.choices.length / self.per-row) * Theme.zone;
+            // Each pill is as wide as its word; they go to the next line when they do not fit.
+            // Its height is counted for the width it is given, not for its narrowest one.
+            FlexboxLayout {
+                min-width: root.width - 2 * Theme.space-medium;
+                spacing-horizontal: Theme.space;
+                spacing-vertical: 0px;
                 for choice[c] in group.choices: Choice {
-                    x: mod(c, flow.per-row) * flow.step;
-                    y: floor(c / flow.per-row) * Theme.zone;
-                    width: root.per-row-width;
                     choice: choice;
                     clicked => { root.toggle(group.key, c); }
                 }

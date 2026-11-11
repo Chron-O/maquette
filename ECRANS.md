@@ -25,14 +25,14 @@ Appliqué aux écrans 2 à 10 : bulle d'onglets à cheval sur l'en-tête, langue
 - **Direct** : gardé en volet (décision de Robin du 10/11), donc 5 onglets dans la bulle et le bouton Direct à son bout ; pas de languette.
 - **Languette sur téléphone** : « Paramètres » seul, le résumé se lit en l'ouvrant (Robin, 10/11) ; flèche `chevron-down` ajoutée à la charte avec `funnel`.
 - **Filtres actifs sur téléphone** : l'entonnoir et leur nombre, sans les étiquettes, qui ne tiendraient pas.
-- **Groupes de filtres ajoutés** : Participants « À vérifier » (Doublons possibles, Catégorie inconnue) et l'état « PM », pour que chaque « Voir » de l'alerte ait son filtre ; Direct « Lectures : À traiter » ; Coureurs, un seul groupe « Coureurs » (licence et pratique mêlées, un seul choix).
-- **Bulles des filtres et de l'alerte** : collées à leur bouton, comme les autres bulles (variante B), au lieu de flotter dessous comme sur les captures du brief.
+- **Groupes de filtres ajoutés** (validés par Robin le 11/11) : Participants « À vérifier » (Doublons possibles, Catégorie inconnue) et l'état « PM », pour que chaque « Voir » de l'alerte ait son filtre ; Direct « Lectures : À traiter » ; Coureurs, un seul groupe « Coureurs » (licence et pratique mêlées, un seul choix).
+- **Bulles des filtres et de l'alerte** : collées à leur bouton, comme les autres bulles (variante B). Ramenées à 340 px de large, comme les captures du brief ; chaque pastille de filtre a la largeur de son mot et passe à la ligne s'il le faut (Robin, 11/11 : « beaucoup trop grandes »). Sur téléphone, la bulle des filtres défile si elle touche la bande du bas.
 - **Indicateurs sur iPad portrait** : sous le nom de l'événement, sinon la bulle cachait la 2ᵉ ligne du nom.
-- **Boîtiers** : « Boîtier spécial » reste blanc, la carte de lecture ayant déjà son bouton orange. Contrôle / Ramassage reste un affichage, dans le volet.
+- **Boîtiers** : « Boîtier spécial » en orange (Robin, 11/11 : l'orange va aux boutons importants et souvent utilisés). Contrôle / Ramassage reste un affichage, dans le volet.
 - **Circuits** : pas de filtre ; « Mettre en avant » reste un affichage. Les réglages d'un circuit restent dans sa carte.
 - **Résultats** : le choix du classement reste dans le volet ; seules les catégories d'un classement par circuit passent dans les Filtres.
 - **Puces et Boîtiers du club** : le choix du parc reste un affichage (volet, ou pastilles sur téléphone) ; la languette donne la description du parc.
-- **Coureurs et clubs** : pas de paramètres, donc pas de languette ; « Ajouter un coureur » passe en orange.
+- **Coureurs et clubs** : pas de paramètres, donc pas de languette ; le contenu monte juste sous l'en-tête, la page étant indépendante (Robin, 11/11) ; « Ajouter un coureur » passe en orange.
 - **Fiche** : ses boutons orange passent en blanc (« Garder le premier résultat ») ; les actions de ligne restent orange.
 - **Non testé** : Échap au clavier, iPad paysage, la fiche ouverte sur toutes les pages du club.
 

@@ -265,7 +265,7 @@ export global Theme {
     out property <length> highlight-chip-width: 92px;
     out property <length> highlight-chip-height: 28px;
     out property <length> view-tabs-width: 230px;
-    out property <length> bubble-width: 420px;
+    out property <length> bubble-width: 340px;   // brief zones-onglets, captures 03 and 04
     out property <color> bubble-shadow: overlay-veil;
     out property <length> menu-mark: 9px;          // the open mark after a column title (« État ▾ »)
     out property <length> menu-mark-stroke: 1.6px;
@@ -589,8 +589,7 @@ export global Theme {
     out property <length> filter-in-use-outline: 2px;
     out property <length> filter-in-use-height: touch ? 32px : 26px;
     out property <length> filter-cross: 14px;
-    out property <length> filter-choice-width: 170px;
-    out property <length> filter-bubble-width: 380px;
+    out property <length> filter-bubble-width: bubble-width;
     // Participants, head of the content: full labels from this width; the search under them below.
     out property <length> participants-head-roomy: 820px;
     out property <length> participants-head-search: 580px;

@@ -22,7 +22,7 @@ Le code pourra servir de point de départ à l'app (à confirmer avec Severin) :
 ## Navigation (cadrage validé)
 - Comme le prototype : l'**Accueil** est une page qui défile, **sans onglets**, avec deux sections : Événements et Le club.
 - Depuis Le club : Puces de prêt (stock de prêt), Boîtiers (inventaire du club), Coureurs et clubs (base fédérale). Retour par « ‹ Accueil » (« ‹ » seul en largeur étroite).
-- Paramètres (brief zones-onglets, 10/11/2026) : une languette « ⚙ Paramètres : résumé » centrée, accrochée sous la bulle des onglets (sous l'en-tête sur les pages du club), qui se déplie par-dessus le contenu. Sans paramètres : pas de languette, le contenu commence à la même hauteur. Les réglages d'un circuit ou d'un point de départ restent dans leur carte.
+- Paramètres (brief zones-onglets, 10/11/2026) : une languette « ⚙ Paramètres : résumé » centrée, accrochée sous la bulle des onglets (sous l'en-tête sur les pages du club), qui se déplie par-dessus le contenu. Sans paramètres : pas de languette ; dans un événement, le contenu commence à la même hauteur ; sur une page du club (Coureurs et clubs), il monte sous l'en-tête. Les réglages d'un circuit ou d'un point de départ restent dans leur carte.
 - Un événement : 5 onglets **toujours présents**, dans l'ordre : Circuits · Participants · Départs · Boîtiers · Résultats, dans une bulle blanche à cheval sur l'en-tête. Le **Direct** est un volet qui monte d'en bas (sa barre reste visible) ; son bouton est au bout de la bulle (Robin, 5/11 et 10/11).
 - Deux niveaux de navigation, pas plus. Le détail (fiche) glisse depuis la droite par-dessus le contenu, à toutes les largeurs, sans voile ; sur téléphone il monte du bas, avec un voile.
 
@@ -43,7 +43,7 @@ Une place par fonction, à tous les écrans :
 - **En tête de la carte du contenu** : à gauche l'action d'ajout en orange, puis les segments d'affichage ; à droite, dans cet ordre, l'alerte, le bouton Filtres (entonnoir), la recherche. Le « Voir » de l'alerte applique son filtre.
 - **Filtres** : tous dans le bouton Filtres et sa bulle (un groupe par critère) ; les filtres actifs dans le bouton, chacun avec sa croix. Les affichages (Tableau / Lignes / Carte, Liste / Frise, Contrôle / Ramassage, « Mettre en avant ») restent des segments.
 - **Bande du bas**, collée à la fenêtre : chiffres à gauche, actions de la page à droite.
-- Un seul bouton orange par écran, hors actions de ligne.
+- Un seul bouton orange par écran, hors actions de ligne : les boutons importants et souvent utilisés (Robin, 11/11).
 - Seul le contenu défile, et les titres d'un tableau restent en haut. Sur téléphone, c'est la page qui défile, jamais de côté ; la recherche est une loupe qui se déplie.
 - Un aspect = un usage : ne pas donner le même dessin à un affichage et à un filtre.
 - Rien ne change de taille tout seul (lecture, alerte, appareil) : place réservée.

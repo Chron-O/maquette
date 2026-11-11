@@ -395,7 +395,8 @@ export component App inherits Window {
             height: Theme.tab-bubble-height / 2 + Theme.settings-tab-height - Theme.settings-tab-tuck;
         }
         // A club page: no tabs, the Paramètres tab hangs under the header (brief zones-onglets).
-        if Navigation.cards-page || Navigation.stations-page || Navigation.runners-page: Rectangle {
+        // Coureurs et clubs has no Paramètres: its content starts right under the header (Robin, 11/11).
+        if Navigation.cards-page || Navigation.stations-page: Rectangle {
             vertical-stretch: 0;
             height: Theme.settings-tab-height;
         }
