@@ -9,7 +9,7 @@ import { PrimaryButton, QuietButton, SecondaryButton } from "../components/butto
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SheetTitle, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
 import { Cell, Title } from "participants.slint";
 import { ReaderTile, Readers } from "../components/reader-tile.slint";
@@ -708,10 +708,9 @@ export component StationsPage {
                 Sheet {
                     width: Theme.course-list-width;
                     VerticalLayout {
-                        padding: Theme.space-medium;   // as on Participants
+                        padding: Theme.button-margin;   // the reader close to the edges, as on Participants (Robin, 11/11)
                         alignment: start;
                         spacing: Theme.space;
-                        SheetTitle { text: "Lecture"; }
                         StationsReader { }
                         Rectangle { height: Theme.space; }
                         Tabs {

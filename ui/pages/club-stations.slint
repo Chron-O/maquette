@@ -7,7 +7,7 @@ import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { QuietButton, SecondaryButton, PrimaryButton } from "../components/buttons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SheetTitle, SideDetail } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
@@ -540,9 +540,8 @@ export component ClubStationsPage {
                 Sheet {
                     width: Theme.course-list-width;
                     VerticalLayout {
-                        padding: Theme.space-medium;   // as on Participants
+                        padding: Theme.button-margin;   // the reader close to the edges, as on Participants (Robin, 11/11)
                         spacing: Theme.space;
-                        SheetTitle { text: "Lecture"; }
                         ReadingBox { vertical-stretch: 0; }
                         ParkColumn {
                             vertical-stretch: 1;

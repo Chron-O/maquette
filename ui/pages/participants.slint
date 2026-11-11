@@ -545,10 +545,9 @@ export component ParticipantsPage {
                 Sheet {
                     width: Theme.course-list-width;
                     VerticalLayout {
-                        padding: Theme.space-medium;
+                        padding: Theme.button-margin;   // the reader close to the edges (Robin, 11/11)
                         spacing: Theme.space;
                         alignment: start;
-                        SheetTitle { text: "Lecture"; }
                         ReaderTile { reader: Readers.entry; }
                         Rectangle { height: Theme.space; }
                         SheetTitle { text: "Puces prêtées"; }
