@@ -360,13 +360,8 @@ impl StartsState {
                         index: i as i32,
                         name: course.name.as_str().into(),
                         tone: i as i32,
-                        chips: model(vec![
-                            format!("S{}", course.start_point).into(),
-                            course.categories.into(),
-                            "écart 2 min".into(),
-                            plural(entrants, "coureur").into(),
-                        ]),
-                        detail: format!("écart 2 min · {}", plural(entrants, "coureur")).into(),
+                        chips: model(vec!["Écart 2 min".into(), "Catégories mêlées".into(), "Ordre au hasard".into()]),
+                        detail: format!("S{} · {} · {}", course.start_point, course.categories, plural(entrants, "coureur")).into(),
                         rows: model(lines),
                     }
                 })

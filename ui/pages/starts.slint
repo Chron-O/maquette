@@ -8,7 +8,7 @@ import { Icons } from "../components/icons.slint";
 import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SettingRow, SettingsTab, SideDetail, Unfold, Zones } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
@@ -237,26 +237,105 @@ component SectionMenuButton {
     }
 }
 
+// The settings of one course's starts, in its Réglages tab: the rows of the Paramètres.
+component SectionSettings inherits VerticalLayout {
+    padding-top: Theme.space-small;
+    SettingRow {
+        label: "Écart dans ce circuit";
+        SmallText { text: "Comme tous : 2 min"; vertical-alignment: center; }
+    }
+    SettingRow {
+        label: "Catégories";
+        ChoiceSegments {
+            choices: ["Mêlées", "Alternées", "À la suite"];
+            active: 0;
+        }
+    }
+    SettingRow {
+        label: "Ordre";
+        SmallText { text: "Comme tous : au hasard"; vertical-alignment: center; }
+    }
+    SettingRow {
+        label: "Pas avant";
+        SmallText { text: "—"; vertical-alignment: center; }
+        VerticalLayout {
+            alignment: center;
+            SecondaryButton {
+                label: "Catégorie";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+        }
+    }
+    HorizontalLayout {
+        padding: Theme.space-medium;
+        padding-top: Theme.space;
+        padding-bottom: Theme.space-small;
+        alignment: start;
+        SecondaryButton { label: "Refaire le tirage de ce circuit"; }
+    }
+}
+
+// The head of one course's starts: its name and what it is, then its Réglages tab, which
+// unfolds over the rows (the same tab as the Paramètres of the page, Robin 11/11).
 component SectionHead inherits Rectangle {
     in property <StartSection> section;
     in property <bool> compact;
+    out property <bool> open: tab.open;
 
     background: Theme.page-background;
-    HorizontalLayout {
-        padding: Theme.space-small;
-        spacing: Theme.space;
-        SummaryZone {
-            horizontal-stretch: root.compact ? 1 : 0;
-            title: root.section.name;
-            chips: root.section.chips;
-            subtitle: root.section.detail;
-            tone: root.section.tone;
-            bubble: 9;
-            compact: root.compact;
-            opened => { Starts.bubble-section = root.section.index; }
+    VerticalLayout {
+        title := HorizontalLayout {
+            padding: Theme.space-small;
+            padding-left: Theme.space;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                CourseChip { tone: root.section.tone; }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                if !root.compact: HorizontalLayout {
+                    spacing: Theme.space;
+                    Text {
+                        text: root.section.name;
+                        color: Theme.text;
+                        font-size: Theme.text-block-title;
+                        font-weight: Theme.weight-block-title;
+                        vertical-alignment: center;
+                    }
+                    SmallText {
+                        horizontal-stretch: 1;
+                        text: root.section.detail;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.compact: Text {
+                    text: root.section.name;
+                    color: Theme.text;
+                    font-size: Theme.text-block-title;
+                    font-weight: Theme.weight-block-title;
+                    wrap: word-wrap;
+                }
+                if root.compact: SmallText { text: root.section.detail; }
+            }
+            SectionMenuButton { section: root.section.index; }
         }
-        if !root.compact: Rectangle { horizontal-stretch: 1; }
-        SectionMenuButton { section: root.section.index; }
+        RowLine { }
+        // The room of the tab's head.
+        Rectangle { height: Theme.settings-tab-height + Theme.space-small; }
+    }
+    tab := SettingsTab {
+        x: Theme.space;
+        y: title.height + Theme.thin-outline-width;
+        width: root.compact ? root.width - 2 * Theme.space
+            : min(root.width - 2 * Theme.space, max(Theme.bubble-width, self.wanted-width));
+        label: "Réglages";
+        summary: Zones.join(root.section.chips);
+        narrow: root.compact;
+        tuck: 0px;
+        SectionSettings { }
     }
 }
 
@@ -298,8 +377,10 @@ component StartsTable {
                 content-height: lines.preferred-height;
                 lines := VerticalLayout {
                     width: root.table-width;
-                    for section in Starts.sections: VerticalLayout {
-                        SectionHead { section: section; compact: !root.wide; }
+                    for section in Starts.sections: Rectangle {
+                      z: head.open ? 1 : 0;
+                      VerticalLayout {
+                        head := SectionHead { z: 1; section: section; compact: !root.wide; }
                         for row in section.rows: VerticalLayout {
                             RowLine { }
                             Rectangle {
@@ -357,6 +438,7 @@ component StartsTable {
                             }
                         }
                     }
+                  }
                 }
             }
         }
@@ -366,8 +448,10 @@ component StartsTable {
 // On a phone: the time › who and their state.
 component StartsList {
     VerticalLayout {
-        for section in Starts.sections: VerticalLayout {
-            SectionHead { section: section; compact: true; }
+        for section in Starts.sections: Rectangle {
+          z: head.open ? 1 : 0;
+          VerticalLayout {
+            head := SectionHead { z: 1; section: section; compact: true; }
             for row in section.rows: VerticalLayout {
                 RowLine { }
                 Rectangle {
@@ -431,6 +515,7 @@ component StartsList {
                 }
             }
         }
+      }
     }
 }
 
@@ -972,43 +1057,6 @@ export component StartsSettings {
     }
 }
 
-component SectionContent {
-    VerticalLayout {
-        padding: Theme.space-medium;
-        spacing: Theme.button-margin;
-        SettingRow {
-            label: "Écart dans ce circuit";
-            BubbleLabel { text: "Comme tous : 2 min"; wrap: no-wrap; }
-        }
-        BubbleLabel { text: "Catégories"; }
-        HorizontalLayout {
-            alignment: start;
-            ChoiceSegments {
-                choices: ["Mêlées", "Alternées", "À la suite"];
-                active: 0;
-            }
-        }
-        SettingRow {
-            label: "Ordre";
-            BubbleLabel { text: "Comme tous : au hasard"; wrap: no-wrap; }
-        }
-        SettingRow {
-            label: "Pas avant";
-            BubbleLabel { text: "—"; wrap: no-wrap; }
-            SecondaryButton {
-                label: "Catégorie";
-                icon: Icons.plus;
-                has-icon: true;
-            }
-        }
-        RowLine { }
-        HorizontalLayout {
-            alignment: start;
-            SecondaryButton { label: "Refaire le tirage de ce circuit"; }
-        }
-    }
-}
-
 component ChangesContent {
     VerticalLayout {
         padding: Theme.space-medium;
@@ -1055,7 +1103,6 @@ export component StartsBubble {
             close => { Courses.close-bubble(); }
         }
         if Courses.open-bubble == 8: ChangesContent { }
-        if Courses.open-bubble == 9: SectionContent { }
         if Courses.open-bubble == 23: VerticalLayout {
             padding-top: Theme.space-small;
             padding-bottom: Theme.space-small;
