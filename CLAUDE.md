@@ -29,7 +29,7 @@ Le code pourra servir de point de départ à l'app (à confirmer avec Severin) :
 ## Disposition adaptative
 La **largeur** décide de la disposition :
 - **Étroite** (< 600 px, téléphone) : ligne pavé › nom › temps ; fiche qui monte du bas ; onglets en icônes, mot sur l'actif seulement. La page défile sous l'en-tête ; dès qu'elle a défilé, l'en-tête se tasse (nom plus petit, indicateurs en 3 points, languette rangée sous la bulle) ; tout revient en haut de la page (Robin, 11/11).
-- **Moyenne** (600–1000 px, iPad portrait) : tableau allégé ; fiche par-dessus, à droite ; onglets avec libellés ; indicateurs à droite du nom de l'événement.
+- **Moyenne** (600–1000 px, iPad portrait) : tableau allégé ; fiche par-dessus, à droite ; onglets avec libellés ; indicateurs à droite du nom de l'événement s'il tient sur une ligne avec eux, sinon dessous, à droite (de même sur téléphone).
 - **Large** (> 1000 px, ordinateur, iPad paysage) : tableau complet ; fiche par-dessus, à droite ; onglets avec icône et mot ; nom et indicateurs dans la bande verte, au-dessus de la bulle (Robin, 11/11).
 
 L'**appareil** décide des tailles, indépendamment : tactile (iOS, Android, web sur téléphone) 48 px, souris 36 px.

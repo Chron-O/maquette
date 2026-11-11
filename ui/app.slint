@@ -40,7 +40,30 @@ component Header inherits Rectangle {
     in property <bool> compact;   // a phone, the page scrolled: smaller name, the indicators as dots
     in property <length> extra;   // a computer: room for the bubble's upper half, half of it on top
 
+    // A phone: a short event name shares its row with the indicators, when both fit on it
+    // (Robin, 11/11). Depends on the name only, never on what the indicators say.
+    // Same on iPad portrait: a name wrapped next to them would slip under the tab bubble.
+    property <bool> indicators-beside: root.layout-mode != LayoutMode.wide && Navigation.in-event
+        && name-probe.preferred-width + Theme.space-medium + indicators-probe.preferred-width
+            <= root.width - root.left-margin - root.right-margin - back-probe.preferred-width - Theme.space-medium;
+
     background: Theme.header;
+    // Measure the name on one line and the indicators; never shown.
+    name-probe := Text {
+        visible: false;
+        text: Navigation.header-title;
+        font-size: Theme.text-screen-title;
+        font-weight: Theme.weight-screen-title;
+    }
+    indicators-probe := HomeIndicators {
+        visible: false;
+        layout-mode: root.layout-mode;
+    }
+    back-probe := HeaderButton {
+        visible: false;
+        label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
+        arrow-only: root.layout-mode == LayoutMode.narrow;
+    }
     VerticalLayout {
         padding-top: root.top-margin + Theme.space + root.extra / 2;   // less room on top (Robin, 11/11)
         padding-bottom: Theme.space + root.extra;
@@ -88,18 +111,25 @@ component Header inherits Rectangle {
                 }
             }
             if root.compact: IndicatorDots { }
+            if root.indicators-beside && !root.compact: HomeIndicators {
+                horizontal-stretch: 0;
+                layout-mode: root.layout-mode;
+            }
             if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.wide: HomeIndicators {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
-            // iPad portrait: short, next to the name, so the header keeps one row (Robin, 11/11).
-            if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.medium: HomeIndicators {
+            // iPad portrait: next to the name when it fits, so the header keeps one row (Robin, 11/11).
+            if Navigation.home && root.layout-mode == LayoutMode.medium: HomeIndicators {
                 horizontal-stretch: 0;
                 layout-mode: root.layout-mode;
             }
         }
-        // A phone: the indicators under the name.
-        if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.narrow && !root.compact: HomeIndicators {
+        // A phone or iPad portrait: the indicators under the name, on the right, unless they fit
+        // beside it.
+        if ((Navigation.home && root.layout-mode == LayoutMode.narrow)
+            || (Navigation.in-event && root.layout-mode != LayoutMode.wide && !root.indicators-beside))
+            && !root.compact: HomeIndicators {
             layout-mode: root.layout-mode;
         }
     }
