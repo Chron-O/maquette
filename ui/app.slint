@@ -38,11 +38,11 @@ component Header inherits Rectangle {
     in property <length> right-margin;
     in property <length> top-margin;
     in property <bool> compact;   // a phone, the page scrolled: smaller name, the indicators as dots
-    in property <length> extra;   // a computer: room for the bubble's upper half, above and below
+    in property <length> extra;   // a computer: room for the bubble's upper half, half of it on top
 
     background: Theme.header;
     VerticalLayout {
-        padding-top: root.top-margin + Theme.space + root.extra;
+        padding-top: root.top-margin + Theme.space + root.extra / 2;   // less room on top (Robin, 11/11)
         padding-bottom: Theme.space + root.extra;
         padding-left: root.left-margin;
         padding-right: root.right-margin;
@@ -92,9 +92,20 @@ component Header inherits Rectangle {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
+            // iPad portrait: one above the other, next to the name, so the header keeps one row
+            // (Robin, 11/11).
+            if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.medium: VerticalLayout {
+                horizontal-stretch: 0;
+                alignment: center;
+                min-width: stack.preferred-width;
+                stack := HomeIndicators {
+                    layout-mode: root.layout-mode;
+                    stacked: true;
+                }
+            }
         }
-        // Narrower windows: the indicators under the name, which keeps its room (iPad portrait).
-        if (Navigation.home || Navigation.in-event) && root.layout-mode != LayoutMode.wide && !root.compact: HomeIndicators {
+        // A phone: the indicators under the name.
+        if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.narrow && !root.compact: HomeIndicators {
             layout-mode: root.layout-mode;
         }
     }
