@@ -117,7 +117,6 @@ export component ReaderTile inherits Rectangle {
 
     in property <ReaderInfo> reader;
     in property <bool> compact;          // the Direct, phones
-    in property <bool> on-dark;          // on the dark green Direct: a shadow does not show, so the outline
     in property <bool> with-result;      // the page shows what was read, under the two lines
     in property <bool> with-buttons;     // a question may come with what was read: its row is kept
     in property <ReaderState> state: ReaderState.waiting;
@@ -140,7 +139,7 @@ export component ReaderTile inherits Rectangle {
     background: root.unplugged ? Theme.reader-error-background : Theme.header;
     border-radius: Theme.card-radius;
     // Light: a clear shadow all around, no outline. Dark: the light green outline.
-    border-width: root.on-dark ? Theme.reader-state-outline-width : Theme.reader-outline-width;
+    border-width: Theme.reader-outline-width;
     border-color: root.accent;
     drop-shadow-blur: Theme.reader-shadow-blur;
     drop-shadow-color: Theme.reader-shadow;
@@ -244,6 +243,7 @@ export component BarReader inherits Rectangle {
     in property <ReaderInfo> reader;
     in property <string> label: root.reader.name;
     in property <bool> show-pin: true;
+    in property <bool> raised;   // on the light green Direct: dark, with its shadow, like the tiles
 
     property <bool> unplugged: root.reader.mode == ReaderMode.unplugged;
     property <bool> reading: root.reader.mode == ReaderMode.reading;
@@ -252,7 +252,9 @@ export component BarReader inherits Rectangle {
     height: Theme.reader-compact-icon + Theme.space;
     border-radius: Theme.reader-compact-radius;
     clip: true;
-    background: root.unplugged ? Theme.reader-error-background : Theme.direct-pill;
+    background: root.unplugged ? Theme.reader-error-background : root.raised ? Theme.reader-raised-pill : Theme.direct-pill;
+    drop-shadow-blur: root.raised ? Theme.reader-compact-shadow-blur : 0px;
+    drop-shadow-color: Theme.reader-shadow;
     border-width: Theme.reader-outline-width;
     border-color: root.unplugged ? Theme.reader-error : Theme.reader-ring;
     accessible-role: text;

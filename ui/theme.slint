@@ -319,6 +319,8 @@ export global Theme {
     out property <length> reader-shadow-blur: 24px;
     out property <color> reader-shadow: dark ? transparent : #16362866;
     out property <length> reader-compact-icon: 18px;
+    out property <length> reader-compact-shadow-blur: 10px;
+    out property <color> reader-raised-pill: dark ? #24352B : #163628;   // the bar readers on the light Direct
     out property <length> reader-compact-radius: 8px;   // a small tile, not a pill
     out property <length> reader-line-icon: 34px;   // prototype: compact tile
     // Full tile a bit taller than the prototype's 11 px (Robin), compact as .tile compact.
@@ -453,7 +455,13 @@ export global Theme {
     out property <length> live-small-time-size: 20px;
     out property <length> live-search-width: 280px;   // its placeholder whole (prototype: 260 px)
     out property <length> live-drain-height: 3px;
-    out property <color> live-drain-track: #FFFFFF1F;   // translucent white, on the green in both themes
+    out property <color> live-drain-track: dark ? #FFFFFF1F : #1636281F;
+    // The open Direct and its bar (Robin, 11/11): light green, so that the dark reader tiles stand
+    // out with their shadow, as in the side panels. Dark theme: as before, for now.
+    out property <color> live-drawer: dark ? #17241C : #DCEBE2;
+    out property <color> live-ink: dark ? #E8F0EA : #163628;
+    out property <color> live-ink-soft: dark ? #9FD9B8 : #2F4A3B;
+    out property <color> live-accent: dark ? #3DDC97 : #1F9D5B;   // the dot, the clock, « il y a »
     out property <duration> live-drain-step: reduced-motion ? 0ms : 1000ms;   // one tick of the race clock
     out property <length> live-narrow-time-size: 24px;
     out property <length> live-stop-step: 62px;

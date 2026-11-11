@@ -620,13 +620,13 @@ component DrainBar inherits Rectangle {
         // The race clock ticks every second: the bar slides between two ticks.
         animate width { duration: Theme.live-drain-step; easing: linear; }
         border-radius: parent.border-radius;
-        background: Theme.live;
+        background: Theme.live-accent;
     }
 }
 
 component WaitingText inherits Text {
     text: "En attente de la prochaine lecture";
-    color: Theme.reader-detail;
+    color: Theme.live-ink-soft;
     font-size: Theme.text-label;
     wrap: word-wrap;
 }
@@ -663,14 +663,14 @@ component BigReading {
                     alignment: center;
                     Text {
                         text: Live.last.name;
-                        color: Theme.header-text;
+                        color: Theme.live-ink;
                         font-size: Theme.text-screen-title;
                         font-weight: Theme.weight-screen-title;
                         wrap: word-wrap;
                     }
                     if Live.last.club != "": Text {
                         text: Live.last.club;
-                        color: Theme.reader-detail;
+                        color: Theme.live-ink-soft;
                         font-size: Theme.text-help;
                         wrap: word-wrap;
                     }
@@ -684,7 +684,7 @@ component BigReading {
                         }
                         Text {
                             text: Live.last.category + " · " + Live.last.age;
-                            color: Theme.reader-detail;
+                            color: Theme.live-ink-soft;
                             font-size: Theme.text-help;
                             wrap: word-wrap;
                         }
@@ -698,7 +698,7 @@ component BigReading {
                     }
                     Text {
                         text: Live.last.category;
-                        color: Theme.header-text;
+                        color: Theme.live-ink;
                         font-size: Theme.text-block-title;
                         font-weight: Theme.weight-screen-title;
                         vertical-alignment: center;
@@ -709,15 +709,15 @@ component BigReading {
                     TimeText {
                         time: Live.last.time;
                         crossed: Live.last.crossed;
-                        tone: Theme.header-text;
-                        crossed-tone: Theme.reader-detail;
+                        tone: Theme.live-ink;
+                        crossed-tone: Theme.live-ink-soft;
                         size: root.full ? Theme.live-time-size : Theme.live-narrow-time-size;
                         weight: Theme.weight-screen-title;
                         strike: Theme.time-strike-large;
                     }
                     if !root.full && Live.last.place != "" && Live.last.place != "—": Text {
                         text: Live.last.place;
-                        color: Theme.header-text;
+                        color: Theme.live-ink;
                         font-size: Theme.text-label;
                         font-weight: Theme.weight-screen-title;
                         horizontal-alignment: right;
@@ -725,7 +725,7 @@ component BigReading {
                 }
                 if root.full && Live.last.place != "" && Live.last.place != "—": Text {
                     text: Live.last.place;
-                    color: Theme.header-text;
+                    color: Theme.live-ink;
                     font-size: Theme.live-place-size;
                     font-weight: Theme.weight-screen-title;
                     vertical-alignment: center;
@@ -734,13 +734,13 @@ component BigReading {
                     alignment: center;
                     Text {
                         text: Live.last.age;
-                        color: Theme.live;
+                        color: Theme.live-accent;
                         font-size: Theme.text-help;
                         font-weight: Theme.weight-block-title;
                     }
                     Text {
                         text: Live.last.reader;
-                        color: Theme.reader-detail;
+                        color: Theme.live-ink-soft;
                         font-size: Theme.text-help;
                     }
                 }
@@ -785,7 +785,7 @@ component SmallReading {
                     alignment: center;
                     Text {
                         text: Live.last.name;
-                        color: Theme.header-text;
+                        color: Theme.live-ink;
                         font-size: Theme.live-small-name-size;
                         font-weight: Theme.weight-screen-title;
                         wrap: word-wrap;
@@ -795,7 +795,7 @@ component SmallReading {
                         spacing: Theme.space-small;
                         Text {
                             text: Live.last.category + " ·";
-                            color: Theme.reader-detail;
+                            color: Theme.live-ink-soft;
                             font-size: Theme.text-help;
                             vertical-alignment: center;
                         }
@@ -804,15 +804,15 @@ component SmallReading {
                             TimeText {
                                 time: Live.last.time;
                                 crossed: Live.last.crossed;
-                                tone: Theme.header-text;
-                                crossed-tone: Theme.reader-detail;
+                                tone: Theme.live-ink;
+                                crossed-tone: Theme.live-ink-soft;
                                 size: Theme.live-small-time-size;
                                 weight: Theme.weight-screen-title;
                             }
                         }
                         if Live.last.place != "" && Live.last.place != "—": Text {
                             text: "· " + Live.last.place;
-                            color: Theme.reader-detail;
+                            color: Theme.live-ink-soft;
                             font-size: Theme.text-help;
                             vertical-alignment: center;
                         }
@@ -1509,7 +1509,7 @@ component BarReading inherits HorizontalLayout {
     Text {
         horizontal-stretch: root.narrow ? 1 : 0;
         text: Live.last.name;
-        color: Theme.header-text;
+        color: Theme.live-ink;
         font-size: Theme.text-help;
         font-weight: Theme.weight-screen-title;
         vertical-alignment: center;
@@ -1517,7 +1517,7 @@ component BarReading inherits HorizontalLayout {
     }
     if !root.narrow: Text {
         text: Live.last.category;
-        color: Theme.reader-detail;
+        color: Theme.live-ink-soft;
         font-size: Theme.text-help;
         vertical-alignment: center;
     }
@@ -1526,13 +1526,13 @@ component BarReading inherits HorizontalLayout {
         TimeText {
             time: Live.last.time;
             crossed: Live.last.crossed;
-            tone: Theme.header-text;
-            crossed-tone: Theme.reader-detail;
+            tone: Theme.live-ink;
+            crossed-tone: Theme.live-ink-soft;
         }
     }
     if !root.narrow && Live.last.place != "" && Live.last.place != "—": Text {
         text: Live.last.place;
-        color: Theme.reader-detail;
+        color: Theme.live-ink-soft;
         font-size: Theme.text-help;
         vertical-alignment: center;
     }
@@ -1554,14 +1554,14 @@ component Fitting inherits Rectangle {
 }
 
 component SummaryFigure inherits Text {
-    color: Theme.header-text;
+    color: Theme.live-ink;
     font-size: Theme.text-help;
     font-weight: Theme.weight-screen-title;
     vertical-alignment: center;
 }
 
 component SummaryWords inherits Text {
-    color: Theme.reader-detail;
+    color: Theme.live-ink-soft;
     font-size: Theme.text-help;
     vertical-alignment: center;
 }
@@ -1586,13 +1586,13 @@ component DirectTitle inherits HorizontalLayout {
         alignment: center;
         LiveDot {
             size: Theme.direct-dot;
-            tone: Theme.live;
+            tone: Theme.live-accent;
             still: !Navigation.live-running;
         }
     }
     Text {
         text: "Direct";
-        color: Theme.header-text;
+        color: Theme.live-ink;
         font-size: Theme.text-label;
         font-weight: Theme.weight-block-title;
         vertical-alignment: center;
@@ -1636,7 +1636,7 @@ component WideBarLine inherits HorizontalLayout {
             padding-left: i > 0 ? Theme.space : 0px;
             VerticalLayout {
                 alignment: center;
-                BarReader { reader: reader; }
+                BarReader { reader: reader; raised: true; }
             }
         }
     }
@@ -1671,7 +1671,7 @@ export component LiveBar inherits Rectangle {
     property <bool> has-alert: Live.alert-title != "";
     property <length> second-height: root.narrow ? Theme.live-open-row-narrow-height : Theme.live-open-row-height;
 
-    background: Theme.direct-background;
+    background: Theme.live-drawer;
     border-top-left-radius: Theme.card-radius;
     border-top-right-radius: Theme.card-radius;
     drop-shadow-offset-y: Theme.live-bar-shadow-offset;
@@ -1712,6 +1712,7 @@ export component LiveBar inherits Rectangle {
             if !root.open && !root.live && !root.has-alert && Readers.finish.length > 0: VerticalLayout {
                 alignment: center;
                 BarReader {
+                    raised: true;
                     reader: Readers.finish[0];
                     label: Readers.finish.length + (Readers.finish.length > 1 ? " lecteurs" : " lecteur");
                     show-pin: false;
@@ -1727,7 +1728,8 @@ export component LiveBar inherits Rectangle {
                 duration: Theme.drawer-duration;
                 easing: cubic-bezier(0.3, 0.8, 0.3, 1);
             }
-            clip: true;
+            // Cut only while it moves: open, the reader tiles' shadows go past its edges.
+            clip: self.height < root.second-height;
             TouchArea { }
             if !root.narrow: HorizontalLayout {
                 y: 0;
@@ -1741,7 +1743,6 @@ export component LiveBar inherits Rectangle {
                     for reader in Readers.finish: ReaderTile {
                         reader: reader;
                         compact: true;
-                        on-dark: true;
                     }
                 }
                 BigReading { horizontal-stretch: 1; }
@@ -1756,6 +1757,7 @@ export component LiveBar inherits Rectangle {
                     spacing: Theme.space;
                     // Equal shares of the width: a state word never widens one reader.
                     for reader in Readers.finish: BarReader {
+                        raised: true;
                         horizontal-stretch: 1;
                         preferred-width: 0px;
                         reader: reader;
