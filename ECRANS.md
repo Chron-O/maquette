@@ -31,6 +31,7 @@ Appliqué aux écrans 2 à 10 : bulle d'onglets à cheval sur l'en-tête, langue
 - **Circuits sur téléphone** : Tableau / Lignes passent sous l'action, une seule ligne débordait de l'écran.
 - **En-tête tassé sur téléphone** (Robin, 11/11) : la page défile sous l'en-tête et la bulle ; une fois qu'elle a défilé, le nom passe en plus petit, les indicateurs deviennent 3 points et la languette se range sous la bulle ; tout revient en haut de la page seulement. Écart avec la charte : les 3 points sont de la couleur seule (choix de Robin) ; leur état reste lu par les lecteurs d'écran. Capture : `03-participants-phone-scrolled`.
 - **En-tête sur ordinateur** : nom et indicateurs dans la bande verte, à 8 px au moins de la bulle, avec moins de vide en haut (Robin, 11/11).
+- **Bulles des indicateurs** (Robin, 11/11, d'après le prototype 06 et 07) : un clic sur une pastille ouvre sa bulle, collée à elle. Lecteurs : un lecteur par ligne (usage, n°, course, état, épingle), dépliable pour choisir l'usage et la course (le nom suit : Arrivée 1, Arrivée 2…). Rôle et appareils : cet appareil, les appareils reliés (état, « ··· » pour le rôle et « Retirer de la course »), la demande d'un appareil avec son mot, Refuser ou Accepter. Écrans publics : un écran par ligne, Activer / Désactiver, dépliable pour le contenu, l'aperçu de ce qu'il montre et ses réglages ; « + Fenêtre ». Tout prend effet aussitôt. Sans effet pour l'instant : « Ajouter un appareil », « Affichage », « Départ suivi », « Appel avant le départ ». Sur une bulle étroite, les longs choix passent un par ligne.
 - **Indicateurs courts** (Robin, 11/11) : icône, point et nombre seulement (« 4 », « 1 », « 0 »), sur tous les écrans ; la phrase entière reste pour les lecteurs d'écran. Écart avec la règle « icône + mot ». Sur téléphone et iPad portrait, ils sont à droite du nom quand le nom tient sur une ligne avec eux ; sinon sous le nom, alignés à droite (un nom coupé en deux lignes à côté d'eux glissait sous la bulle).
 - **Boîtiers** : « Boîtier spécial » en orange (Robin, 11/11 : l'orange va aux boutons importants et souvent utilisés). Contrôle / Ramassage reste un affichage, dans le volet.
 - **Circuits** : pas de filtre ; « Mettre en avant » reste un affichage. Les réglages d'un circuit restent dans sa carte.
@@ -65,7 +66,7 @@ Appliqué aux écrans 2 à 10 : bulle d'onglets à cheval sur l'en-tête, langue
 - **Disposition moyenne** : absente du prototype, proposée ici. Carte blanche et Direct côte à côte dès 760 px.
 - **Téléphone** : Direct sous la carte blanche, sans le chevauchement du prototype.
 - **« 2 à traiter ›** ouvre l'onglet Direct ; le prototype ouvre un tiroir, qui n'existe pas ici (voir écran 6).
-- **Sans effet pour l'instant** : Rejoindre, Nouvel événement, Voir tous, indicateurs.
+- **Sans effet pour l'instant** : Rejoindre, Nouvel événement, Voir tous.
 
 ## 2 — Circuits
 - « Tous les postes » : liste des circuits, Tableau / Lignes / Carte, tri, recherche, « Mettre en avant », fiche du poste.

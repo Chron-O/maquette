@@ -22,7 +22,7 @@ mod test_data;
 
 use device::Device;
 use navigation::Navigator;
-use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
@@ -683,6 +683,24 @@ fn connect_readers(window: &App, state: &Rc<RefCell<AppState>>) {
     equipment.on_accept_request(move || accept(0));
     let refuse = on_reader(window, state, |data, _| data.refuse_request());
     equipment.on_refuse_request(move || refuse(0));
+    // The screens' bubble.
+    equipment.on_toggle_screen(on_reader(window, state, Generated::toggle_screen));
+    equipment.on_set_content(on_choice(window, state, Generated::set_screen_content));
+    equipment.on_remove_window(on_reader(window, state, Generated::remove_window));
+    equipment.on_next_reader(on_choice(window, state, Generated::next_screen_reader));
+    equipment.on_toggle_setting(on_choice(window, state, Generated::toggle_screen_setting));
+    let add = on_reader(window, state, |data, _| {
+        data.add_window();
+    });
+    let weak = window.as_weak();
+    equipment.on_add_window(move || {
+        add(0);
+        // The new window unfolds, to choose what it shows.
+        if let Some(window) = weak.upgrade() {
+            let equipment = window.global::<Equipment>();
+            equipment.set_open_screen(equipment.get_screens().row_count() as i32 - 1);
+        }
+    });
     let unplug = on_reader(window, state, Generated::toggle_unplugged);
     window.global::<Demo>().on_toggle_unplugged(move || unplug(0));
 }

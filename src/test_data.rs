@@ -400,6 +400,26 @@ pub struct DeviceRequest {
     pub word: &'static str,
 }
 
+// A public screen plugged into this device, or a free window (prototype: W.E).
+pub struct PublicScreen {
+    pub name: String,
+    pub size: Option<&'static str>,   // None: a free window
+    pub on: bool,
+    pub content: usize,               // in SCREEN_CONTENTS
+    pub readers: [Option<usize>; 2],  // reading: the readers shown left and right
+    pub provisional: bool,            // reading: the provisional ranking
+    pub names: bool,                  // start clock: the starters' names
+    pub beeps: bool,                  // start clock: beeps at −10 s, −5 s and the top
+}
+
+pub const SCREEN_CONTENTS: [&str; 4] = ["Lecture de puce", "Horloge de départ", "Entrée du sas", "Résultats"];
+
+impl PublicScreen {
+    fn new(name: String, size: Option<&'static str>, on: bool, content: usize) -> Self {
+        PublicScreen { name, size, on, content, readers: [Some(0), Some(1)], provisional: true, names: true, beeps: true }
+    }
+}
+
 pub const DEVICE_ROLES: [&str; 5] = ["GEC", "Départ", "Arrivée", "Poste radio", "Écran public"];
 const CHECK_WORDS: [&str; 4] = ["SAPIN", "CHÊNE", "BOULEAU", "ÉRABLE"];
 
@@ -434,7 +454,7 @@ pub struct Generated {
     pub station_parks: Vec<StationPark>,
     pub devices: Vec<LinkedDevice>,
     pub request: Option<DeviceRequest>,   // a device asking to join the course
-    pub screens: u32,
+    pub screens: Vec<PublicScreen>,
     today: u32,
     clock_seconds: u32,
     next_reading: u32,
@@ -1312,6 +1332,12 @@ impl Generated {
                 waiting: Some(random.between(2, 8)),
             },
         ];
+        // Two screens plugged in (sometimes only one showing), and a free window, closed.
+        let screens = vec![
+            PublicScreen::new("Télé HDMI".into(), Some("1920 × 1080"), true, 0),
+            PublicScreen::new("Écran USB-C".into(), Some("1280 × 720"), random.below(2) == 1, 1),
+            PublicScreen::new("Fenêtre 1".into(), None, false, 2),
+        ];
         let request = (random.below(2) == 1).then(|| DeviceRequest {
             kind: DeviceKind::Tablet,
             name: format!("Tablette de {}", random.pick(&FIRST_NAMES)),
@@ -1330,7 +1356,7 @@ impl Generated {
             station_parks,
             devices,
             request,
-            screens: random.below(3),
+            screens,
             today,
             clock_seconds,
             next_reading: clock_seconds + 3,
@@ -1431,6 +1457,56 @@ impl Generated {
     pub fn remove_device(&mut self, device: usize) {
         if device < self.devices.len() {
             self.devices.remove(device);
+        }
+    }
+
+    pub fn toggle_screen(&mut self, screen: usize) {
+        if let Some(screen) = self.screens.get_mut(screen) {
+            screen.on = !screen.on;
+        }
+    }
+
+    // Choosing a content shows it at once (prototype: « Choisir un contenu le diffuse aussitôt »).
+    pub fn set_screen_content(&mut self, screen: usize, content: usize) {
+        if let Some(screen) = self.screens.get_mut(screen) {
+            screen.content = content.min(SCREEN_CONTENTS.len() - 1);
+            screen.on = true;
+        }
+    }
+
+    // « + Fenêtre »: a free window, showing the reading.
+    pub fn add_window(&mut self) -> usize {
+        let number = self.screens.iter().filter(|s| s.size.is_none()).count() + 1;
+        self.screens.push(PublicScreen::new(format!("Fenêtre {number}"), None, true, 0));
+        self.screens.len() - 1
+    }
+
+    pub fn remove_window(&mut self, screen: usize) {
+        if self.screens.get(screen).is_some_and(|s| s.size.is_none()) {
+            self.screens.remove(screen);
+        }
+    }
+
+    // The reader shown on one side of a reading screen: the next one, then none.
+    pub fn next_screen_reader(&mut self, screen: usize, side: usize) {
+        let readers = self.readers.len();
+        if let Some(slot) = self.screens.get_mut(screen).and_then(|s| s.readers.get_mut(side)) {
+            *slot = match *slot {
+                None => Some(0),
+                Some(r) if r + 1 < readers => Some(r + 1),
+                Some(_) => None,
+            };
+        }
+    }
+
+    // A switch of a screen: 0 provisional ranking, 1 starters' names, 2 beeps.
+    pub fn toggle_screen_setting(&mut self, screen: usize, setting: usize) {
+        if let Some(screen) = self.screens.get_mut(screen) {
+            match setting {
+                0 => screen.provisional = !screen.provisional,
+                1 => screen.names = !screen.names,
+                _ => screen.beeps = !screen.beeps,
+            }
         }
     }
 

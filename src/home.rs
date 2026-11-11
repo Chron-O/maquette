@@ -98,7 +98,8 @@ fn club_cards(data: Option<&Generated>) -> Vec<ClubCard> {
 
 fn indicators(window: &App, data: Option<&Generated>) -> Vec<IndicatorItem> {
     let icons = window.global::<Icons>();
-    let (readers, screens) = data.map_or((0, 0), |d| (d.readers.len() as u32, d.screens));
+    let readers = data.map_or(0, |d| d.readers.len() as u32);
+    let screens = data.map_or(0, |d| d.screens.iter().filter(|s| s.on).count() as u32);
     let asking = data.is_some_and(|d| d.request.is_some());
     let devices = data.map_or(0, |d| d.devices.len() as u32);
     let offline = data.map_or(0, |d| d.devices.iter().filter(|x| x.waiting.is_some()).count() as u32);

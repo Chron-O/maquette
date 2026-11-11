@@ -8,7 +8,8 @@ import { ReaderInfo, ReaderMode, Readers } from "../components/reader-tile.slint
 import { ChoiceSegments } from "../components/choice-segments.slint";
 import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
 import { Status, StatusBadge } from "../components/status.slint";
-import { BubbleFrame, Courses, RowLine } from "courses.slint";
+import { BubbleFrame, Courses, RowLine, Switch } from "courses.slint";
+import { ReaderRings } from "../components/dot.slint";
 
 export struct EquipmentReader {
     info: ReaderInfo,
@@ -24,6 +25,33 @@ export struct LinkedDeviceRow {
     role-choice: int,    // in Equipment.roles
     offline: bool,
     state: string,       // « Synchronisé », « Hors ligne · 6 en attente »
+}
+
+export struct PublicScreenRow {
+    name: string,
+    detail: string,      // « 1920 × 1080 · plein écran », « fenêtre libre »
+    window: bool,
+    on: bool,
+    content: int,        // in Equipment.contents
+    left: string,        // reading: the readers shown, « Aucun »
+    right: string,
+    left-index: int,     // their index in the readers; -1: none
+    right-index: int,
+    provisional: bool,
+    names: bool,
+    beeps: bool,
+}
+
+// What the screens show now, for their previews.
+export struct ScreenPreview {
+    reading: bool,       // a card was just read
+    reader: int,         // the reader it was read on
+    name: string,
+    category: string,
+    time: string,
+    place: string,
+    clock: string,       // the time of day, with seconds
+    starters: [string],  // « 10:42 · DUPONT Ana »
 }
 
 export global Equipment {
@@ -47,6 +75,19 @@ export global Equipment {
     callback refuse-request();
     callback set-device-role(int, int);
     callback remove-device(int);
+
+    // Public screens.
+    in property <[PublicScreenRow]> screens;
+    in property <[string]> contents;   // Lecture de puce, Horloge de départ, Entrée du sas, Résultats
+    in property <ScreenPreview> preview;
+    in property <string> start-point;   // the start the clock and the entry follow
+    in-out property <int> open-screen: -1;
+    callback toggle-screen(int);
+    callback set-content(int, int);       // screen, content
+    callback add-window();
+    callback remove-window(int);
+    callback next-reader(int, int);       // screen, side
+    callback toggle-setting(int, int);    // screen: 0 provisional ranking, 1 names, 2 beeps
 
     public pure function device-icon(kind: int) -> image {
         if kind == 0 {
@@ -137,6 +178,7 @@ component ChoiceLine {
     in property <string> label;
     in property <[string]> choices;
     in property <int> active;
+    in property <bool> stacked;   // a narrow bubble: one choice per line
 
     VerticalLayout {
         spacing: Theme.space-small;
@@ -146,6 +188,7 @@ component ChoiceLine {
             ChoiceSegments {
                 choices: root.choices;
                 active: root.active;
+                stacked: root.stacked;
                 clicked(i) => { root.clicked(i); }
             }
         }
@@ -157,6 +200,8 @@ component ReaderRow inherits Rectangle {
     in property <EquipmentReader> reader;
 
     property <bool> open: Equipment.open-reader == root.reader.info.index;
+    // The text's width, given: a name on two lines is then counted on two lines.
+    property <length> middle: root.width - 2 * Theme.space-medium - 2 * Theme.button-icon - Theme.zone - 3 * Theme.button-margin;
 
     background: root.open ? Theme.page-background : transparent;
     VerticalLayout {
@@ -179,7 +224,7 @@ component ReaderRow inherits Rectangle {
                     }
                 }
                 VerticalLayout {
-                    horizontal-stretch: 1;
+                    width: root.middle;
                     alignment: center;
                     spacing: Theme.space-small;
                     Text {
@@ -205,7 +250,7 @@ component ReaderRow inherits Rectangle {
             }
             TouchArea {
                 // Leaves the pin its own clicks.
-                width: parent.width - Theme.zone - Theme.button-icon - 2 * Theme.button-margin;
+                width: Theme.button-icon + Theme.button-margin + root.middle;
                 x: 0;
                 mouse-cursor: pointer;
                 clicked => { Equipment.open-reader = root.open ? -1 : root.reader.info.index; }
@@ -214,13 +259,14 @@ component ReaderRow inherits Rectangle {
         if root.open: VerticalLayout {
             spacing: Theme.button-margin;
             ChoiceLine {
-                label: "Usage";
+                label: "Usage";   // short words: one row, which fits a phone
                 choices: Equipment.usages;
                 active: root.reader.usage;
                 clicked(i) => { Equipment.set-usage(root.reader.info.index, i); }
             }
             ChoiceLine {
                 label: "Course";
+                stacked: root.width < Theme.bubble-narrow-below;
                 choices: Equipment.courses;
                 active: root.reader.course-choice;
                 clicked(i) => { Equipment.set-course(root.reader.info.index, i); }
@@ -272,6 +318,8 @@ component ReadersContent {
 
 // The device asking to join: who, the role it asks for, the word it shows; refuse or accept.
 component RequestRow inherits Rectangle {
+    property <length> middle: root.width - 2 * Theme.space-medium - Theme.button-icon - refuse.preferred-width - accept.preferred-width - 3 * Theme.button-margin;
+
     background: Theme.to-check.badge-background;
     HorizontalLayout {
         padding-left: Theme.space-medium;
@@ -289,7 +337,7 @@ component RequestRow inherits Rectangle {
             }
         }
         VerticalLayout {
-            horizontal-stretch: 1;
+            width: root.middle;
             alignment: center;
             spacing: Theme.space-small;
             Text {
@@ -308,14 +356,14 @@ component RequestRow inherits Rectangle {
         }
         VerticalLayout {
             alignment: center;
-            SecondaryButton {
+            refuse := SecondaryButton {
                 label: "Refuser";
                 clicked => { Equipment.refuse-request(); }
             }
         }
         VerticalLayout {
             alignment: center;
-            PrimaryButton {
+            accept := PrimaryButton {
                 label: "Accepter";
                 in-row: true;
                 clicked => { Equipment.accept-request(); }
@@ -330,6 +378,7 @@ component DeviceRow inherits Rectangle {
     in property <int> index;
 
     property <bool> open: Equipment.open-device == root.index;
+    property <length> middle: root.width - 2 * Theme.space-medium - Theme.button-icon - max(Theme.small-button-width, more.preferred-width) - 2 * Theme.button-margin;
 
     background: root.open ? Theme.page-background : transparent;
     VerticalLayout {
@@ -351,7 +400,7 @@ component DeviceRow inherits Rectangle {
                 }
             }
             VerticalLayout {
-                horizontal-stretch: 1;
+                width: root.middle;
                 alignment: center;
                 spacing: Theme.space-small;
                 Text {
@@ -368,7 +417,7 @@ component DeviceRow inherits Rectangle {
             }
             VerticalLayout {
                 alignment: center;
-                MoreButton {
+                more := MoreButton {
                     open: false;
                     clicked => { Equipment.open-device = root.open ? -1 : root.index; }
                 }
@@ -376,6 +425,7 @@ component DeviceRow inherits Rectangle {
         }
         if root.open: ChoiceLine {
             label: "Rôle";
+            stacked: root.width < Theme.bubble-narrow-below;
             choices: Equipment.roles;
             active: root.device.role-choice;
             clicked(i) => { Equipment.set-device-role(root.index, i); }
@@ -470,6 +520,383 @@ component DevicesContent {
     }
 }
 
+// A miniature of a public screen: what it shows now (prototype: preview).
+component ScreenMiniature inherits Rectangle {
+    in property <PublicScreenRow> screen;
+
+    property <ScreenPreview> p: Equipment.preview;
+
+    width: Theme.screen-preview-width;
+    height: Theme.screen-preview-height;
+    border-radius: Theme.screen-preview-radius;
+    border-width: Theme.screen-preview-outline;
+    border-color: Theme.screen-preview-frame;
+    background: root.screen.on ? Theme.header : Theme.screen-preview-frame;   // off: black
+    clip: true;
+
+    // Reading: one half per reader followed; the card just read on its side.
+    if root.screen.on && root.screen.content == 0: HorizontalLayout {
+        padding: Theme.screen-preview-outline + Theme.space-small;
+        spacing: Theme.space-small;
+        for side in 2: Rectangle {
+            visible: (side == 0 ? root.screen.left : root.screen.right) != "Aucun";
+            border-radius: Theme.space-small;
+            background: Theme.preview-half;
+            if root.p.reading && root.p.reader == (side == 0 ? root.screen.left-index : root.screen.right-index): VerticalLayout {
+                alignment: center;
+                padding: Theme.space-small;
+                Text {
+                    text: root.p.name;
+                    color: Theme.header-text;
+                    font-size: Theme.preview-text;
+                    font-weight: Theme.weight-block-title;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.p.category;
+                    color: Theme.reader-detail;
+                    font-size: Theme.preview-text;
+                }
+                HorizontalLayout {
+                    spacing: Theme.space-small;
+                    Text {
+                        text: root.p.time;
+                        color: Theme.header-text;
+                        font-size: Theme.preview-big;
+                        font-weight: Theme.weight-screen-title;
+                    }
+                    Text {
+                        text: root.p.place;
+                        color: Theme.header-text;
+                        font-size: Theme.preview-title;
+                        font-weight: Theme.weight-screen-title;
+                        vertical-alignment: bottom;
+                    }
+                }
+            }
+            if !(root.p.reading && root.p.reader == (side == 0 ? root.screen.left-index : root.screen.right-index)): VerticalLayout {
+                alignment: center;
+                spacing: Theme.space-small;
+                HorizontalLayout {
+                    alignment: center;
+                    ReaderRings { size: Theme.preview-rings; }
+                }
+                Text {
+                    text: "Insérez votre puce";
+                    color: Theme.header-text;
+                    font-size: Theme.preview-text;
+                    font-weight: Theme.weight-block-title;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+    // Start clock, entry to the start: the time, then the next starters.
+    if root.screen.on && (root.screen.content == 1 || root.screen.content == 2): VerticalLayout {
+        padding: Theme.screen-preview-outline + Theme.space;
+        spacing: Theme.space-small;
+        alignment: center;
+        Text {
+            text: root.screen.content == 1 ? root.p.clock : "Appel au départ";
+            color: Theme.header-text;
+            font-size: root.screen.content == 1 ? Theme.preview-big : Theme.preview-title;
+            font-weight: Theme.weight-screen-title;
+            horizontal-alignment: center;
+        }
+        if root.screen.content == 2 || root.screen.names: VerticalLayout {
+            for starter in root.p.starters: Text {
+                text: starter;
+                color: Theme.reader-detail;
+                font-size: Theme.preview-text;
+                horizontal-alignment: center;
+            }
+        }
+    }
+    if root.screen.on && root.screen.content == 3: Text {
+        text: "Résultats · à définir";
+        color: Theme.reader-detail;
+        font-size: Theme.preview-title;
+    }
+}
+
+// A value to change, in the settings of a screen.
+component ValueChip inherits Rectangle {
+    callback clicked();
+    in property <string> text;
+
+    min-height: Theme.zone;
+    min-width: label.preferred-width + 2 * Theme.button-margin;
+    accessible-role: button;
+    accessible-label: root.text;
+    Rectangle {
+        height: Theme.choice-height;
+        border-radius: Theme.choice-radius;
+        background: zone.has-hover ? Theme.choice-hover : Theme.choice-background;
+        border-width: Theme.thin-outline-width;
+        border-color: Theme.choice-outline;
+    }
+    label := Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-block-title;
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A setting of a screen: its name, then its value.
+component ScreenSetting inherits HorizontalLayout {
+    in property <string> label;
+
+    spacing: Theme.space;
+    Text {
+        horizontal-stretch: 1;
+        text: root.label;
+        color: Theme.text-secondary;
+        font-size: Theme.text-help;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    @children
+}
+
+// The settings of a screen, by content (prototype: screenSettings).
+component ScreenSettings {
+    in property <PublicScreenRow> screen;
+    in property <int> index;
+
+    VerticalLayout {
+        if root.screen.content == 0: VerticalLayout {
+            ScreenSetting {
+                label: "Boîtiers suivis";
+                VerticalLayout {
+                    ValueChip {
+                        text: "Gauche : " + root.screen.left;
+                        clicked => { Equipment.next-reader(root.index, 0); }
+                    }
+                    ValueChip {
+                        text: "Droite : " + root.screen.right;
+                        clicked => { Equipment.next-reader(root.index, 1); }
+                    }
+                }
+            }
+            ScreenSetting {
+                label: "Classement provisoire";
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        on: root.screen.provisional;
+                        TouchArea { clicked => { Equipment.toggle-setting(root.index, 0); } }
+                    }
+                }
+            }
+        }
+        if root.screen.content == 1: VerticalLayout {
+            ScreenSetting {
+                label: "Noms des partants";
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        on: root.screen.names;
+                        TouchArea { clicked => { Equipment.toggle-setting(root.index, 1); } }
+                    }
+                }
+            }
+            ScreenSetting {
+                label: "Bips −10 s, −5 s, top";
+                VerticalLayout {
+                    alignment: center;
+                    Switch {
+                        on: root.screen.beeps;
+                        TouchArea { clicked => { Equipment.toggle-setting(root.index, 2); } }
+                    }
+                }
+            }
+        }
+        if root.screen.content == 1 || root.screen.content == 2: ScreenSetting {
+            label: "Départ suivi";
+            ValueChip { text: Equipment.start-point; }
+        }
+        if root.screen.content == 2: ScreenSetting {
+            label: "Appel avant le départ";
+            ValueChip { text: "3 min"; }
+        }
+        if root.screen.content == 3: BubbleNote { text: "Réglages des résultats : à définir ensemble."; }
+    }
+}
+
+// A public screen: its name and size, whether it shows something, Activer or Désactiver.
+// A click unfolds its content, its preview and its settings.
+component ScreenRow inherits Rectangle {
+    in property <PublicScreenRow> screen;
+    in property <int> index;
+    in property <bool> stacked;   // a narrow bubble: the settings under the preview
+
+    property <bool> open: Equipment.open-screen == root.index;
+    // The text's width, given: a name on two lines is then counted on two lines.
+    property <length> middle: root.width - 2 * Theme.space-medium - 2 * Theme.button-icon - toggle.preferred-width - 3 * Theme.button-margin;
+
+    background: root.open ? Theme.page-background : transparent;
+    VerticalLayout {
+        padding-left: Theme.space-medium;
+        padding-right: Theme.space-medium;
+        padding-bottom: root.open ? Theme.space-medium : 0px;
+        spacing: Theme.space;
+        Rectangle {
+            HorizontalLayout {
+                padding-top: Theme.space;
+                padding-bottom: root.open ? 0px : Theme.space;
+                spacing: Theme.button-margin;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: root.screen.window ? Icons.app-window : Icons.tv;
+                        colorize: Theme.text-secondary;
+                        width: Theme.button-icon;
+                        height: Theme.button-icon;
+                    }
+                }
+                VerticalLayout {
+                    width: root.middle;
+                    alignment: center;
+                    spacing: Theme.space-small;
+                    Text {
+                        text: root.screen.name + " · " + root.screen.detail;
+                        color: Theme.text;
+                        font-size: Theme.text-help;
+                        font-weight: Theme.weight-block-title;
+                        wrap: word-wrap;
+                    }
+                    FlexboxLayout {
+                        min-width: root.middle;
+                        spacing-horizontal: Theme.space;
+                        StatusBadge {
+                            status: root.screen.on ? { word: "Diffuse", state: Theme.valid, icon: Icons.check }
+                                : { word: "Désactivé", state: Theme.inactive, icon: Icons.x };
+                        }
+                        if root.screen.on: Text {
+                            text: Equipment.contents[root.screen.content];
+                            color: Theme.text-secondary;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    toggle := SecondaryButton {
+                        label: root.screen.on ? "Désactiver" : "Activer";
+                        clicked => { Equipment.toggle-screen(root.index); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    UnfoldMark { open: root.open; }
+                }
+            }
+            TouchArea {
+                x: 0;
+                width: Theme.button-icon + Theme.button-margin + root.middle;
+                mouse-cursor: pointer;
+                clicked => { Equipment.open-screen = root.open ? -1 : root.index; }
+            }
+        }
+        if root.open: ChoiceLine {
+            label: "Contenu";
+            stacked: root.width < Theme.bubble-narrow-below;
+            choices: Equipment.contents;
+            active: root.screen.content;
+            clicked(i) => { Equipment.set-content(root.index, i); }
+        }
+        if root.open && !root.stacked: HorizontalLayout {
+            spacing: Theme.space-medium;
+            VerticalLayout {
+                spacing: Theme.space-small;
+                alignment: start;
+                ScreenMiniature { screen: root.screen; }
+                BubbleNote {
+                    width: Theme.screen-preview-width;
+                    text: root.screen.on ? "Ce que montre l'écran en ce moment" : "Désactivé : l'écran ne montre rien";
+                }
+            }
+            ScreenSettings {
+                horizontal-stretch: 1;
+                screen: root.screen;
+                index: root.index;
+            }
+        }
+        if root.open && root.stacked: VerticalLayout {
+            spacing: Theme.space-small;
+            HorizontalLayout {
+                alignment: start;
+                ScreenMiniature { screen: root.screen; }
+            }
+            BubbleNote { text: root.screen.on ? "Ce que montre l'écran en ce moment" : "Désactivé : l'écran ne montre rien"; }
+            ScreenSettings {
+                screen: root.screen;
+                index: root.index;
+            }
+        }
+        if root.open && root.screen.window: HorizontalLayout {
+            alignment: start;
+            SecondaryButton {
+                label: "Supprimer la fenêtre";
+                danger: true;
+                clicked => {
+                    Equipment.open-screen = -1;
+                    Equipment.remove-window(root.index);
+                }
+            }
+        }
+    }
+}
+
+component ScreensContent {
+    property <bool> stacked: root.width < Theme.bubble-narrow-below;
+
+    VerticalLayout {
+        padding-top: Theme.space-medium;
+        padding-bottom: Theme.space-medium;
+        spacing: Theme.space;
+        HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                BubbleTitle { text: "Écrans publics"; }
+            }
+            SecondaryButton {
+                label: "Fenêtre";
+                icon: Icons.plus;
+                has-icon: true;
+                clicked => { Equipment.add-window(); }
+            }
+        }
+        VerticalLayout {
+            for screen[i] in Equipment.screens: VerticalLayout {
+                RowLine { }
+                ScreenRow {
+                    screen: screen;
+                    index: i;
+                    stacked: root.stacked;
+                }
+            }
+        }
+        VerticalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            BubbleNote {
+                text: "Les écrans branchés apparaissent tout seuls. Choisir un contenu le diffuse aussitôt, en plein écran sur cet écran. « + Fenêtre » ouvre une fenêtre libre, à placer où on veut.";
+            }
+        }
+    }
+}
+
 // The bubble of an indicator, joined to its pill.
 export component EquipmentBubble {
     in property <length> margin;
@@ -481,5 +908,6 @@ export component EquipmentBubble {
         wanted-width: Theme.equipment-bubble-width;
         if Courses.open-bubble == 31: ReadersContent { }
         if Courses.open-bubble == 32: DevicesContent { }
+        if Courses.open-bubble == 33: ScreensContent { }
     }
 }

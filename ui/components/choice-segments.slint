@@ -49,13 +49,28 @@ export component ChoiceSegments {
     callback clicked(int);
     in property <[string]> choices;
     in property <int> active: -1;
+    // One per line, on the left (a phone's bubble): long choices never pass the edge.
+    in property <bool> stacked;
 
-    HorizontalLayout {
-        spacing: Theme.space-small;
-        for choice[i] in root.choices: Segment {
-            label: choice;
-            active: i == root.active;
-            clicked => { root.clicked(i); }
+    // A layout around the two `if`, so their size reaches the parent.
+    VerticalLayout {
+        if !root.stacked: HorizontalLayout {
+            spacing: Theme.space-small;
+            for choice[i] in root.choices: Segment {
+                label: choice;
+                active: i == root.active;
+                clicked => { root.clicked(i); }
+            }
+        }
+        if root.stacked: VerticalLayout {
+            for choice[i] in root.choices: HorizontalLayout {
+                alignment: start;
+                Segment {
+                    label: choice;
+                    active: i == root.active;
+                    clicked => { root.clicked(i); }
+                }
+            }
         }
     }
 }

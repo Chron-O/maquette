@@ -2,14 +2,19 @@
 // the role and the linked devices, the public screens.
 
 use crate::readers::info;
-use crate::test_data::{DEVICE_ROLES, DeviceKind, Generated, LinkedDevice, READER_USAGES};
-use crate::{App, Equipment, EquipmentReader, LinkedDeviceRow, model};
+use crate::live::last_reading;
+use crate::test_data::{
+    CURRENT_EVENT, DEVICE_ROLES, DeviceKind, Generated, LinkedDevice, PublicScreen, READER_USAGES, SCREEN_CONTENTS,
+    format_clock, format_clock_seconds,
+};
+use crate::{App, Equipment, EquipmentReader, LinkedDeviceRow, PublicScreenRow, ScreenPreview, model};
 use slint::SharedString;
 use slint::ComponentHandle;
 
 pub fn show(window: &App, data: Option<&Generated>) {
     let equipment = window.global::<Equipment>();
     equipment.set_usages(model(READER_USAGES.iter().map(|&u| SharedString::from(u)).collect()));
+    equipment.set_contents(model(SCREEN_CONTENTS.iter().map(|&c| SharedString::from(c)).collect()));
     equipment.set_roles(model(DEVICE_ROLES.iter().map(|&r| SharedString::from(r)).collect()));
     equipment.set_this_role("Rôle GEC (toute la course)".into());
     let Some(data) = data else {
@@ -18,9 +23,11 @@ pub fn show(window: &App, data: Option<&Generated>) {
         equipment.set_devices(model(Vec::new()));
         equipment.set_has_request(false);
         equipment.set_course_state("Course hors ligne".into());
+        equipment.set_screens(model(Vec::new()));
         return;
     };
     show_devices(&equipment, data);
+    show_screens(&equipment, data);
     let courses = data.reader_courses();
     equipment.set_courses(model(courses.iter().map(|c| SharedString::from(c.as_str())).collect()));
     equipment.set_readers(model(
@@ -79,4 +86,48 @@ fn show_devices(equipment: &Equipment, data: &Generated) {
         });
         equipment.set_request_word(request.word.into());
     }
+}
+
+fn screen_row(data: &Generated, screen: &PublicScreen) -> PublicScreenRow {
+    let reader = |side: usize| screen.readers[side].and_then(|r| data.readers.get(r)).map_or("Aucun".into(), |r| r.name.as_str().into());
+    let index = |side: usize| screen.readers[side].map_or(-1, |r| r as i32);
+    PublicScreenRow {
+        name: screen.name.as_str().into(),
+        detail: match screen.size {
+            Some(size) => format!("{size} · plein écran").into(),
+            None => "fenêtre libre".into(),
+        },
+        window: screen.size.is_none(),
+        on: screen.on,
+        content: screen.content as i32,
+        left: reader(0),
+        right: reader(1),
+        left_index: index(0),
+        right_index: index(1),
+        provisional: screen.provisional,
+        names: screen.names,
+        beeps: screen.beeps,
+    }
+}
+
+// The screens, and what they show now: the card just read, the time, the next starters.
+fn show_screens(equipment: &Equipment, data: &Generated) {
+    equipment.set_screens(model(data.screens.iter().map(|s| screen_row(data, s)).collect()));
+    let event = &data.events[CURRENT_EVENT];
+    let clock = data.clock();
+    let last = last_reading(event, &data.readers, clock, false);
+    let reader = event.readings.last().map_or(-1, |r| r.reader as i32);
+    let mut next: Vec<_> = event.runners.iter().filter(|r| !r.started && r.start >= clock).collect();
+    next.sort_by_key(|r| r.start);
+    equipment.set_start_point(format!("S{}", event.courses.first().map_or(1, |c| c.start_point)).into());
+    equipment.set_preview(ScreenPreview {
+        reading: last.live,
+        reader,
+        name: last.name,
+        category: last.category,
+        time: last.time,
+        place: last.place,
+        clock: format_clock_seconds(clock).into(),
+        starters: model(next.iter().take(3).map(|r| format!("{} · {}", format_clock(r.start), r.name()).into()).collect()),
+    });
 }

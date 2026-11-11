@@ -270,7 +270,19 @@ export global Theme {
     out property <length> menu-mark: 9px;          // the open mark after a column title (« État ▾ »)
     out property <length> menu-mark-stroke: 1.6px;
     out property <length> menu-bubble-width: 240px;
-    out property <length> equipment-bubble-width: 560px;   // the header indicators' bubbles (prototype: bulRd)   // prototype: lDots
+    out property <length> equipment-bubble-width: 560px;   // the header indicators' bubbles (prototype: bulRd)
+    // The miniature of a public screen (prototype: preview), 16:9.
+    out property <length> screen-preview-width: 224px;
+    out property <length> screen-preview-height: 126px;
+    out property <length> screen-preview-radius: 6px;
+    out property <length> screen-preview-outline: 3px;
+    out property <color> screen-preview-frame: #1A1A1A;
+    out property <color> preview-half: dark ? #1A2A21 : #1F3A2D;
+    out property <length> preview-text: 9px;
+    out property <length> preview-title: 11px;
+    out property <length> preview-big: 20px;
+    out property <length> preview-rings: 22px;
+    out property <length> bubble-narrow-below: 480px;   // a narrower bubble: long choices one per line, a screen's settings under its preview   // prototype: lDots
     out property <length> bubble-gap: 6px;      // prototype: popPlace, between the button and the bubble
     out property <length> bubble-joint: 3px;    // how far the joint goes into the button, over its outline
     out property <length> bubble-extra: 24px;   // a bubble is at least its button plus this

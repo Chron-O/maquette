@@ -2603,9 +2603,11 @@ export component BubbleFrame {
         Flickable {
             width: parent.width;
             height: parent.height;
+            // As wide as the bubble: a too wide line never widens the whole content.
+            content-width: self.width;
             content-height: root.wanted-height;
             content := VerticalLayout {
-                width: parent.width;
+                width: bubble.width;
                 @children
             }
         }
