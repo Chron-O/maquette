@@ -11,7 +11,7 @@ import { ChoiceSegments } from "../components/choice-segments.slint";
 import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SettingRow, SettingsTab, SideDetail, Unfold, Zones } from "../components/zones.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
-import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch, TitleBubble } from "courses.slint";
 import { Cell, Title } from "participants.slint";
 
 export struct StartRow {
@@ -285,57 +285,31 @@ component SectionHead inherits Rectangle {
 
     background: Theme.page-background;
     VerticalLayout {
-        title := HorizontalLayout {
-            padding: Theme.space-small;
-            padding-left: Theme.space;
-            spacing: Theme.space;
-            VerticalLayout {
-                alignment: center;
-                CourseChip { tone: root.section.tone; }
-            }
-            VerticalLayout {
-                horizontal-stretch: 1;
-                alignment: center;
-                if !root.compact: HorizontalLayout {
-                    spacing: Theme.space;
-                    Text {
-                        text: root.section.name;
-                        color: Theme.text;
-                        font-size: Theme.text-block-title;
-                        font-weight: Theme.weight-block-title;
-                        vertical-alignment: center;
-                    }
-                    SmallText {
-                        horizontal-stretch: 1;
-                        text: root.section.detail;
-                        vertical-alignment: center;
-                    }
-                }
-                if root.compact: Text {
-                    text: root.section.name;
-                    color: Theme.text;
-                    font-size: Theme.text-block-title;
-                    font-weight: Theme.weight-block-title;
-                    wrap: word-wrap;
-                }
-                if root.compact: SmallText { text: root.section.detail; }
-            }
-            SectionMenuButton { section: root.section.index; }
-        }
-        RowLine { }
-        // The room of the tab's head.
-        Rectangle { height: Theme.settings-tab-height + Theme.space-small; }
+        padding: Theme.space-small;
+        padding-bottom: Theme.settings-tab-height - Theme.settings-tab-tuck + Theme.space-small;
+        Rectangle { height: title.preferred-height; }
     }
+    // Drawn before the title, so that it comes from under it.
     tab := SettingsTab {
-        x: Theme.space;
-        y: title.height + Theme.thin-outline-width;
-        width: root.compact ? root.width - 2 * Theme.space
-            : min(root.width - 2 * Theme.space, max(Theme.bubble-width, self.wanted-width));
+        x: root.compact ? Theme.space-small + Theme.settings-tab-narrow-inset : Theme.space-small + Theme.space-medium;
+        y: title.y + title.height - Theme.settings-tab-tuck;
+        width: root.compact ? root.width - 2 * (Theme.space-small + Theme.settings-tab-narrow-inset)
+            : min(root.width - 2 * Theme.space-small - 2 * Theme.space-medium, max(Theme.bubble-width, self.wanted-width));
         label: "Réglages";
         summary: Zones.join(root.section.chips);
         narrow: root.compact;
-        tuck: 0px;
         SectionSettings { }
+    }
+    title := TitleBubble {
+        x: Theme.space-small;
+        y: Theme.space-small;
+        width: root.width - 2 * Theme.space-small;
+        height: self.preferred-height;
+        tone: root.section.tone;
+        name: root.section.name;
+        facts: root.section.detail;
+        compact: root.compact;
+        SectionMenuButton { section: root.section.index; }
     }
 }
 

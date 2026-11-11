@@ -2089,6 +2089,63 @@ component CourseSettings inherits VerticalLayout {
     }
 }
 
+// The title of a course in a card: a white bubble with its shadow, like the tab bubble,
+// so that its Réglages tab hangs from something raised (Robin, 11/11). `compact`: a phone.
+export component TitleBubble inherits Rectangle {
+    in property <int> tone;
+    in property <string> name;
+    in property <string> facts;     // what the course is: categories, length…
+    in property <bool> compact;
+
+    background: Theme.card;
+    border-radius: root.compact ? Theme.card-radius : self.height / 2;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.tab-bubble-shadow-blur;
+    drop-shadow-offset-y: Theme.tab-bubble-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
+    HorizontalLayout {
+        padding-top: Theme.tab-bubble-padding;
+        padding-bottom: Theme.tab-bubble-padding;
+        padding-left: Theme.space-medium;
+        padding-right: Theme.tab-bubble-padding;
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            CourseChip { tone: root.tone; }
+        }
+        // The name, then what the course is, on the same line while it fits.
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            if !root.compact: HorizontalLayout {
+                spacing: Theme.space;
+                Text {
+                    text: root.name;
+                    color: Theme.text;
+                    font-size: Theme.text-block-title;
+                    font-weight: Theme.weight-block-title;
+                    vertical-alignment: center;
+                }
+                SmallText {
+                    horizontal-stretch: 1;
+                    text: root.facts;
+                    vertical-alignment: center;
+                }
+            }
+            if root.compact: Text {
+                text: root.name;
+                color: Theme.text;
+                font-size: Theme.text-block-title;
+                font-weight: Theme.weight-block-title;
+                wrap: word-wrap;
+            }
+            if root.compact: SmallText { text: root.facts; }
+        }
+        @children
+    }
+}
+
 component OneCourse {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -2111,53 +2168,20 @@ component OneCourse {
             border-color: Theme.card-outline;
             clip: true;
             card := VerticalLayout {
-                VerticalLayout {
+                // The band of the title: the bubble, then the room of the Réglages tab's head.
+                Rectangle {
                     vertical-stretch: 0;
-                    padding: Theme.space;
-                    spacing: Theme.space;
-                    HorizontalLayout {
-                        spacing: Theme.space;
-                        VerticalLayout {
-                            alignment: center;
-                            CourseChip { tone: Courses.active-course; }
-                        }
-                        // The name, then what the course is, on the same line while it fits.
-                        VerticalLayout {
-                            horizontal-stretch: 1;
-                            alignment: center;
-                            if !root.narrow: HorizontalLayout {
-                                spacing: Theme.space;
-                                Text {
-                                    text: Courses.course-name;
-                                    color: Theme.text;
-                                    font-size: Theme.text-block-title;
-                                    font-weight: Theme.weight-block-title;
-                                    vertical-alignment: center;
-                                }
-                                SmallText {
-                                    horizontal-stretch: 1;
-                                    text: Courses.course-facts;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            if root.narrow: Text {
-                                text: Courses.course-name;
-                                color: Theme.text;
-                                font-size: Theme.text-block-title;
-                                font-weight: Theme.weight-block-title;
-                                wrap: word-wrap;
-                            }
-                            if root.narrow: SmallText { text: Courses.course-facts; }
-                        }
-                        CourseMenuButton { }
+                    background: Theme.page-background;
+                    VerticalLayout {
+                        padding: Theme.space;
+                        padding-bottom: Theme.settings-tab-height - Theme.settings-tab-tuck + Theme.space;
+                        Rectangle { height: title.preferred-height; }
                     }
                 }
-                // The line the Réglages tab hangs from; under it, the room of the tab's head.
-                tab-line := RowLine { vertical-stretch: 0; }
+                RowLine { vertical-stretch: 0; }
                 VerticalLayout {
                     vertical-stretch: 0;
                     padding: Theme.space;
-                    padding-top: Theme.settings-tab-height + Theme.space;   // the head of the Réglages tab
                     spacing: Theme.space;
                     HorizontalLayout {
                         spacing: Theme.space;
@@ -2195,19 +2219,30 @@ component OneCourse {
             if Courses.course-settings-open: TouchArea {
                 clicked => { Courses.course-settings-open = false; }
             }
-            // The Réglages of the course, hung under the line, unfolding over the content:
-            // the same tab as the Paramètres of the page (Robin, 11/11).
+            // The Réglages of the course, hung under its title, unfolding over the content:
+            // the same tab as the Paramètres of the page (Robin, 11/11). Drawn before the title,
+            // so that it comes from under it.
             course-tab := SettingsTab {
-                x: Theme.space;
-                y: tab-line.y + tab-line.height;
-                width: root.narrow ? parent.width - 2 * Theme.space
-                    : min(parent.width - 2 * Theme.space, max(Theme.bubble-width, self.wanted-width));
+                x: root.narrow ? Theme.space + Theme.settings-tab-narrow-inset : Theme.space + Theme.space-medium;
+                y: title.y + title.height - Theme.settings-tab-tuck;
+                width: root.narrow ? parent.width - 2 * (Theme.space + Theme.settings-tab-narrow-inset)
+                    : min(parent.width - 2 * Theme.space - 2 * Theme.space-medium, max(Theme.bubble-width, self.wanted-width));
                 label: "Réglages";
                 summary: Zones.join(Courses.course-chips);
                 narrow: root.narrow;
-                tuck: 0px;
                 open <=> Courses.course-settings-open;
                 CourseSettings { }
+            }
+            title := TitleBubble {
+                x: Theme.space;
+                y: Theme.space;
+                width: parent.width - 2 * Theme.space;
+                height: self.preferred-height;
+                tone: Courses.active-course;
+                name: Courses.course-name;
+                facts: Courses.course-facts;
+                compact: root.narrow;
+                CourseMenuButton { }
             }
         }
     }
