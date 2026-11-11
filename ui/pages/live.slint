@@ -1,0 +1,1773 @@
+// The Direct, following 08-direct.png, live-fil.md and fiche-coureur-live.md: every card
+// read stays in one feed, the newest first, with the last one in big. As in the HTML
+// prototype, it is a drawer: its bar stays at the bottom of every tab, and it rises over them.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode, Navigation } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { LiveDot } from "../components/dot.slint";
+import { BarReader, ReaderMode, ReaderTile, Readers } from "../components/reader-tile.slint";
+import { MoreButton, PrimaryButton, SecondaryButton } from "../components/buttons.slint";
+import { StatusBadge, StatusBlock } from "../components/status.slint";
+import { Badge, BadgeKind, Home, ToHandleButton } from "home.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText } from "courses.slint";
+import { CategoryCell, Cell, NameCell } from "participants.slint";
+
+export struct LiveRow {
+    index: int,
+    badge: Badge,
+    family: string,
+    first: string,
+    category: string,
+    tone: int,
+    time: string,
+    place: string,
+    clock: string,
+    action: string,
+    settled: string,
+    crossed: bool,      // a time that does not count
+    to-handle: bool,
+    selected: bool,
+}
+
+export struct LiveStop {
+    rank: string,       // the order number, empty on a course without an order
+    code: string,
+    time: string,
+    missed: bool,
+}
+
+// The last reading, while it is live (prototype: bigLast, lastLive).
+export struct LiveLast {
+    live: bool,         // read less than 15 s ago: otherwise nothing is shown
+    index: int,
+    badge: Badge,
+    name: string,
+    club: string,
+    category: string,
+    tone: int,
+    time: string,
+    place: string,
+    age: string,        // « à l'instant », « il y a 6 s »
+    left: float,        // what is left of its live time, 1 down to 0
+    reader: string,
+    crossed: bool,
+    stops: [LiveStop],
+}
+
+// The race in figures: the figures in bold, the words around them.
+export struct LiveSummary {
+    racing: string,
+    back: string,
+    back-word: string,
+    closing: string,    // « fermeture 14:30 », empty when nobody runs
+}
+
+export struct LiveFilter {
+    label: string,
+    tone: int,
+    detail: string,
+}
+
+export struct LiveCount {
+    value: string,
+    label: string,
+}
+
+export struct LiveListRow {
+    runner: int,
+    name: string,
+    detail: string,
+    tone: int,
+}
+
+export struct LiveProblem {
+    index: int,
+    label: string,
+    action: string,
+}
+
+export struct LiveCandidate {
+    runner: int,
+    name: string,
+    detail: string,
+}
+
+export struct LiveSplit {
+    rank: string,
+    code: string,
+    clock: string,
+    leg: string,
+    total: string,
+    missed: bool,
+    finish: bool,       // the last line, the finish
+}
+
+export global Live {
+    in property <[LiveRow]> rows;
+    in property <LiveLast> last;
+    in property <bool> to-handle-only;   // the feed shows only what is to handle
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    in property <LiveSummary> summary;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[LiveProblem]> problems;
+    in property <[LiveFilter]> course-filters;
+    in property <int> active-course;
+    in property <[LiveFilter]> reader-filters;
+    in property <int> active-reader;
+    in property <string> search-text;
+    in property <[LiveCount]> counts;
+    in property <int> active-list: -1;
+    in property <string> list-title;
+    in property <[LiveListRow]> list-rows;
+
+    in property <bool> detail-open;
+    in property <Badge> detail-badge;
+    in property <string> detail-name;
+    in property <string> detail-course;
+    in property <int> detail-tone;
+    in property <string> detail-club;
+    in property <string> detail-card;
+    in property <string> detail-start;
+    in property <string> detail-time;
+    in property <string> detail-place;
+    in property <bool> detail-crossed;
+    in property <string> detail-settled;
+    in property <bool> detail-has-runner;
+    in property <bool> detail-can-print;   // a settled reading with a runner (lecture-a-regler.md § 4)
+    in property <string> detail-problem;
+    in property <bool> detail-unknown;
+    in property <bool> detail-twice;
+    in property <[LiveCandidate]> candidates;
+    in property <[LiveSplit]> splits;
+
+    callback select-course(int);
+    callback select-reader(int);
+    callback select-row(int);
+    callback open-row(int);
+    callback select-runner(int);
+    callback toggle-list(int);
+    callback search(string);
+    callback close-detail();
+    callback toggle-to-handle();
+    callback toggle-filter(int, int);
+    callback clear-filters();
+    in-out property <int> menu-row: -1;   // the row whose « ⋯ » menu is open
+    callback show-to-handle();
+    callback give-to(int);
+    callback keep-first();
+
+    // A row to settle is pale yellow, a PM pale red (charte, familles d'états).
+    public pure function row-tint(row: LiveRow) -> color {
+        if row.selected {
+            return Theme.row-selected;
+        }
+        if row.to-handle {
+            return Theme.row-to-check;
+        }
+        if row.badge.kind == BadgeKind.pm {
+            return Theme.row-problem;
+        }
+        return transparent;
+    }
+}
+
+// A time, crossed out when it does not count (charte, 03/11).
+export component TimeText {
+    in property <string> time;
+    in property <bool> crossed;
+    in property <color> tone: Theme.text;
+    in property <color> crossed-tone: Theme.text-secondary;
+    in property <length> size: Theme.text-help;
+    in property <int> weight: Theme.weight-block-title;
+    in property <length> strike: Theme.time-strike;
+
+    HorizontalLayout {
+        alignment: start;
+        Rectangle {
+            width: label.preferred-width;
+            label := Text {
+                text: root.time;
+                color: root.crossed ? root.crossed-tone : root.tone;
+                font-size: root.size;
+                font-weight: root.crossed ? Theme.weight-regular : root.weight;
+                vertical-alignment: center;
+            }
+            if root.crossed: Rectangle {
+                height: root.strike;
+                background: root.crossed-tone;
+            }
+        }
+    }
+}
+
+export component Head inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    vertical-alignment: center;
+}
+
+export component RowCell inherits HorizontalLayout {
+    padding-left: Theme.space;
+    alignment: start;
+}
+
+// How a reading was settled: never by its color alone.
+component SettledMark {
+    in property <string> text;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.badge-icon-gap;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.check;
+                colorize: Theme.valid.badge-text;
+                width: Theme.badge-icon;
+                height: Theme.badge-icon;
+            }
+        }
+        Text {
+            text: root.text;
+            color: Theme.valid.badge-text;
+            font-size: Theme.text-help;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// The « ⋯ » of a row: a small menu, joined to it (prototype: lDots). No effect yet.
+component RowMenuButton {
+    in property <int> index;
+
+    property <bool> open: Courses.open-bubble == 21 && Live.menu-row == root.index;
+
+    min-width: Theme.small-button-width;
+    accessible-role: button;
+    accessible-label: "Plus d'actions";
+    MoreButton {
+        width: 100%;
+        height: 100%;
+        open: root.open;
+        down: Courses.bubble-down;
+        clicked => {
+            Live.menu-row = root.index;
+            // The menu is joined to the drawn button, not to its touch zone.
+            Courses.open-at(21, self.absolute-position.x + (self.width - Theme.small-button-width) / 2,
+                self.absolute-position.y + (self.height - Theme.small-button-height) / 2,
+                Theme.small-button-width, Theme.small-button-height);
+        }
+    }
+}
+
+// The button of a row, or how it was settled, then the « ⋯ » of a row without one.
+component RowEnd {
+    in property <LiveRow> entry;
+    in property <bool> light;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-right: Theme.space;
+        spacing: Theme.space-small;
+        if root.entry.action != "": PrimaryButton {
+            label: root.entry.action;
+            in-row: true;
+            clicked => { Live.open-row(root.entry.index); }
+        }
+        if root.entry.settled != "": SettledMark { text: root.light ? "réglée" : root.entry.settled; }
+        Rectangle { horizontal-stretch: 1; }
+        if root.entry.action == "": RowMenuButton { index: root.entry.index; }
+    }
+}
+
+// A column title that opens a choice (prototype: « État ▾ »): a small open mark after it,
+// unlike the sort triangle.
+component MenuMark {
+    width: Theme.menu-mark;
+    height: Theme.menu-mark / 2;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 10;
+        viewbox-height: 5;
+        stroke: Theme.text-secondary;
+        stroke-width: Theme.menu-mark-stroke;
+        commands: "M 1 0.5 L 5 4.5 L 9 0.5";
+    }
+}
+
+export component MenuHead inherits Rectangle {
+    callback clicked();
+    in property <string> text;
+    in property <bool> right;
+
+    background: zone.has-hover ? Theme.column-title-hover : transparent;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        alignment: root.right ? end : start;
+        padding-left: Theme.space;
+        padding-right: root.right ? Theme.space : 0px;
+        spacing: Theme.space-small;
+        Head { text: root.text; }
+        VerticalLayout {
+            alignment: center;
+            MenuMark { }
+        }
+    }
+}
+
+// The feed. The titles stay at the top: only the rows scroll.
+component LiveTable {
+    in property <length> available-width;
+
+    property <bool> wide: root.available-width >= Theme.live-full-width;
+    property <length> state-width: root.wide ? Theme.live-state-width : Theme.live-light-state-width;
+    property <length> category-width: root.wide ? Theme.live-category-width : 0px;
+    property <length> time-width: root.wide ? Theme.live-time-width : Theme.live-light-time-width;
+    property <length> action-width: root.wide ? Theme.live-action-width : Theme.live-light-action-width;
+    property <length> fixed: root.state-width + root.category-width + root.time-width + root.action-width
+        + (root.wide ? Theme.live-place-width + Theme.live-clock-width : 0px);
+    property <length> name-width: max(Theme.live-name-width, root.available-width - root.fixed);
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            height: Theme.table-header-height + Theme.space;
+            MenuHead { width: root.state-width; text: "État"; }
+            RowCell { width: root.name-width; Head { text: "Nom"; } }
+            if root.wide: MenuHead { width: root.category-width; text: "Catégorie"; }
+            RowCell { width: root.time-width; Head { text: "Temps"; } }
+            if root.wide: RowCell { width: Theme.live-place-width; Head { text: "Place"; } }
+            if root.wide: MenuHead { width: Theme.live-clock-width; text: "Lu à"; }
+            // Only what is to handle, or everything again.
+            MenuHead {
+                width: root.action-width;
+                text: "Action";
+                right: true;
+                clicked => { Live.toggle-to-handle(); }
+            }
+        }
+        RowLine { vertical-stretch: 0; }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                width: root.available-width;
+                alignment: start;
+                if Live.to-handle-only && Live.rows.length == 0: Text {
+                    height: Theme.zone + 2 * Theme.space-medium;
+                    text: "Rien à traiter.";
+                    color: Theme.text-secondary;
+                    font-size: Theme.text-help;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                for row[n] in Live.rows: VerticalLayout {
+                    if n > 0: RowLine { }
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: Live.row-tint(row);
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { Live.select-row(row.index); }
+                        }
+                        HorizontalLayout {
+                            RowCell {
+                                width: root.state-width;
+                                VerticalLayout {
+                                    alignment: center;
+                                    StatusBadge { status: Home.status-of(row.badge); }
+                                }
+                            }
+                            if root.wide: NameCell { width: root.name-width; family: row.family; first: row.first; }
+                            if root.wide: CategoryCell { width: root.category-width; category: row.category; tone: row.tone; }
+                            // Without the room for its column, the category goes under the name.
+                            if !root.wide: VerticalLayout {
+                                width: root.name-width;
+                                alignment: center;
+                                NameCell { family: row.family; first: row.first; }
+                                CategoryCell { category: row.category; tone: row.tone; }
+                            }
+                            RowCell {
+                                width: root.time-width;
+                                spacing: Theme.space-small;
+                                TimeText { time: row.time; crossed: row.crossed; }
+                                if !root.wide && row.place != "—" && row.place != "": Cell { text: row.place; }
+                            }
+                            if root.wide: RowCell { width: Theme.live-place-width; Cell { text: row.place; } }
+                            if root.wide: RowCell { width: Theme.live-clock-width; Cell { text: row.clock; color: Theme.text-secondary; } }
+                            RowEnd { width: root.action-width; entry: row; light: !root.wide; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: status block › who and where › time (charte, Listes: name 17/600, time 22/700).
+component LiveList {
+    VerticalLayout {
+        if Live.to-handle-only && Live.rows.length == 0: Text {
+            height: Theme.zone + 2 * Theme.space-medium;
+            text: "Rien à traiter.";
+            color: Theme.text-secondary;
+            font-size: Theme.text-help;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for row[n] in Live.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: Live.row-tint(row);
+                TouchArea {
+                    clicked => { Live.select-row(row.index); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBlock { status: Home.status-of(row.badge); }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.first == "" ? row.family : row.family + " " + row.first;
+                            color: Theme.text;
+                            font-size: Theme.text-block-title;
+                            font-weight: Theme.weight-block-title;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Theme.space-small;
+                            if row.tone >= 0: VerticalLayout {
+                                alignment: center;
+                                CourseChip { tone: row.tone; }
+                            }
+                            SmallText { text: row.category; }
+                            if row.settled != "": SettledMark { text: "réglée"; }
+                        }
+                    }
+                    if row.action != "": VerticalLayout {
+                        alignment: center;
+                        PrimaryButton {
+                            label: row.action;
+                            in-row: true;
+                            clicked => { Live.open-row(row.index); }
+                        }
+                    }
+                    if row.action == "": VerticalLayout {
+                        alignment: center;
+                        HorizontalLayout {
+                            alignment: end;
+                            TimeText {
+                                time: row.time;
+                                crossed: row.crossed;
+                                size: Theme.text-screen-title;
+                                weight: Theme.weight-screen-title;
+                                strike: Theme.time-strike-large;
+                            }
+                        }
+                        if row.place != "—" && row.place != "": HorizontalLayout {
+                            alignment: end;
+                            SmallText { text: row.place; wrap: no-wrap; }
+                        }
+                    }
+                    if row.action == "": RowMenuButton { index: row.index; }
+                }
+            }
+        }
+    }
+}
+
+// The controls of the last reading: the order number in the circle (empty on a course
+// without an order, as in Circuits), the code in a small box under it, then the time.
+// Light in both themes, like a map.
+component PunchStrip inherits Rectangle {
+    in property <[LiveStop]> stops;
+    in property <string> finish;
+
+    property <int> nodes: root.stops.length + 2;
+    property <length> step: root.width / root.nodes;
+    property <length> content: Theme.live-stop-size + 2 * Theme.live-code-margin + Theme.live-code-height + Theme.text-body;
+    property <length> top: (root.height - root.content) / 2;
+    property <length> time-y: root.top + Theme.live-stop-size + 2 * Theme.live-code-margin + Theme.live-code-height;
+
+    background: Theme.live-strip-background;
+    border-radius: Theme.block-radius;
+    Rectangle {
+        x: root.step / 2;
+        y: root.top + (Theme.live-stop-size - self.height) / 2;
+        width: root.width - root.step;
+        height: Theme.metro-trace;
+        background: Theme.purple;
+    }
+    Rectangle {
+        x: (root.step - self.width) / 2;
+        y: root.top;
+        width: Theme.live-stop-size;
+        height: Theme.live-stop-size;
+        background: Theme.live-strip-background;
+        Image {
+            source: Icons.co-start;
+            colorize: Theme.purple;
+            width: 100%;
+            height: 100%;
+        }
+    }
+    for stop[i] in root.stops: column := Rectangle {
+        x: (i + 1) * root.step;
+        y: 0;
+        width: root.step;
+        height: root.height;
+        property <color> ink: stop.missed ? Theme.problem.badge-text : Theme.purple;
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: root.top;
+            width: Theme.live-stop-size;
+            height: Theme.live-stop-size;
+            border-radius: self.height / 2;
+            border-width: Theme.metro-trace;
+            border-color: column.ink;
+            background: stop.missed ? Theme.live-strip-missed : Theme.live-strip-background;
+            Text {
+                text: stop.rank;
+                color: column.ink;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-screen-title;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: root.top + Theme.live-stop-size + Theme.live-code-margin;
+            width: code.preferred-width + 2 * Theme.live-code-margin;
+            height: Theme.live-code-height;
+            border-radius: Theme.tag-radius;
+            border-width: Theme.thin-outline-width;
+            border-color: column.ink;
+            background: stop.missed ? Theme.live-strip-missed : Theme.live-strip-background;
+            code := Text {
+                text: stop.code;
+                color: column.ink;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            y: root.time-y;
+            width: parent.width;
+            height: Theme.text-body;
+            text: stop.time;
+            color: stop.missed ? Theme.problem.badge-text : Theme.live-strip-text;
+            font-size: Theme.text-help;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Rectangle {
+        x: (root.nodes - 1) * root.step + (root.step - self.width) / 2;
+        y: root.top;
+        width: Theme.live-stop-size;
+        height: Theme.live-stop-size;
+        border-radius: self.height / 2;
+        background: Theme.live-strip-background;
+        Image {
+            source: Icons.co-finish;
+            colorize: Theme.purple;
+            width: 100%;
+            height: 100%;
+        }
+    }
+    Text {
+        x: (root.nodes - 1) * root.step;
+        y: root.time-y;
+        width: root.step;
+        height: Theme.text-body;
+        text: root.finish;
+        color: Theme.live-strip-text;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-screen-title;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// What is left of the last reading's live time: a thin bar emptying (prototype: .x-drain).
+component DrainBar inherits Rectangle {
+    height: Theme.live-drain-height;
+    border-radius: self.height / 2;
+    background: Theme.live-drain-track;
+    Rectangle {
+        x: 0;
+        width: parent.width * max(0, min(1, Live.last.left));
+        // The race clock ticks every second: the bar slides between two ticks.
+        animate width { duration: Theme.live-drain-step; easing: linear; }
+        border-radius: parent.border-radius;
+        background: Theme.live-accent;
+    }
+}
+
+component WaitingText inherits Text {
+    text: "En attente de la prochaine lecture";
+    color: Theme.live-ink-soft;
+    font-size: Theme.text-label;
+    wrap: word-wrap;
+}
+
+// The last reading in big, right on the green of the open bar: no card around it
+// (prototype: bigLast). Its room never changes: nothing moves when a reading comes or goes.
+component BigReading {
+    property <bool> full: root.width >= Theme.live-big-full-width;
+    property <length> strip-width: min(root.width, Live.last.stops.length * Theme.live-stop-step + 2 * Theme.live-stop-step);
+
+    if !Live.last.live: WaitingText {
+        width: root.width;
+        height: root.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if Live.last.live: VerticalLayout {
+        width: root.width;
+        height: root.height;
+        alignment: start;
+        spacing: Theme.space;
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { Live.select-row(Live.last.index); }
+            HorizontalLayout {
+                spacing: root.full ? Theme.live-big-gap : Theme.space-medium;
+                VerticalLayout {
+                    alignment: center;
+                    StatusBlock { status: Home.status-of(Live.last.badge); }
+                }
+                VerticalLayout {
+                    min-width: root.full ? Theme.live-big-name-width : 0px;
+                    horizontal-stretch: root.full ? 0 : 1;
+                    alignment: center;
+                    Text {
+                        text: Live.last.name;
+                        color: Theme.live-ink;
+                        font-size: Theme.text-screen-title;
+                        font-weight: Theme.weight-screen-title;
+                        wrap: word-wrap;
+                    }
+                    if Live.last.club != "": Text {
+                        text: Live.last.club;
+                        color: Theme.live-ink-soft;
+                        font-size: Theme.text-help;
+                        wrap: word-wrap;
+                    }
+                    // Without the room for its column, the category goes under the name.
+                    if !root.full: HorizontalLayout {
+                        alignment: start;
+                        spacing: Theme.space-small;
+                        if Live.last.tone >= 0: VerticalLayout {
+                            alignment: center;
+                            CourseChip { tone: Live.last.tone; }
+                        }
+                        Text {
+                            text: Live.last.category + " · " + Live.last.age;
+                            color: Theme.live-ink-soft;
+                            font-size: Theme.text-help;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+                if root.full: HorizontalLayout {
+                    spacing: Theme.space-small;
+                    if Live.last.tone >= 0: VerticalLayout {
+                        alignment: center;
+                        CourseChip { tone: Live.last.tone; }
+                    }
+                    Text {
+                        text: Live.last.category;
+                        color: Theme.live-ink;
+                        font-size: Theme.text-block-title;
+                        font-weight: Theme.weight-screen-title;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    TimeText {
+                        time: Live.last.time;
+                        crossed: Live.last.crossed;
+                        tone: Theme.live-ink;
+                        crossed-tone: Theme.live-ink-soft;
+                        size: root.full ? Theme.live-time-size : Theme.live-narrow-time-size;
+                        weight: Theme.weight-screen-title;
+                        strike: Theme.time-strike-large;
+                    }
+                    if !root.full && Live.last.place != "" && Live.last.place != "—": Text {
+                        text: Live.last.place;
+                        color: Theme.live-ink;
+                        font-size: Theme.text-label;
+                        font-weight: Theme.weight-screen-title;
+                        horizontal-alignment: right;
+                    }
+                }
+                if root.full && Live.last.place != "" && Live.last.place != "—": Text {
+                    text: Live.last.place;
+                    color: Theme.live-ink;
+                    font-size: Theme.live-place-size;
+                    font-weight: Theme.weight-screen-title;
+                    vertical-alignment: center;
+                }
+                if root.full: VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: Live.last.age;
+                        color: Theme.live-accent;
+                        font-size: Theme.text-help;
+                        font-weight: Theme.weight-block-title;
+                    }
+                    Text {
+                        text: Live.last.reader;
+                        color: Theme.live-ink-soft;
+                        font-size: Theme.text-help;
+                    }
+                }
+                if root.full: Rectangle { horizontal-stretch: 1; }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            PunchStrip {
+                width: root.strip-width;
+                height: Theme.live-strip-height;
+                stops: Live.last.stops;
+                finish: Live.last.time;
+            }
+        }
+        DrainBar { }
+    }
+}
+
+// On a phone, the last reading in the open bar (prototype: mDrBar).
+component SmallReading {
+    if !Live.last.live: WaitingText {
+        width: root.width;
+        height: root.height;
+        vertical-alignment: center;
+    }
+    if Live.last.live: VerticalLayout {
+        width: root.width;
+        height: root.height;
+        alignment: center;
+        spacing: Theme.space;
+        TouchArea {
+            clicked => { Live.select-row(Live.last.index); }
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                VerticalLayout {
+                    alignment: center;
+                    StatusBlock { status: Home.status-of(Live.last.badge); }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    Text {
+                        text: Live.last.name;
+                        color: Theme.live-ink;
+                        font-size: Theme.live-small-name-size;
+                        font-weight: Theme.weight-screen-title;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: Theme.space-small;
+                        Text {
+                            text: Live.last.category + " ·";
+                            color: Theme.live-ink-soft;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            TimeText {
+                                time: Live.last.time;
+                                crossed: Live.last.crossed;
+                                tone: Theme.live-ink;
+                                crossed-tone: Theme.live-ink-soft;
+                                size: Theme.live-small-time-size;
+                                weight: Theme.weight-screen-title;
+                            }
+                        }
+                        if Live.last.place != "" && Live.last.place != "—": Text {
+                            text: "· " + Live.last.place;
+                            color: Theme.live-ink-soft;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+        DrainBar { }
+    }
+}
+
+// A row of small chips, going to the next row when they do not fit.
+export component ChipFlow {
+    callback clicked(int);
+    in property <[LiveFilter]> items;
+    in property <int> active;
+    in property <length> chip-width: Theme.participant-chip-width;
+
+    property <length> step: root.chip-width + Theme.space-small;
+    property <int> per-row: max(1, floor((root.width + Theme.space-small) / root.step));
+
+    height: ceil(root.items.length / root.per-row) * Theme.zone;
+    for item[i] in root.items: HighlightChip {
+        x: mod(i, root.per-row) * root.step;
+        y: floor(i / root.per-row) * Theme.zone;
+        width: root.chip-width;
+        label: item.label;
+        tone: item.tone;
+        active: root.active == i;
+        clicked => { root.clicked(i); }
+    }
+}
+
+component LiveContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Live.search-text != "";
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.live-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.live-head-search;
+
+    Rectangle {
+        background: Theme.card;
+        border-radius: Theme.card-radius;
+        border-width: Theme.card-outline-width;
+        border-color: Theme.card-outline;
+        clip: true;
+        VerticalLayout {
+            // The add action in orange; on the right, the filters and the search (brief
+            // zones-onglets § 6). What is to handle is in the bar above, and in the filters.
+            VerticalLayout {
+                vertical-stretch: 0;
+                padding: Theme.space;
+                spacing: Theme.space;
+                HorizontalLayout {
+                    spacing: Theme.space;
+                    PrimaryButton {
+                        label: root.roomy ? "Arrivée manuelle" : "Arrivée";
+                        icon: Icons.plus;
+                        has-icon: true;
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    FilterButton {
+                        filters: Live.active-filters;
+                        narrow: root.narrow;
+                        open: Courses.open-bubble == 26;
+                        open-down: Courses.bubble-down;
+                        clicked => {
+                            Courses.open-at(26, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                        }
+                        remove(g, c) => { Live.toggle-filter(g, c); }
+                        clear => { Live.clear-filters(); }
+                    }
+                    if root.narrow: VerticalLayout {
+                        alignment: start;
+                        SearchToggle {
+                            open: root.search-open;
+                            clicked => {
+                                if root.search-open {
+                                    Live.search("");
+                                }
+                                root.search-open = !root.search-open;
+                            }
+                        }
+                    }
+                    if !root.narrow && !root.search-below: VerticalLayout {
+                        alignment: start;
+                        InputField {
+                            // Never narrower than its placeholder, whatever the font gives.
+                            width: max(Theme.live-search-width, self.placeholder-width);
+                            placeholder: "Chercher un coureur, une puce…";
+                            text: Live.search-text;
+                            edited(text) => { Live.search(text); }
+                        }
+                    }
+                }
+                if root.search-below: InputField {
+                    placeholder: "Chercher un coureur, une puce…";
+                    text: Live.search-text;
+                    edited(text) => { Live.search(text); }
+                }
+                // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                if root.narrow: Unfold {
+                    open: root.search-open;
+                    InputField {
+                        // Opened, it takes the keyboard.
+                        property <bool> wanted: root.search-open;
+                        changed wanted => {
+                            if self.wanted {
+                                self.take-focus();
+                            }
+                        }
+                        placeholder: "Chercher un coureur, une puce…";
+                        text: Live.search-text;
+                        edited(text) => { Live.search(text); }
+                    }
+                }
+            }
+            RowLine { vertical-stretch: 0; }
+            if root.narrow: LiveList { }
+            if !root.narrow: LiveTable {
+                vertical-stretch: 1;
+                available-width: root.available-width;
+            }
+        }
+    }
+}
+
+// One figure of the race: a button that opens its list.
+component CountButton inherits Rectangle {
+    callback clicked();
+    in property <string> value;
+    in property <string> label;
+    in property <bool> active;
+
+    height: Theme.live-count-height;
+    border-radius: Theme.block-radius;
+    background: root.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : Theme.surface;
+    accessible-role: button;
+    accessible-label: root.value + " " + root.label;
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.value;
+            color: root.active ? Theme.active-tab-text : Theme.text;
+            font-size: Theme.text-screen-title;
+            font-weight: Theme.weight-screen-title;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.label;
+            color: root.active ? Theme.active-tab-text : Theme.text-secondary;
+            font-size: Theme.text-help;
+            horizontal-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component RaceCounts inherits Rectangle {
+    property <int> per-row: 3;
+    property <length> cell: (root.width - 2 * Theme.space-medium - (root.per-row - 1) * Theme.space-small) / root.per-row;
+    property <int> rows: ceil(Live.counts.length / root.per-row);
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: "La course en direct";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+        }
+        Rectangle {
+            height: root.rows * Theme.live-count-height + (root.rows - 1) * Theme.space-small;
+            for count[i] in Live.counts: CountButton {
+                x: mod(i, root.per-row) * (root.cell + Theme.space-small);
+                y: floor(i / root.per-row) * (Theme.live-count-height + Theme.space-small);
+                width: root.cell;
+                value: count.value;
+                label: count.label;
+                active: Live.active-list == i;
+                clicked => { Live.toggle-list(i); }
+            }
+        }
+    }
+}
+
+// The list a figure opens, with one line per runner.
+component RaceListRows {
+    VerticalLayout {
+        for entry[n] in Live.list-rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Live.select-runner(entry.runner); }
+                }
+                HorizontalLayout {
+                    padding-left: Theme.space-medium;
+                    padding-right: Theme.space-medium;
+                    padding-top: Theme.space-small;
+                    padding-bottom: Theme.space-small;
+                    spacing: Theme.space;
+                    if entry.tone >= 0: VerticalLayout {
+                        alignment: center;
+                        CourseChip { tone: entry.tone; }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: entry.name;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-block-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: entry.detail; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component ListHeader {
+    HorizontalLayout {
+        padding-left: Theme.space-medium;
+        spacing: Theme.space;
+        Head {
+            horizontal-stretch: 1;
+            text: Live.list-title;
+        }
+        Rectangle {
+            width: Theme.zone;
+            height: Theme.zone;
+            accessible-role: button;
+            accessible-label: "Fermer";
+            Image {
+                source: Icons.x;
+                colorize: Theme.text-secondary;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { Live.toggle-list(Live.active-list); }
+            }
+        }
+    }
+}
+
+// In the column: only the list scrolls.
+component RaceList inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    clip: true;
+    VerticalLayout {
+        ListHeader { vertical-stretch: 0; }
+        RowLine { vertical-stretch: 0; }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height;
+            // The end of the list stays clear of the Démo button.
+            rows := VerticalLayout {
+                width: parent.width;
+                padding-bottom: Theme.zone + Theme.space-medium;
+                RaceListRows { }
+            }
+        }
+    }
+}
+
+// On a phone, the whole page scrolls.
+component RaceListFlowing inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    clip: true;
+    VerticalLayout {
+        ListHeader { }
+        RowLine { }
+        RaceListRows { }
+    }
+}
+
+// What the reading asks for, always first in the detail.
+component ProblemBand inherits Rectangle {
+    background: Theme.to-check.badge-background;
+    border-radius: Theme.block-radius;
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space;
+        Text {
+            text: Live.detail-unknown ? "Qui est-ce ?" : "À régler";
+            color: Theme.to-check.badge-text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+        }
+        Text {
+            text: Live.detail-problem;
+            color: Theme.to-check.badge-text;
+            font-size: Theme.text-help;
+            wrap: word-wrap;
+        }
+        for candidate in Live.candidates: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: candidate.name;
+                    color: Theme.to-check.badge-text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: candidate.detail;
+                    color: Theme.to-check.badge-text;
+                    font-size: Theme.text-help;
+                    wrap: word-wrap;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                PrimaryButton {
+                    label: "Attribuer";
+                    in-row: true;
+                    clicked => { Live.give-to(candidate.runner); }
+                }
+            }
+        }
+        if Live.detail-unknown && Live.candidates.length == 0: Text {
+            text: "Aucun coureur encore en course sur ce circuit.";
+            color: Theme.to-check.badge-text;
+            font-size: Theme.text-help;
+            wrap: word-wrap;
+        }
+        if Live.detail-unknown: HorizontalLayout { alignment: start; SecondaryButton { label: "Chercher un autre participant…"; } }
+        if Live.detail-unknown: HorizontalLayout { alignment: start; SecondaryButton { label: "Inscrire un nouveau…"; } }
+        if Live.detail-twice: HorizontalLayout {
+            alignment: start;
+            // White: the screen's one orange button is the add action (brief zones-onglets § 6).
+            SecondaryButton {
+                label: "Garder le premier résultat";
+                clicked => { Live.keep-first(); }
+            }
+        }
+        // The four choices of puce-deja-lue.md (C16), in its order.
+        if Live.detail-twice: HorizontalLayout { alignment: start; SecondaryButton { label: "Prendre la nouvelle lecture"; } }
+        if Live.detail-twice: HorizontalLayout { alignment: start; SecondaryButton { label: "Second passage (hors classement)"; } }
+        if Live.detail-twice: HorizontalLayout { alignment: start; SecondaryButton { label: "C'est un autre coureur…"; } }
+    }
+}
+
+// Postes et temps (fiche-coureur-live.md § 2): # · Poste · Heure · Tronçon · Cumul, then the finish.
+component SplitsTable {
+    property <length> rank-width: Theme.live-split-rank-width;
+    property <length> code-width: Theme.live-split-code-width;
+    property <length> time-width: (root.width - root.rank-width - root.code-width) / 3;
+
+    VerticalLayout {
+        HorizontalLayout {
+            height: Theme.table-header-height;
+            Head { width: root.rank-width; text: "#"; }
+            Head { width: root.code-width; text: "Poste"; }
+            Head { width: root.time-width; text: "Heure"; horizontal-alignment: right; }
+            Head { width: root.time-width; text: "Tronçon"; horizontal-alignment: right; }
+            Head { width: root.time-width; text: "Cumul"; horizontal-alignment: right; }
+        }
+        for split in Live.splits: VerticalLayout {
+            RowLine { }
+            HorizontalLayout {
+                height: Theme.table-header-height;
+                if !split.finish: Cell { width: root.rank-width; text: split.rank; color: Theme.text-secondary; }
+                if !split.finish: Cell {
+                    width: root.code-width;
+                    text: split.code;
+                    color: split.missed ? Theme.problem.badge-text : Theme.purple;
+                    font-weight: Theme.weight-screen-title;
+                }
+                if split.finish: Cell {
+                    width: root.rank-width + root.code-width;
+                    text: split.code;
+                    font-weight: Theme.weight-screen-title;
+                }
+                Cell { width: root.time-width; text: split.clock; color: Theme.text-secondary; horizontal-alignment: right; }
+                Cell { width: root.time-width; text: split.leg; horizontal-alignment: right; }
+                Cell {
+                    width: root.time-width;
+                    text: split.total;
+                    color: split.missed ? Theme.problem.badge-text : Theme.text;
+                    font-weight: split.missed || split.finish ? Theme.weight-screen-title : Theme.weight-regular;
+                    horizontal-alignment: right;
+                }
+            }
+        }
+    }
+}
+
+export component LiveDetail inherits Rectangle {
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: Theme.space-small;
+                Text {
+                    text: Live.detail-name;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    StatusBadge { status: Home.status-of(Live.detail-badge); }
+                }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Live.close-detail(); }
+                }
+            }
+        }
+        if Live.detail-problem != "": ProblemBand { }
+        if Live.detail-settled != "": SettledMark { text: Live.detail-settled; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space-small;
+            if Live.detail-tone >= 0: VerticalLayout {
+                alignment: center;
+                CourseChip { tone: Live.detail-tone; }
+            }
+            BubbleLabel { text: Live.detail-course; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Club"; }
+            BubbleLabel { text: Live.detail-club; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Puce"; }
+            BubbleLabel { text: Live.detail-card; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Heure de départ"; }
+            BubbleLabel { text: Live.detail-start; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Temps"; vertical-alignment: center; }
+            TimeText { time: Live.detail-time; crossed: Live.detail-crossed; }
+            if Live.detail-place != "" && Live.detail-place != "—": BubbleLabel { text: Live.detail-place; wrap: no-wrap; }
+        }
+        RowLine { }
+        SplitsTable { }
+        RowLine { }
+        if Live.detail-can-print: HorizontalLayout { alignment: start; SecondaryButton { label: "Imprimer le ticket"; } }
+        if Live.detail-has-runner: HorizontalLayout { alignment: start; SecondaryButton { label: "Modifier le participant…"; } }
+    }
+}
+
+export component LivePage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
+
+    VerticalLayout {
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            RaceCounts { }
+            if Live.active-list >= 0: RaceListFlowing { }
+            LiveContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left: the race in figures, and the list opened.
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.space;
+                        spacing: Theme.space;
+                        RaceCounts { vertical-stretch: 0; }
+                        if Live.active-list >= 0: RaceList { vertical-stretch: 1; }
+                        if Live.active-list < 0: Rectangle { vertical-stretch: 1; }
+                    }
+                }
+                LiveContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
+                }
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Live.detail-open;
+                close => { Live.close-detail(); }
+                LiveDetail { in-sheet: true; }
+            }
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom.
+export component LiveOverlay {
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: Live.detail-open;
+        close => { Live.close-detail(); }
+        LiveDetail { in-sheet: true; }
+    }
+}
+
+// One line per reading to settle, each with its button.
+export component LiveBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Courses.open-bubble == 21 ? Theme.menu-bubble-width
+            : Courses.open-bubble == 26 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 26: FiltersContent {
+            groups: Live.filter-groups;
+            toggle(g, c) => { Live.toggle-filter(g, c); }
+            clear => { Live.clear-filters(); }
+            close => { Courses.close-bubble(); }
+        }
+        if Courses.open-bubble == 13: VerticalLayout {
+            padding: Theme.space-medium;
+            spacing: Theme.space;
+            Text {
+                text: Live.alert-title;
+                color: Theme.text;
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-screen-title;
+                wrap: word-wrap;
+            }
+            for problem in Live.problems: HorizontalLayout {
+                spacing: Theme.space;
+                BubbleLabel { horizontal-stretch: 1; text: problem.label; }
+                PrimaryButton {
+                    label: problem.action;
+                    in-row: true;
+                    clicked => {
+                        Courses.close-bubble();
+                        Live.open-row(problem.index);
+                    }
+                }
+            }
+        }
+        // The « ⋯ » of a row (prototype: lDots): no effect yet.
+        if Courses.open-bubble == 21: VerticalLayout {
+            padding-top: Theme.space-small;
+            padding-bottom: Theme.space-small;
+            MenuItem { text: "Changer le statut…"; }
+            MenuItem { text: "Voir la fiche du coureur"; }
+            MenuItem { text: "Historique"; }
+        }
+    }
+}
+
+// The Direct button, next to the tabs (prototype: .x-direct): opens and closes the drawer.
+export component LiveTabButton inherits Rectangle {
+    in property <bool> narrow;
+
+    property <bool> open: Navigation.live-open;
+    property <color> tint: root.open ? Theme.active-tab-text : Theme.tab-text;
+    animate tint { duration: Theme.tab-duration; }
+
+    height: Theme.tab-height;   // in the tab bubble, as high as a tab
+    border-radius: self.height / 2;
+    background: root.open ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : Theme.tabs-background;
+    animate background { duration: Theme.tab-duration; }
+
+    zone := TouchArea {
+        y: (root.height - self.height) / 2;
+        height: max(root.height, Theme.zone);
+        mouse-cursor: pointer;
+        clicked => { Navigation.toggle-live(); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.button-margin;
+        padding-right: Theme.button-margin;
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            LiveDot {
+                size: Theme.direct-dot;
+                tone: Theme.live;
+                still: !Navigation.live-running;
+            }
+        }
+        if root.narrow: VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.radio;
+                colorize: root.tint;
+                width: Theme.tab-icon;
+                height: Theme.tab-icon;
+            }
+        }
+        if !root.narrow || root.open: Text {
+            text: "Direct";
+            color: root.tint;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        // Something to handle: the alert icon in a red mark, never the color alone.
+        // Its room is kept, alert or not: the tabs beside never move.
+        if root.narrow: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                visible: Live.alert-title != "";
+                width: Theme.live-alert-mark;
+                height: Theme.live-alert-mark;
+                border-radius: self.height / 2;
+                background: Theme.problem.badge-background;
+                border-width: Theme.thin-outline-width;
+                border-color: Theme.problem.badge-text;
+                accessible-role: image;
+                accessible-label: Live.alert-title;
+                Image {
+                    source: Icons.triangle-alert;
+                    colorize: Theme.problem.badge-text;
+                    width: Theme.live-alert-mark-icon;
+                    height: Theme.live-alert-mark-icon;
+                }
+            }
+        }
+    }
+}
+
+// The last reading, in one line.
+component BarReading inherits HorizontalLayout {
+    in property <bool> narrow;
+
+    spacing: Theme.space;
+    VerticalLayout {
+        alignment: center;
+        StatusBadge { status: Home.status-of(Live.last.badge); }
+    }
+    Text {
+        horizontal-stretch: root.narrow ? 1 : 0;
+        text: Live.last.name;
+        color: Theme.live-ink;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-screen-title;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    if !root.narrow: Text {
+        text: Live.last.category;
+        color: Theme.live-ink-soft;
+        font-size: Theme.text-help;
+        vertical-alignment: center;
+    }
+    VerticalLayout {
+        alignment: center;
+        TimeText {
+            time: Live.last.time;
+            crossed: Live.last.crossed;
+            tone: Theme.live-ink;
+            crossed-tone: Theme.live-ink-soft;
+        }
+    }
+    if !root.narrow && Live.last.place != "" && Live.last.place != "—": Text {
+        text: Live.last.place;
+        color: Theme.live-ink-soft;
+        font-size: Theme.text-help;
+        vertical-alignment: center;
+    }
+}
+
+// Shows its content only when told it fits: the content is cut by nothing, it goes away whole.
+component Fitting inherits Rectangle {
+    in property <bool> shown;
+    out property <length> needed: inner.preferred-width;
+
+    clip: true;
+    width: root.shown ? inner.preferred-width : 0px;
+    animate width { duration: Theme.tab-duration; }
+    inner := HorizontalLayout {
+        x: 0;
+        height: root.height;
+        @children
+    }
+}
+
+component SummaryFigure inherits Text {
+    color: Theme.live-ink;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-screen-title;
+    vertical-alignment: center;
+}
+
+component SummaryWords inherits Text {
+    color: Theme.live-ink-soft;
+    font-size: Theme.text-help;
+    vertical-alignment: center;
+}
+
+// The race in figures, the figures in bold white (prototype: drBar). `short`: the racing only.
+component SummaryLine inherits HorizontalLayout {
+    in property <bool> short;
+
+    spacing: Theme.space-small;
+    SummaryFigure { text: Live.summary.racing; }
+    SummaryWords { text: root.short ? "en course" : "en course ·"; }
+    if !root.short: SummaryFigure { text: Live.summary.back; }
+    if !root.short: SummaryWords {
+        text: Live.summary.back-word + (Live.summary.closing == "" ? "" : " · " + Live.summary.closing);
+    }
+}
+
+component DirectTitle inherits HorizontalLayout {
+    horizontal-stretch: 0;
+    spacing: Theme.space;
+    VerticalLayout {
+        alignment: center;
+        LiveDot {
+            size: Theme.direct-dot;
+            tone: Theme.live-accent;
+            still: !Navigation.live-running;
+        }
+    }
+    Text {
+        text: "Direct";
+        color: Theme.live-ink;
+        font-size: Theme.text-label;
+        font-weight: Theme.weight-block-title;
+        vertical-alignment: center;
+    }
+}
+
+// « N à traiter › »: closed, it opens the Direct on what is to handle (prototype: drBar);
+// open, it opens its bubble, joined to it.
+component BarToHandle inherits ToHandleButton {
+    label: Live.alert-title + " ›";
+    joined: Courses.open-bubble == 13;
+    joined-down: Courses.bubble-down;
+    clicked => {
+        if Navigation.live-open {
+            Courses.open-at(13, self.absolute-position.x, self.absolute-position.y + self.pill-y, self.width, self.pill-height);
+        } else {
+            Navigation.toggle-live();
+            Live.show-to-handle();
+        }
+    }
+}
+
+// The bar's first line on wider windows. What does not fit goes away whole, the least useful
+// first: the readers, then the last reading. Only the window's width decides, never a reading,
+// an alert or a count: nothing comes or goes by itself (charte-ui, rule 16).
+component WideBarLine inherits HorizontalLayout {
+    in property <length> room;
+
+    property <bool> open: Navigation.live-open;
+    property <bool> has-alert: Live.alert-title != "";
+    // Open, the readers and the reading are in the second line.
+    property <bool> show-reading: !root.open && Live.last.live && root.room >= Theme.live-bar-reading-room;
+    property <bool> show-readers: !root.open && root.room >= Theme.live-bar-readers-room;
+
+    min-height: Theme.zone;
+    title := DirectTitle { }
+    readers := Fitting {
+        shown: root.show-readers;
+        Rectangle { width: Theme.button-margin; }
+        for reader[i] in Readers.finish: HorizontalLayout {
+            padding-left: i > 0 ? Theme.space : 0px;
+            VerticalLayout {
+                alignment: center;
+                BarReader { reader: reader; raised: true; }
+            }
+        }
+    }
+    reading := Fitting {
+        shown: root.show-reading;
+        Rectangle { width: Theme.button-margin; }
+        BarReading { narrow: false; }
+    }
+    Rectangle { horizontal-stretch: 1; }
+    alert := Fitting {
+        shown: root.has-alert;
+        BarToHandle { }
+        Rectangle { width: Theme.button-margin; }
+    }
+    summary := SummaryLine { }
+}
+
+// The bar of the drawer, always at the bottom of an event (prototype: .x-bar). A click on
+// it opens or closes the drawer. Open, a second line comes on the green: the readers and
+// the last reading in big (prototype: x-r2).
+export component LiveBar inherits Rectangle {
+    in property <LayoutMode> layout-mode;
+    in property <length> left-margin;
+    in property <length> right-margin;
+    in property <length> bottom-margin;
+    // Its height at the bottom of the window, whether it is there now or not.
+    out property <length> closed-height: self.preferred-height - second.height + (root.open ? root.bottom-margin : 0px);
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> open: Navigation.live-open;
+    property <bool> live: Live.last.live;
+    property <bool> has-alert: Live.alert-title != "";
+    property <length> second-height: root.narrow ? Theme.live-open-row-narrow-height : Theme.live-open-row-height;
+
+    background: Theme.live-drawer;
+    border-top-left-radius: Theme.card-radius;
+    border-top-right-radius: Theme.card-radius;
+    drop-shadow-offset-y: Theme.live-bar-shadow-offset;
+    drop-shadow-blur: Theme.live-bar-shadow-blur;
+    drop-shadow-color: Theme.live-bar-shadow;
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Navigation.toggle-live(); }
+    }
+    VerticalLayout {
+        padding-top: Theme.space-small;
+        padding-bottom: Theme.space + (root.open ? 0px : root.bottom-margin);
+        padding-left: root.left-margin;
+        padding-right: root.right-margin;
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.live-handle-width;
+                height: Theme.live-handle-height;
+                border-radius: self.height / 2;
+                background: Theme.live-handle;
+                opacity: root.open ? 0 : 1;
+                animate opacity { duration: Theme.tab-duration; }
+            }
+        }
+        if !root.narrow: WideBarLine {
+            room: root.width - root.left-margin - root.right-margin;
+        }
+        // On a phone: one thing at a time, as in the prototype (mDrBar).
+        if root.narrow: HorizontalLayout {
+            min-height: Theme.zone;
+            spacing: Theme.space;
+            DirectTitle { }
+            if !root.open && root.live: BarReading { narrow: true; }
+            if (root.open || !root.live) && root.has-alert: BarToHandle { }
+            if !root.open && !root.live && !root.has-alert && Readers.finish.length > 0: VerticalLayout {
+                alignment: center;
+                BarReader {
+                    raised: true;
+                    reader: Readers.finish[0];
+                    label: Readers.finish.length + (Readers.finish.length > 1 ? " lecteurs" : " lecteur");
+                    show-pin: false;
+                }
+            }
+            if root.open || !root.live: Rectangle { horizontal-stretch: 1; }
+            if root.open || !root.live: SummaryLine { short: !root.open || root.has-alert; }
+        }
+        // Grows when the drawer opens; a click in it does not close the drawer.
+        second := Rectangle {
+            height: root.open ? root.second-height : 0px;
+            animate height {
+                duration: Theme.drawer-duration;
+                easing: cubic-bezier(0.3, 0.8, 0.3, 1);
+            }
+            // Cut only while it moves: open, the reader tiles' shadows go past its edges.
+            clip: self.height < root.second-height;
+            TouchArea { }
+            if !root.narrow: HorizontalLayout {
+                y: 0;
+                height: root.second-height;
+                padding-top: Theme.live-second-padding;
+                spacing: Theme.live-second-gap;
+                VerticalLayout {
+                    width: Theme.live-readers-width;
+                    alignment: start;
+                    spacing: Theme.space;
+                    for reader in Readers.finish: ReaderTile {
+                        reader: reader;
+                        compact: true;
+                    }
+                }
+                BigReading { horizontal-stretch: 1; }
+            }
+            if root.narrow: VerticalLayout {
+                y: 0;
+                height: root.second-height;
+                padding-top: Theme.live-second-narrow-padding;
+                spacing: Theme.live-second-narrow-padding;
+                HorizontalLayout {
+                    vertical-stretch: 0;
+                    spacing: Theme.space;
+                    // Equal shares of the width: a state word never widens one reader.
+                    for reader in Readers.finish: BarReader {
+                        raised: true;
+                        horizontal-stretch: 1;
+                        preferred-width: 0px;
+                        reader: reader;
+                        label: reader.name + " · " + (reader.mode == ReaderMode.unplugged ? "Débranché"
+                            : reader.mode == ReaderMode.reading ? "Lecture…" : "Prêt");
+                        show-pin: false;
+                    }
+                }
+                SmallReading { vertical-stretch: 1; }
+            }
+        }
+    }
+}

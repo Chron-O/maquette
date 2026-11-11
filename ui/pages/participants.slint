@@ -1,0 +1,749 @@
+// The Participants tab, following 02-participants.png and participants-resultats.md.
+// Rust gives the rows, already sorted and filtered; this file shows them and sends the clicks back.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { ReaderTile, Readers } from "../components/reader-tile.slint";
+import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
+import { ActiveFilter, FilterButton, FilterGroup, FiltersContent, SettingRow, Sheet, SheetTitle, Unfold } from "../components/zones.slint";
+import { StatusBadge, StatusBlock } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SequenceStop, SmallText, SortMark, StopsFlow, SummaryZone, Switch } from "courses.slint";
+
+export struct ParticipantRow {
+    index: int,
+    badge: Badge,
+    family: string,
+    first: string,
+    club: string,
+    category: string,
+    category-short: string,
+    tones: [int],       // one per passage, in passage order; empty when no course yet
+    card: string,       // with « · prêtée » for a loan card
+    no-card: bool,
+    start: string,
+    result: string,     // on a phone: the time when back, otherwise the start
+    selected: bool,
+}
+
+export struct Passage {
+    course: string,
+    tone: int,
+    ordered: bool,
+    stops: [SequenceStop],
+    time: string,
+    badge: Badge,
+}
+
+export global Participants {
+    in property <[ParticipantRow]> rows;
+    in property <[string]> chips;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[string]> problems;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    in property <string> search-text;
+    in property <int> sort-column;
+    in property <bool> sort-ascending: true;
+    in property <string> lent-count;
+    in property <string> lent-detail;
+    in property <string> lent-name;
+
+    in property <bool> detail-open;
+    in property <string> detail-name;
+    in property <string> detail-category;
+    in property <[int]> detail-tones;
+    in property <string> detail-club;
+    in property <string> detail-card;
+    in property <string> detail-start;
+    in property <[Passage]> passages;
+
+    callback select-row(int);
+    callback sort-by(int);
+    callback toggle-filter(int, int);
+    callback clear-filters();
+    callback show-problem(int);
+    callback search(string);
+    callback close-detail();
+}
+
+// The loan cards of the event, in the side panel under its title.
+component LentCards {
+    VerticalLayout {
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            Text {
+                text: Participants.lent-count;
+                color: Theme.text;
+                font-size: Theme.text-screen-title;
+                font-weight: Theme.weight-screen-title;
+                vertical-alignment: center;
+            }
+            SmallText {
+                text: Participants.lent-detail;
+                vertical-alignment: center;
+            }
+        }
+        if Participants.lent-name != "": SmallText { text: Participants.lent-name; }
+    }
+}
+
+export component Title inherits Rectangle {
+    callback clicked();
+    in property <string> label;
+    in property <bool> sorted;
+    in property <bool> ascending;
+
+    // Hover: a light background (charte-ui.md, Tableaux).
+    background: zone.has-hover ? Theme.column-title-hover : transparent;
+    animate background { duration: Theme.tint-duration; }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        Text {
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        if root.sorted: VerticalLayout {
+            alignment: center;
+            SortMark { ascending: root.ascending; }
+        }
+    }
+}
+
+export component Cell inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    vertical-alignment: center;
+}
+
+export component NameCell {
+    in property <string> family;
+    in property <string> first;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        Cell {
+            text: root.family;
+            font-weight: Theme.weight-screen-title;
+        }
+        Cell { text: root.first; }
+    }
+}
+
+// One chip per passage, in passage order (`tones`), or a single one (`tone`), then the text.
+export component CategoryCell {
+    in property <string> category;
+    in property <int> tone: -1;
+    in property <[int]> tones;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        if root.tones.length == 0 && root.tone >= 0: VerticalLayout {
+            alignment: center;
+            CourseChip { tone: root.tone; }
+        }
+        for item in root.tones: VerticalLayout {
+            alignment: center;
+            CourseChip { tone: item; }
+        }
+        Cell { text: root.category; }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. It scrolls sideways when it does not fit.
+component ParticipantsTable {
+    in property <length> available-width;
+
+    // Light when the room is short, whatever the device: next to an open detail, on a small tablet.
+    property <bool> wide: root.available-width >= Theme.participant-full-width;
+    property <length> category-width: root.wide ? Theme.participant-category-width : Theme.participant-light-category-width;
+    // The Action column when there is room for it (prototype: tabParts); otherwise the button takes the card's place.
+    property <bool> with-action: root.available-width >= Theme.participant-action-full-width;
+    property <length> card-width: root.with-action ? Theme.participant-card-width
+        : root.wide ? Theme.participant-card-button-width : Theme.participant-light-card-width;
+    property <length> action-width: root.with-action ? Theme.participant-action-width : 0px;
+    property <length> fixed: Theme.participant-state-width + root.category-width + root.card-width + root.action-width
+        + (root.wide ? Theme.participant-club-width + Theme.participant-start-width : 0px);
+    property <length> table-width: max(root.width, root.fixed + Theme.participant-name-width);
+    property <length> name-width: root.table-width - root.fixed;
+
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-width: root.table-width;
+        content-height: root.height;
+        VerticalLayout {
+            width: root.table-width;
+            height: root.height;
+            HorizontalLayout {
+                vertical-stretch: 0;
+                height: Theme.table-header-height + Theme.space;
+                Title { width: Theme.participant-state-width; label: "État"; sorted: Participants.sort-column == 0; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(0); } }
+                Title { width: root.name-width; label: "Nom"; sorted: Participants.sort-column == 1; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(1); } }
+                if root.wide: Title { width: Theme.participant-club-width; label: "Club"; sorted: Participants.sort-column == 2; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(2); } }
+                Title { width: root.category-width; label: "Catégorie"; sorted: Participants.sort-column == 3; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(3); } }
+                Title { width: root.card-width; label: "Puce"; sorted: Participants.sort-column == 4; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(4); } }
+                if root.wide: Title { width: Theme.participant-start-width; label: "Départ"; sorted: Participants.sort-column == 5; ascending: Participants.sort-ascending; clicked => { Participants.sort-by(5); } }
+                if root.with-action: Title { width: root.action-width; label: "Action"; }
+            }
+            RowLine { vertical-stretch: 0; }
+            Flickable {
+                vertical-stretch: 1;
+                content-height: lines.preferred-height;
+                lines := VerticalLayout {
+                    width: root.table-width;
+                    for row[n] in Participants.rows: VerticalLayout {
+                        if n > 0: RowLine { }
+                        Rectangle {
+                            min-height: Theme.zone;
+                            background: row.selected ? Theme.row-selected : row.no-card ? Theme.row-to-handle : transparent;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { Participants.select-row(row.index); }
+                            }
+                            HorizontalLayout {
+                                VerticalLayout {
+                                    width: Theme.participant-state-width;
+                                    alignment: center;
+                                    HorizontalLayout {
+                                        padding-left: Theme.space;
+                                        alignment: start;
+                                        StatusBadge { status: Home.status-of(row.badge); }
+                                    }
+                                }
+                                NameCell { width: root.name-width; family: row.family; first: row.first; }
+                                if root.wide: HorizontalLayout {
+                                    width: Theme.participant-club-width;
+                                    padding-left: Theme.space;
+                                    Cell { text: row.club; }
+                                }
+                                CategoryCell { width: root.category-width; category: root.wide ? row.category : row.category-short; tones: row.tones; }
+                                HorizontalLayout {
+                                    width: root.card-width;
+                                    padding-left: Theme.space;
+                                    if root.with-action || !row.no-card: Cell { text: row.card; wrap: word-wrap; }
+                                    if !root.with-action && row.no-card: HorizontalLayout {
+                                        alignment: start;
+                                        PrimaryButton { label: root.wide ? "Attribuer une puce" : "Attribuer"; in-row: true; }
+                                    }
+                                }
+                                if root.wide: HorizontalLayout {
+                                    width: Theme.participant-start-width;
+                                    padding-left: Theme.space;
+                                    Cell { text: row.start; }
+                                }
+                                if root.with-action: HorizontalLayout {
+                                    width: root.action-width;
+                                    padding-left: Theme.space;
+                                    padding-right: Theme.space;
+                                    alignment: start;
+                                    if row.no-card: VerticalLayout {
+                                        alignment: center;
+                                        PrimaryButton { label: "Attribuer une puce"; in-row: true; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: status block › who and where › the time.
+component ParticipantsList {
+    VerticalLayout {
+        for row[n] in Participants.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : row.no-card ? Theme.row-to-handle : transparent;
+                TouchArea {
+                    clicked => { Participants.select-row(row.index); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBlock { status: Home.status-of(row.badge); }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.family + " " + row.first;
+                            color: Theme.text;
+                            font-size: Theme.text-block-title;
+                            font-weight: Theme.weight-block-title;
+                            wrap: word-wrap;
+                        }
+                        CategoryCell { category: row.category; tones: row.tones; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        if !row.no-card: Cell {
+                            text: row.result;
+                            font-size: Theme.text-screen-title;
+                            font-weight: Theme.weight-screen-title;
+                            horizontal-alignment: right;
+                        }
+                        if row.no-card: PrimaryButton { label: "Attribuer"; in-row: true; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The head of the content (brief zones-onglets § 6): the orange add action on the left; on the
+// right, the alert, the Filtres button and the search. When they do not fit on one line, the
+// labels get shorter, then the search goes under them.
+component ParticipantsHead {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.participants-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.participants-head-search;
+    property <bool> search-open: Participants.search-text != "";
+
+    VerticalLayout {
+        spacing: Theme.space;
+        HorizontalLayout {
+            spacing: Theme.space;
+            PrimaryButton {
+                label: root.roomy ? "Nouveau participant" : "Nouveau";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if Participants.alert-title != "": AlertPill {
+                title: Participants.alert-title;
+                count: Participants.alert-count;
+                bubble: 6;
+                compact: !root.roomy;
+            }
+            FilterButton {
+                filters: Participants.active-filters;
+                narrow: root.narrow;
+                open: Courses.open-bubble == 7;
+                open-down: Courses.bubble-down;
+                clicked => {
+                    Courses.open-at(7, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                }
+                remove(g, c) => { Participants.toggle-filter(g, c); }
+                clear => { Participants.clear-filters(); }
+            }
+            if root.narrow: VerticalLayout {
+                alignment: start;
+                SearchToggle {
+                    open: root.search-open;
+                    clicked => {
+                        if root.search-open {
+                            Participants.search("");
+                        }
+                        root.search-open = !root.search-open;
+                    }
+                }
+            }
+            if !root.narrow && !root.search-below: VerticalLayout {
+                alignment: start;
+                InputField {
+                    width: Theme.code-search-width;
+                    placeholder: "Nom, club ou puce…";
+                    text: Participants.search-text;
+                    edited(text) => { Participants.search(text); }
+                }
+            }
+        }
+        if root.search-below: InputField {
+            placeholder: "Nom, club ou puce…";
+            text: Participants.search-text;
+            edited(text) => { Participants.search(text); }
+        }
+        // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+        if root.narrow: Unfold {
+            open: root.search-open;
+            InputField {
+                // Opened, it takes the keyboard.
+                property <bool> wanted: root.search-open;
+                changed wanted => {
+                    if self.wanted {
+                        self.take-focus();
+                    }
+                }
+                placeholder: "Nom, club ou puce…";
+                text: Participants.search-text;
+                edited(text) => { Participants.search(text); }
+            }
+        }
+    }
+}
+
+component ParticipantsContent inherits Rectangle {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    clip: true;
+    VerticalLayout {
+        VerticalLayout {
+            vertical-stretch: 0;
+            padding: Theme.space;
+            ParticipantsHead {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width - 2 * Theme.space;
+            }
+        }
+        RowLine { vertical-stretch: 0; }
+        if root.narrow: ParticipantsList { }
+        if !root.narrow: ParticipantsTable {
+            vertical-stretch: 1;
+            available-width: root.available-width;
+        }
+    }
+}
+
+// The detail of a participant: the content of the right-hand panel (or of the bottom sheet).
+export component ParticipantDetail inherits Rectangle {
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: Participants.detail-name;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                CategoryCell { category: Participants.detail-category; tones: Participants.detail-tones; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Participants.close-detail(); }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Club"; }
+            BubbleLabel { text: Participants.detail-club; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Puce"; }
+            BubbleLabel { text: Participants.detail-card; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Heure de départ"; }
+            BubbleLabel { text: Participants.detail-start; wrap: no-wrap; }
+        }
+        for passage in Participants.passages: VerticalLayout {
+            spacing: Theme.space;
+            RowLine { }
+            HorizontalLayout {
+                spacing: Theme.space-small;
+                VerticalLayout {
+                    alignment: center;
+                    CourseChip { tone: passage.tone; }
+                }
+                BubbleLabel { horizontal-stretch: 1; text: passage.course; }
+                SecondaryButton { label: "Retirer"; }
+            }
+            StopsFlow {
+                stops: passage.stops;
+                ordered: passage.ordered;
+                tone: passage.tone;
+            }
+            if passage.time != "": HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space;
+                BubbleLabel { text: "Temps " + passage.time; wrap: no-wrap; }
+                VerticalLayout {
+                    alignment: center;
+                    StatusBadge { status: Home.status-of(passage.badge); }
+                }
+            }
+        }
+        RowLine { }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Modifier…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Arrivée manuelle…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Historique"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Prêter une puce…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Non partant"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Abandon"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Retirer ce participant…"; danger: true; } }
+    }
+}
+
+export component ParticipantsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
+
+    // A layout at the root, so that a phone's page gets its whole height to scroll.
+    VerticalLayout {
+        if root.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            ReaderTile {
+                reader: Readers.entry;
+                compact: true;
+                with-result: true;
+                message: "Posez une puce sur la station";
+            }
+            ParticipantsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if !root.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left: the reader, then the loan cards.
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.button-margin;   // the reader close to the edges (Robin, 11/11)
+                        spacing: Theme.space;
+                        alignment: start;
+                        ReaderTile {
+                            reader: Readers.entry;
+                            with-result: true;
+                            message: "Posez une puce sur la station";
+                        }
+                        Rectangle { height: Theme.space; }
+                        SheetTitle { text: "Puces prêtées"; }
+                        LentCards { }
+                    }
+                }
+                ParticipantsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
+                }
+            }
+            // The detail: the same panel, sliding in from the right, over the table (which keeps
+            // its width). No veil: a click on another row changes it. Escape or the cross closes it.
+            Rectangle {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: parent.height;
+                clip: true;
+                Sheet {
+                    property <bool> shown: Participants.detail-open;
+                    x: self.shown ? parent.width - self.width : parent.width + Theme.sheet-gap;
+                    animate x {
+                        duration: Theme.sheet-duration;
+                        easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+                    }
+                    y: 0;
+                    width: min(Theme.side-sheet-width, parent.width);
+                    height: parent.height;
+                    visible: self.shown || self.x < parent.width;
+                    keys := FocusScope {
+                        key-pressed(event) => {
+                            if event.text == Key.Escape {
+                                Participants.close-detail();
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+                    changed shown => {
+                        if self.shown {
+                            keys.focus();
+                        }
+                    }
+                    Flickable {
+                        content-height: side-detail.preferred-height;
+                        side-detail := ParticipantDetail {
+                            x: 0;
+                            y: 0;
+                            width: parent.width;
+                            height: self.preferred-height;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom, over a veil; a touch on the veil closes it.
+export component ParticipantSheet {
+    property <bool> shown: Participants.detail-open;
+
+    Rectangle {
+        background: Theme.overlay-veil;
+        opacity: root.shown ? 1 : 0;
+        animate opacity { duration: Theme.sheet-duration; }
+    }
+    TouchArea {
+        enabled: root.shown;
+        clicked => { Participants.close-detail(); }
+    }
+    Sheet {
+        x: Theme.narrow-margin;
+        y: root.shown ? Theme.bottom-sheet-top : root.height + Theme.sheet-gap;
+        animate y {
+            duration: Theme.sheet-duration;
+            easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        width: root.width - 2 * Theme.narrow-margin;
+        height: root.height - Theme.bottom-sheet-top + Theme.sheet-radius;
+        visible: root.shown || self.y < root.height;
+        clip: true;
+        Flickable {
+            height: parent.height - Theme.sheet-radius;
+            content-height: bottom-detail.preferred-height;
+            bottom-detail := ParticipantDetail {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: self.preferred-height;
+            }
+        }
+    }
+}
+
+// The rows of the Paramètres tab (brief zones-onglets § 2, capture 02).
+export component ParticipantSettings {
+    VerticalLayout {
+        SettingRow {
+            label: "Inscription";
+            VerticalLayout {
+                alignment: center;
+                ChoiceSegments {
+                    choices: ["par catégorie", "par circuit"];
+                    active: 0;
+                }
+            }
+        }
+        RowLine { }
+        SettingRow {
+            label: "Dossards";
+            VerticalLayout {
+                alignment: center;
+                ChoiceSegments {
+                    choices: ["sans", "avec"];
+                    active: 0;
+                }
+            }
+        }
+        RowLine { }
+        SettingRow {
+            label: "Champs libres";
+            HorizontalLayout {
+                spacing: Theme.space;
+                Text {
+                    text: "repas";
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    vertical-alignment: center;
+                }
+                QuietButton { label: "Modifier"; }
+            }
+        }
+        RowLine { }
+    }
+}
+
+// One line per problem, each with its button.
+component ProblemsContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Participants.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        // « Voir » applies the matching filter, which shows in the Filtres button.
+        for problem[i] in Participants.problems: HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: problem; }
+            QuietButton {
+                label: "Voir";
+                clicked => {
+                    Participants.show-problem(i);
+                    Courses.close-bubble();
+                }
+            }
+        }
+    }
+}
+
+export component ParticipantsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Courses.open-bubble == 7 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 6: ProblemsContent { }
+        if Courses.open-bubble == 7: FiltersContent {
+            groups: Participants.filter-groups;
+            toggle(g, c) => { Participants.toggle-filter(g, c); }
+            clear => { Participants.clear-filters(); }
+            close => { Courses.close-bubble(); }
+        }
+    }
+}

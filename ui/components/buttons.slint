@@ -1,0 +1,176 @@
+import { Theme } from "../theme.slint";
+
+// Orange main button, pill shaped, 18 bold text.
+// `in-row`: a row action, drawn smaller, 16 bold text.
+// The click area keeps the charter height (36 or 48): only the drawing changes.
+export component PrimaryButton {
+    callback clicked();
+    in property <string> label;
+    in property <bool> in-row: false;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+
+    min-height: Theme.primary-button-height;
+
+    Rectangle {
+        height: root.in-row ? Theme.row-action-height : root.height;
+        y: (root.height - self.height) / 2;
+        border-radius: self.height / 2;
+        background: zone.pressed ? Theme.primary-button-pressed
+            : zone.has-hover ? Theme.primary-button-hover
+            : Theme.primary-button;
+        animate background { duration: Theme.tint-duration; }
+    }
+    HorizontalLayout {
+        padding-left: root.in-row ? Theme.button-margin : Theme.primary-button-margin;
+        padding-right: root.in-row ? Theme.button-margin : Theme.primary-button-margin;
+        spacing: Theme.button-icon-gap;
+        alignment: center;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.primary-button-text;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+        }
+        Text {
+            text: root.label;
+            color: Theme.primary-button-text;
+            font-size: root.in-row ? Theme.text-body : Theme.text-primary-button;
+            font-weight: Theme.weight-screen-title;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Secondary button: white, thin outline, radius 10. Optional icon on the left.
+// `enabled: false`: drawn pale, the click does nothing.
+export component SecondaryButton {
+    callback clicked();
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+
+    min-height: Theme.zone;
+    opacity: root.enabled ? 1 : Theme.dimmed-opacity;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+
+    Rectangle {
+        height: Theme.secondary-button-height;
+        y: (root.height - self.height) / 2;
+        border-radius: Theme.secondary-button-radius;
+        border-width: Theme.thin-outline-width;
+        border-color: Theme.thin-outline;
+        background: zone.pressed ? Theme.secondary-button-pressed
+            : zone.has-hover ? Theme.secondary-button-hover
+            : Theme.secondary-button;
+        animate background { duration: Theme.tint-duration; }
+    }
+    HorizontalLayout {
+        padding-left: Theme.button-margin;
+        padding-right: Theme.button-margin;
+        spacing: Theme.button-icon-gap;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon;
+                colorize: Theme.text;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+        }
+        Text {
+            text: root.label;
+            color: root.danger ? Theme.problem.badge-text : Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Quiet button: underlined text, darker on hover. Slint cannot underline:
+// the line is drawn under the text, at its width.
+export component QuietButton {
+    callback clicked();
+    in property <string> label;
+
+    min-height: Theme.zone;
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: start;
+            VerticalLayout {
+                Text {
+                    text: root.label;
+                    color: zone.has-hover ? Theme.text : Theme.text-secondary;
+                    animate color { duration: Theme.tint-duration; }
+                    font-size: Theme.text-label;
+                    font-weight: Theme.weight-label;
+                }
+                Rectangle {
+                    height: Theme.underline;
+                    background: zone.has-hover ? Theme.text : Theme.text-secondary;
+                    animate background { duration: Theme.tint-duration; }
+                }
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Small "···" button on table rows (08-direct.png).
+// `open`: its menu is open, joined to it on the side `down` says.
+export component MoreButton {
+    callback clicked();
+    in property <bool> open;
+    in property <bool> down: true;
+
+    min-height: Theme.zone;
+    min-width: Theme.small-button-width;
+
+    Rectangle {
+        property <length> radius: self.height / 2;
+        width: Theme.small-button-width;
+        height: Theme.small-button-height;
+        border-radius: self.radius;
+        border-width: Theme.thin-outline-width;
+        border-color: root.open ? Theme.active-tab-background : Theme.thin-outline;
+        // Open: lit, dark green, while its menu points at it.
+        background: root.open ? Theme.active-tab-background
+            : zone.pressed ? Theme.secondary-button-pressed
+            : zone.has-hover ? Theme.secondary-button-hover
+            : Theme.secondary-button;
+        animate background { duration: Theme.tint-duration; }
+    }
+    Text {
+        text: "···";
+        color: root.open ? Theme.active-tab-text : Theme.text;
+        font-size: Theme.text-label;
+        font-weight: Theme.weight-screen-title;
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

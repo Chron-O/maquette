@@ -1,0 +1,51 @@
+import { Theme } from "../theme.slint";
+
+// Pill button on the header.
+export component HeaderButton inherits Rectangle {
+    callback clicked();
+    in property <string> label;
+    in property <bool> arrow-only: false;
+
+    min-height: Theme.zone;
+    min-width: Theme.zone;
+    border-radius: self.height / 2;
+    background: zone.pressed ? Theme.header-button-pressed
+        : zone.has-hover ? Theme.header-button-hover
+        : Theme.header-button;
+    animate background { duration: Theme.tint-duration; }
+
+    // A layout around the two `if`, so the width reaches the header.
+    HorizontalLayout {
+        if !root.arrow-only: HorizontalLayout {
+            padding-left: Theme.space-medium;
+            padding-right: Theme.space-medium;
+            Text {
+                text: root.label;
+                color: Theme.header-text;
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-label;
+                vertical-alignment: center;
+            }
+        }
+        // The arrow is a font character: it sits low in its line, so it is lifted to look centered.
+        if root.arrow-only: Rectangle {
+            width: Theme.zone;
+            Text {
+                y: -Theme.back-arrow-lift;
+                width: 100%;
+                height: 100%;
+                text: root.label;
+                color: Theme.header-text;
+                font-size: Theme.back-arrow-size;
+                font-weight: Theme.weight-label;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

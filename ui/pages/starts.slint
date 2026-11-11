@@ -1,0 +1,1088 @@
+// The Départs tab, following the HTML prototype and departs-tirage-v2.md.
+// Rust gives the rows, already sorted and filtered, and draws the start times.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { Tabs, TabItem } from "../components/tabs.slint";
+import { ChoiceSegments } from "../components/choice-segments.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SettingRow, SettingsTab, SideDetail, Unfold, Zones } from "../components/zones.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch, TitleBubble } from "courses.slint";
+import { Cell, Title } from "participants.slint";
+
+export struct StartRow {
+    index: int,         // -1 for a vacant start
+    time: string,
+    old-time: string,   // in a draw preview, when the time moves
+    locked: bool,
+    family: string,
+    first: string,
+    category: string,
+    club: string,
+    card: string,
+    badge: Badge,
+    note: string,       // in a draw preview: why the time stays
+    selected: bool,
+}
+
+export struct StartSection {
+    index: int,
+    name: string,
+    tone: int,
+    chips: [string],
+    detail: string,     // on a phone, under its name: the chips that matter there
+    rows: [StartRow],
+}
+
+export struct StartGroup {
+    name: string,
+    detail: string,
+}
+
+export struct StartPoint {
+    label: string,
+}
+
+// The settings of one start point (departs-arrivees-numerotes.md), already written by Rust.
+export struct StartPointSetting {
+    name: string,
+    first-start: string,
+    step: string,
+    limit: string,
+}
+
+export struct FriseCell {
+    index: int,         // -1 when no runner
+    label: string,
+    vacant: bool,
+    locked: bool,
+    moved: bool,
+    dimmed: bool,
+}
+
+export struct FriseRow {
+    point: string,      // on the first row of a start point, when there are several
+    name: string,
+    tone: int,
+    cells: [FriseCell],
+}
+
+export struct ChangedStart {
+    name: string,
+    time: string,
+}
+
+export global Starts {
+    in property <[StartSection]> sections;
+    in property <[string]> chips;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[ChangedStart]> changed;
+    in property <[StartGroup]> groups;
+    in property <int> active-group: -1;
+    in property <[StartPoint]> points;
+    in property <int> active-point;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    in property <[TabItem]> views;
+    in property <int> active-view;
+    in property <string> search-text;
+    in property <int> sort-column;
+    in property <bool> sort-ascending: true;
+    in property <[StartPointSetting]> point-settings;
+    in property <[string]> frise-times;
+    in property <[FriseRow]> frise-rows;
+
+    in property <bool> preview;
+    in property <string> preview-detail;
+    in property <string> publish-label: "Publier";
+    in property <bool> publish-enabled: true;
+
+    in property <bool> detail-open;
+    in property <string> detail-name;
+    in property <string> detail-subtitle;
+    in property <string> detail-time;
+    in property <string> detail-old-time;   // in a draw preview, when the time moves
+    in property <string> detail-point;
+    in property <string> detail-club;
+    in property <string> detail-card;
+    in property <string> detail-groups;
+    in property <bool> detail-locked;
+
+    in-out property <int> bubble-section;   // the course whose settings or « ⋯ » menu are open
+
+    callback select-row(int);
+    callback sort-by(int);
+    callback select-group(int);
+    callback select-point(int);
+    callback toggle-filter(int, int);
+    callback clear-filters();
+    callback select-view(int);
+    callback search(string);
+    callback close-detail();
+    callback toggle-lock();
+    callback draw();
+    callback abandon();
+    callback apply();
+    callback publish();
+}
+
+component LockMark inherits Image {
+    source: Icons.lock;
+    colorize: Theme.text-secondary;
+    width: Theme.badge-icon;
+    height: Theme.badge-icon;
+}
+
+// A time that goes away in a draw preview, crossed out.
+component OldTime {
+    in property <string> time;
+
+    HorizontalLayout {
+        Rectangle {
+            width: label.preferred-width;
+            label := Text {
+                text: root.time;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                height: Theme.thin-outline-width;
+                background: Theme.text-secondary;
+            }
+        }
+    }
+}
+
+component TimeCell {
+    in property <StartRow> entry;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        spacing: Theme.space-small;
+        if root.entry.old-time != "": OldTime { time: root.entry.old-time; }
+        Cell {
+            text: root.entry.time;
+            font-weight: Theme.weight-screen-title;
+        }
+        if root.entry.locked: VerticalLayout {
+            alignment: center;
+            LockMark { }
+        }
+    }
+}
+
+component VacantMark inherits Rectangle {
+    height: Theme.badge-height;
+    border-radius: Theme.tag-radius;
+    border-width: Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-right: Theme.space;
+        SmallText {
+            text: "Vacant";
+            wrap: no-wrap;
+            vertical-alignment: center;
+        }
+    }
+}
+
+component StateCell {
+    in property <StartRow> entry;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        if root.entry.note != "": SmallText {
+            text: root.entry.note;
+            vertical-alignment: center;
+        }
+        if root.entry.note == "": VerticalLayout {
+            alignment: center;
+            StatusBadge { status: Home.status-of(root.entry.badge); }
+        }
+    }
+}
+
+// The « ⋯ » of a course (prototype: grpDots): a small menu, joined to it. No effect yet.
+component SectionMenuButton {
+    in property <int> section;
+
+    property <bool> open: Courses.open-bubble == 23 && Starts.bubble-section == root.section;
+
+    min-width: Theme.small-button-width;
+    horizontal-stretch: 0;
+    accessible-role: button;
+    accessible-label: "Plus d'actions";
+    MoreButton {
+        width: 100%;
+        height: 100%;
+        open: root.open;
+        down: Courses.bubble-down;
+        clicked => {
+            Starts.bubble-section = root.section;
+            Courses.open-at(23, self.absolute-position.x + (self.width - Theme.small-button-width) / 2,
+                self.absolute-position.y + (self.height - Theme.small-button-height) / 2,
+                Theme.small-button-width, Theme.small-button-height);
+        }
+    }
+}
+
+// The settings of one course's starts, in its Réglages tab: the rows of the Paramètres.
+component SectionSettings inherits VerticalLayout {
+    padding-top: Theme.space-small;
+    SettingRow {
+        label: "Écart dans ce circuit";
+        SmallText { text: "Comme tous : 2 min"; vertical-alignment: center; }
+    }
+    SettingRow {
+        label: "Catégories";
+        ChoiceSegments {
+            choices: ["Mêlées", "Alternées", "À la suite"];
+            active: 0;
+        }
+    }
+    SettingRow {
+        label: "Ordre";
+        SmallText { text: "Comme tous : au hasard"; vertical-alignment: center; }
+    }
+    SettingRow {
+        label: "Pas avant";
+        SmallText { text: "—"; vertical-alignment: center; }
+        VerticalLayout {
+            alignment: center;
+            SecondaryButton {
+                label: "Catégorie";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+        }
+    }
+    HorizontalLayout {
+        padding: Theme.space-medium;
+        padding-top: Theme.space;
+        padding-bottom: Theme.space-small;
+        alignment: start;
+        SecondaryButton { label: "Refaire le tirage de ce circuit"; }
+    }
+}
+
+// The head of one course's starts: its name and what it is, then its Réglages tab, which
+// unfolds over the rows (the same tab as the Paramètres of the page, Robin 11/11).
+component SectionHead inherits Rectangle {
+    in property <StartSection> section;
+    in property <bool> compact;
+    out property <bool> open: tab.open;
+
+    background: Theme.page-background;
+    VerticalLayout {
+        padding: Theme.space-small;
+        padding-bottom: Theme.settings-tab-height - Theme.settings-tab-tuck + Theme.space-small;
+        Rectangle { height: title.preferred-height; }
+    }
+    // Drawn before the title, so that it comes from under it.
+    tab := SettingsTab {
+        x: root.compact ? Theme.space-small + Theme.settings-tab-narrow-inset : Theme.space-small + Theme.space-medium;
+        y: title.y + title.height - Theme.settings-tab-tuck;
+        width: root.compact ? root.width - 2 * (Theme.space-small + Theme.settings-tab-narrow-inset)
+            : min(root.width - 2 * Theme.space-small - 2 * Theme.space-medium, max(Theme.bubble-width, self.wanted-width));
+        label: "Réglages";
+        summary: Zones.join(root.section.chips);
+        narrow: root.compact;
+        SectionSettings { }
+    }
+    title := TitleBubble {
+        x: Theme.space-small;
+        y: Theme.space-small;
+        width: root.width - 2 * Theme.space-small;
+        height: self.preferred-height;
+        tone: root.section.tone;
+        name: root.section.name;
+        facts: root.section.detail;
+        compact: root.compact;
+        SectionMenuButton { section: root.section.index; }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. It scrolls sideways when it does not fit.
+component StartsTable {
+    in property <length> available-width;
+
+    property <bool> wide: root.available-width >= Theme.start-full-width;
+    property <length> category-width: root.wide ? Theme.start-category-width : Theme.start-light-category-width;
+    property <length> state-width: root.wide ? Theme.start-state-width : Theme.start-light-state-width;
+    property <length> fixed: Theme.start-time-width + root.category-width + root.state-width
+        + (root.wide ? Theme.start-club-width + Theme.start-card-width : 0px);
+    property <length> table-width: max(root.width, root.fixed + Theme.participant-name-width);
+    property <length> name-width: root.table-width - root.fixed;
+
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-width: root.table-width;
+        content-height: root.height;
+        VerticalLayout {
+            width: root.table-width;
+            height: root.height;
+            HorizontalLayout {
+                vertical-stretch: 0;
+                height: Theme.table-header-height + Theme.space;
+                Title { width: Theme.start-time-width; label: "Heure"; sorted: Starts.sort-column == 0; ascending: Starts.sort-ascending; clicked => { Starts.sort-by(0); } }
+                Title { width: root.name-width; label: "Nom"; sorted: Starts.sort-column == 1; ascending: Starts.sort-ascending; clicked => { Starts.sort-by(1); } }
+                Title { width: root.category-width; label: "Cat."; sorted: Starts.sort-column == 2; ascending: Starts.sort-ascending; clicked => { Starts.sort-by(2); } }
+                if root.wide: Title { width: Theme.start-club-width; label: "Club"; sorted: Starts.sort-column == 3; ascending: Starts.sort-ascending; clicked => { Starts.sort-by(3); } }
+                if root.wide: Title { width: Theme.start-card-width; label: "Puce"; sorted: Starts.sort-column == 4; ascending: Starts.sort-ascending; clicked => { Starts.sort-by(4); } }
+                Title { width: root.state-width; label: "État"; sorted: Starts.sort-column == 5; ascending: Starts.sort-ascending; clicked => { Starts.sort-by(5); } }
+            }
+            RowLine { vertical-stretch: 0; }
+            Flickable {
+                vertical-stretch: 1;
+                content-height: lines.preferred-height;
+                lines := VerticalLayout {
+                    width: root.table-width;
+                    for section in Starts.sections: Rectangle {
+                      z: head.open ? 1 : 0;
+                      VerticalLayout {
+                        head := SectionHead { z: 1; section: section; compact: !root.wide; }
+                        for row in section.rows: VerticalLayout {
+                            RowLine { }
+                            Rectangle {
+                                min-height: Theme.zone;
+                                background: row.selected ? Theme.row-selected : row.old-time != "" ? Theme.row-to-handle : transparent;
+                                if row.index >= 0: TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { Starts.select-row(row.index); }
+                                }
+                                HorizontalLayout {
+                                    TimeCell { width: Theme.start-time-width; entry: row; }
+                                    if row.index >= 0: HorizontalLayout {
+                                        width: root.name-width;
+                                        padding-left: Theme.space;
+                                        alignment: start;
+                                        spacing: Theme.space-small;
+                                        Cell {
+                                            text: row.family;
+                                            font-weight: Theme.weight-screen-title;
+                                        }
+                                        Cell { text: row.first; }
+                                    }
+                                    if row.index < 0: HorizontalLayout {
+                                        width: root.name-width;
+                                        padding-left: Theme.space;
+                                        alignment: start;
+                                        VerticalLayout {
+                                            alignment: center;
+                                            VacantMark { }
+                                        }
+                                    }
+                                    HorizontalLayout {
+                                        width: root.category-width;
+                                        padding-left: Theme.space;
+                                        Cell { text: row.category; }
+                                    }
+                                    if root.wide: HorizontalLayout {
+                                        width: Theme.start-club-width;
+                                        padding-left: Theme.space;
+                                        Cell { text: row.club; }
+                                    }
+                                    if root.wide: HorizontalLayout {
+                                        width: Theme.start-card-width;
+                                        padding-left: Theme.space;
+                                        Cell { text: row.card; }
+                                    }
+                                    if row.index >= 0: StateCell { width: root.state-width; entry: row; }
+                                    if row.index < 0: HorizontalLayout {
+                                        width: root.state-width;
+                                        padding-left: Theme.space;
+                                        alignment: start;
+                                        SecondaryButton { label: "Réserver…"; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                  }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: the time › who and their state.
+component StartsList {
+    VerticalLayout {
+        for section in Starts.sections: Rectangle {
+          z: head.open ? 1 : 0;
+          VerticalLayout {
+            head := SectionHead { z: 1; section: section; compact: true; }
+            for row in section.rows: VerticalLayout {
+                RowLine { }
+                Rectangle {
+                    min-height: Theme.zone;
+                    background: row.selected ? Theme.row-selected : row.old-time != "" ? Theme.row-to-handle : transparent;
+                    if row.index >= 0: TouchArea {
+                        clicked => { Starts.select-row(row.index); }
+                    }
+                    HorizontalLayout {
+                        padding: Theme.space;
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            width: Theme.start-phone-time-width;
+                            alignment: center;
+                            if row.old-time != "": OldTime { time: row.old-time; }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Theme.space-small;
+                                Cell {
+                                    text: row.time;
+                                    font-weight: Theme.weight-screen-title;
+                                }
+                                if row.locked: VerticalLayout {
+                                    alignment: center;
+                                    LockMark { }
+                                }
+                            }
+                        }
+                        if row.index >= 0: VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: Theme.space-small;
+                            Text {
+                                text: row.family + " " + row.first;
+                                color: Theme.text;
+                                font-size: Theme.text-help;
+                                font-weight: Theme.weight-block-title;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Theme.space;
+                                VerticalLayout {
+                                    alignment: center;
+                                    if row.note == "": StatusBadge { status: Home.status-of(row.badge); }
+                                    if row.note != "": SmallText { text: row.note; wrap: no-wrap; }
+                                }
+                                Cell { text: row.category; }
+                            }
+                        }
+                        if row.index < 0: VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            HorizontalLayout {
+                                alignment: start;
+                                VacantMark { }
+                            }
+                        }
+                        if row.index < 0: SecondaryButton { label: "Réserver…"; }
+                    }
+                }
+            }
+        }
+      }
+    }
+}
+
+component FriseBox inherits Rectangle {
+    in property <FriseCell> cell;
+    in property <int> tone;
+
+    width: Theme.frise-cell-width;
+    height: Theme.frise-cell-height;
+    border-radius: Theme.tag-radius;
+    opacity: root.cell.dimmed ? Theme.dimmed-opacity : 1;
+    background: root.cell.index >= 0 ? Courses.tone-color(root.tone) : root.cell.vacant ? transparent : Theme.surface;
+    border-width: root.cell.moved ? Theme.tag-outline : root.cell.vacant ? Theme.thin-outline-width : 0;
+    border-color: root.cell.moved ? Theme.primary-button : Theme.thin-outline;
+    property <color> ink: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: root.cell.label;
+            color: root.ink;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-screen-title;
+            horizontal-alignment: center;
+        }
+    }
+    if root.cell.locked: Image {
+        x: parent.width - self.width - Theme.space-small / 2;
+        y: Theme.space-small / 2;
+        source: Icons.lock;
+        colorize: root.ink;
+        width: Theme.frise-lock;
+        height: Theme.frise-lock;
+    }
+    if root.cell.index >= 0: TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Starts.select-row(root.cell.index); }
+    }
+}
+
+// One row per course, sorted by start point, one column per minute. It scrolls sideways when it does not fit.
+component StartsFrise {
+    property <length> frise-width: lines.preferred-width;
+
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-width: max(root.width, root.frise-width);
+        content-height: max(root.height, lines.preferred-height);
+        lines := VerticalLayout {
+            alignment: start;
+            padding: Theme.space-medium;
+            spacing: Theme.space-small;
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space-small;
+                Rectangle { width: Theme.frise-name-width; }
+                for time in Starts.frise-times: Text {
+                    width: Theme.frise-cell-width;
+                    text: time;
+                    color: Theme.text-secondary;
+                    font-size: Theme.text-help;
+                    horizontal-alignment: center;
+                }
+            }
+            for row in Starts.frise-rows: VerticalLayout {
+                spacing: Theme.space-small;
+                if row.point != "": Text {
+                    text: row.point;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-screen-title;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: Theme.space-small;
+                    HorizontalLayout {
+                        width: Theme.frise-name-width;
+                        alignment: start;
+                        spacing: Theme.space-small;
+                        VerticalLayout {
+                            alignment: center;
+                            CourseChip { tone: row.tone; }
+                        }
+                        Cell {
+                            text: row.name;
+                            font-weight: Theme.weight-block-title;
+                        }
+                    }
+                    for cell in row.cells: FriseBox { cell: cell; tone: row.tone; }
+                }
+            }
+        }
+    }
+}
+
+// A draw that is not applied yet: nothing changes before « Appliquer ».
+component DrawPreview inherits Rectangle {
+    in property <bool> narrow;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.tag-outline;
+    border-color: Theme.primary-button;
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            spacing: Theme.space;
+            alignment: start;
+            Text {
+                text: "Aperçu du tirage";
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-screen-title;
+                vertical-alignment: center;
+            }
+            VerticalLayout {
+                alignment: center;
+                StatusBadge { status: Home.status-of({ word: "Pas encore appliqué", kind: to-check }); }
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            if !root.narrow: SmallText {
+                horizontal-stretch: 1;
+                text: Starts.preview-detail;
+                vertical-alignment: center;
+            }
+            if root.narrow: Rectangle { horizontal-stretch: 1; }
+            QuietButton { label: "Abandonner"; clicked => { Starts.abandon(); } }
+            SecondaryButton { label: "Refaire (nouvel ordre)"; clicked => { Starts.draw(); } }
+            PrimaryButton { label: "Appliquer"; in-row: true; clicked => { Starts.apply(); } }
+        }
+        if root.narrow: SmallText { text: Starts.preview-detail; }
+    }
+}
+
+component StartsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Starts.search-text != "";
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.starts-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.starts-head-search;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        if Starts.preview: DrawPreview {
+            vertical-stretch: 0;
+            narrow: root.narrow;
+        }
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    // The draw in orange, then the views; on the right, the alert, the filters and
+                    // the search (brief zones-onglets § 6). The draw hides while its preview is open.
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        if !Starts.preview: PrimaryButton {
+                            label: root.narrow ? "Tirer" : "Tirer les horaires";
+                            clicked => { Starts.draw(); }
+                        }
+                        if !root.narrow: Tabs {
+                            tabs: Starts.views;
+                            active: Starts.active-view;
+                            clicked(i) => { Starts.select-view(i); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        if Starts.alert-title != "" && !Starts.preview: AlertPill {
+                            title: Starts.alert-title;
+                            count: Starts.alert-count;
+                            bubble: 8;
+                            compact: !root.roomy;
+                        }
+                        FilterButton {
+                            filters: Starts.active-filters;
+                            narrow: root.narrow;
+                            open: Courses.open-bubble == 24;
+                            open-down: Courses.bubble-down;
+                            clicked => {
+                                Courses.open-at(24, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                            }
+                            remove(g, c) => { Starts.toggle-filter(g, c); }
+                            clear => { Starts.clear-filters(); }
+                        }
+                        if root.narrow: SearchToggle {
+                            open: root.search-open;
+                            clicked => {
+                                if root.search-open {
+                                    Starts.search("");
+                                }
+                                root.search-open = !root.search-open;
+                            }
+                        }
+                        if !root.narrow && !root.search-below: VerticalLayout {
+                            alignment: center;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Nom ou club…";
+                                text: Starts.search-text;
+                                edited(text) => { Starts.search(text); }
+                            }
+                        }
+                    }
+                    if root.search-below: InputField {
+                        placeholder: "Nom ou club…";
+                        text: Starts.search-text;
+                        edited(text) => { Starts.search(text); }
+                    }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Nom ou club…";
+                            text: Starts.search-text;
+                            edited(text) => { Starts.search(text); }
+                        }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: StartsList { }
+                if !root.narrow && Starts.active-view == 0: StartsTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+                if !root.narrow && Starts.active-view == 1: StartsFrise { vertical-stretch: 1; }
+            }
+        }
+    }
+}
+
+component GroupItem inherits Rectangle {
+    callback clicked();
+    in property <StartGroup> group;
+    in property <bool> active;
+
+    border-radius: Theme.field-radius;
+    background: root.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    VerticalLayout {
+        padding: Theme.space;
+        min-height: Theme.zone;
+        alignment: center;
+        Text {
+            text: root.group.name;
+            color: root.active ? Theme.active-tab-text : Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        Text {
+            text: root.group.detail;
+            color: root.active ? Theme.active-tab-text : Theme.text-secondary;
+            font-size: Theme.text-help;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// The floating panel on the left (brief zones-onglets § 3).
+component GroupsColumn inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.sheet-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.sheet-shadow-blur;
+    drop-shadow-offset-y: Theme.sheet-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            SecondaryButton {
+                label: "Groupe";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Text {
+            vertical-stretch: 0;
+            text: "Groupes de départ";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+        }
+        for group[i] in Starts.groups: GroupItem {
+            vertical-stretch: 0;
+            group: group;
+            active: Starts.active-group == i;
+            clicked => { Starts.select-group(i); }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+}
+
+export component StartDetail inherits Rectangle {
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: Starts.detail-name;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: Starts.detail-subtitle; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Starts.close-detail(); }
+                }
+            }
+        }
+        if Starts.detail-locked: HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space-small;
+            VerticalLayout {
+                alignment: center;
+                LockMark { }
+            }
+            BubbleLabel { text: "Verrouillée"; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Heure de départ"; }
+            if Starts.detail-old-time != "": VerticalLayout {
+                alignment: center;
+                OldTime { time: Starts.detail-old-time; }
+            }
+            BubbleLabel { text: Starts.detail-time; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Départ"; }
+            BubbleLabel { text: Starts.detail-point; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Club"; }
+            BubbleLabel { text: Starts.detail-club; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { horizontal-stretch: 1; text: "Puce"; }
+            BubbleLabel { text: Starts.detail-card; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            spacing: Theme.space;
+            SmallText { text: "Groupes"; }
+            BubbleLabel { horizontal-stretch: 1; text: Starts.detail-groups; horizontal-alignment: right; }
+        }
+        RowLine { }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Échanger avec…"; } }
+        HorizontalLayout {
+            alignment: start;
+            SecondaryButton {
+                label: Starts.detail-locked ? "Déverrouiller l'heure" : "Verrouiller l'heure";
+                icon: Icons.lock;
+                has-icon: true;
+                clicked => { Starts.toggle-lock(); }
+            }
+        }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Placer au premier créneau libre"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Ajouter à un groupe…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Demande : partir tôt"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Demande : partir tard"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Changer de départ…"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Mettre un vacant à sa place…"; danger: true; } }
+    }
+}
+
+export component StartsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
+
+    VerticalLayout {
+        if root.layout-mode == LayoutMode.narrow: StartsContent {
+            layout-mode: root.layout-mode;
+            available-width: root.available-width;
+        }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                GroupsColumn { width: Theme.course-list-width; }
+                StartsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
+                }
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Starts.detail-open;
+                close => { Starts.close-detail(); }
+                StartDetail { in-sheet: true; }
+            }
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom.
+export component StartOverlay {
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: Starts.detail-open;
+        close => { Starts.close-detail(); }
+        StartDetail { in-sheet: true; }
+    }
+}
+
+component SettingRow {
+    in property <string> label;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        BubbleLabel { horizontal-stretch: 1; text: root.label; }
+        @children
+    }
+}
+
+// The rows of the Paramètres tab.
+export component StartsSettings {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        BubbleLabel { text: "Comment partent les coureurs"; }
+        HorizontalLayout {
+            alignment: start;
+            ChoiceSegments {
+                choices: ["Libre", "Avec horaires", "En masse"];
+                active: 1;
+            }
+        }
+        // One block per start point, each with its own settings (lot4-departs.md § 2).
+        for point in Starts.point-settings: VerticalLayout {
+            spacing: Theme.space-small;
+            RowLine { }
+            Text {
+                text: point.name;
+                color: Theme.text;
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-screen-title;
+                wrap: word-wrap;
+            }
+            SettingRow {
+                label: "Premier départ";
+                BubbleLabel { text: point.first-start; wrap: no-wrap; }
+            }
+            BubbleLabel { text: point.step; }
+            BubbleLabel { text: point.limit; }
+        }
+        RowLine { }
+        SettingRow {
+            label: "Écart dans un circuit";
+            BubbleLabel { text: "2 min"; wrap: no-wrap; }
+        }
+        BubbleLabel { text: "Ordre"; }
+        HorizontalLayout {
+            alignment: start;
+            ChoiceSegments {
+                choices: ["Au hasard", "Classement", "Classement inversé"];
+                active: 0;
+            }
+        }
+        SettingRow {
+            label: "Séparer les clubs";
+            VerticalLayout {
+                alignment: center;
+                Switch { on: true; }
+            }
+        }
+        SettingRow {
+            label: "Vacants";
+            BubbleLabel { text: "1 par circuit"; wrap: no-wrap; }
+        }
+        SettingRow {
+            label: "Demandes tôt / tard";
+            VerticalLayout {
+                alignment: center;
+                Switch { on: true; }
+            }
+        }
+    }
+}
+
+component ChangesContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Starts.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        for start in Starts.changed: HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: start.name; }
+            BubbleLabel { text: start.time; wrap: no-wrap; }
+        }
+        HorizontalLayout {
+            alignment: end;
+            PrimaryButton {
+                label: "Publier les changements";
+                in-row: true;
+                clicked => {
+                    Courses.close-bubble();
+                    Starts.publish();
+                }
+            }
+        }
+    }
+}
+
+export component StartsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Courses.open-bubble == 23 ? Theme.menu-bubble-width
+            : Courses.open-bubble == 24 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 24: FiltersContent {
+            groups: Starts.filter-groups;
+            toggle(g, c) => { Starts.toggle-filter(g, c); }
+            clear => { Starts.clear-filters(); }
+            close => { Courses.close-bubble(); }
+        }
+        if Courses.open-bubble == 8: ChangesContent { }
+        if Courses.open-bubble == 23: VerticalLayout {
+            padding-top: Theme.space-small;
+            padding-bottom: Theme.space-small;
+            MenuItem { text: "Refaire le tirage de ce circuit"; }
+            MenuItem { text: "Ajouter un vacant"; }
+            MenuItem { text: "Imprimer ce circuit"; }
+        }
+    }
+}

@@ -1,0 +1,970 @@
+// The Boîtiers tab, following the HTML prototype and lot1b-boitiers-serie.md: one table
+// whose state moves on as stations are checked before the race and collected after it.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { Tabs, TabItem } from "../components/tabs.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
+import { Cell, Title } from "participants.slint";
+import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
+
+export struct CourseMark {
+    letter: string,
+    tone: int,
+}
+
+export struct StationRow {
+    index: int,
+    name: string,
+    courses: [CourseMark],
+    serial: string,
+    serial-long: string,
+    badge: Badge,
+    battery: string,
+    low-battery: bool,
+    action: string,
+    action-short: string,
+    can-add: bool,      // the only row action that works for now
+    to-handle: bool,
+    selected: bool,
+}
+
+export struct StationProblem {
+    label: string,
+}
+
+// A station worth reading to settle a doubt, ticked once read.
+export struct UsefulStation {
+    label: string,
+    detail: string,
+    done: bool,
+}
+
+export global Stations {
+    in property <[StationRow]> rows;
+    in property <[string]> chips;
+    in property <string> summary;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <string> alert-button;
+    in property <[StationProblem]> problems;
+    in property <[TabItem]> modes;
+    in property <int> active-mode;
+    in property <[TabItem]> filters;
+    in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    in property <string> search-text;
+    in property <int> sort-column;
+    in property <bool> sort-ascending: true;
+
+    in property <string> gauge-title;
+    in property <string> gauge-count;
+    in property <string> gauge-total;
+    in property <float> gauge-share;
+    in property <string> gauge-detail;
+
+    in property <[UsefulStation]> useful;
+    in property <string> settings-spares;
+    in property <[string]> settings-parks;
+    in property <[string]> settings-specials;
+    in property <bool> settings-check-clock;
+    in property <bool> settings-check-battery;
+
+    // What was read, in its own card above the table (prototype: bxBig).
+    in property <bool> reading;
+    in property <string> reading-code;
+    in property <string> reading-label;      // over the code: « Code lu », « Rentré »
+    in property <string> reading-question;
+    in property <string> reading-detail;
+    in property <string> reading-detail-short;   // on a phone
+    in property <string> reading-button;
+    in property <string> reading-button-short;
+    in property <bool> reading-can-refuse;
+
+    in property <bool> detail-open;
+    in property <int> detail-index;
+    in property <string> detail-name;
+    in property <string> detail-subtitle;
+    in property <bool> detail-has-station;
+    in property <string> detail-serial;
+    in property <string> detail-park;
+    in property <bool> detail-low-battery;
+    in property <string> detail-gap;
+    in property <string> detail-punches;
+
+    callback select-mode(int);
+    callback select-filter(int);
+    callback toggle-filter(int, int);
+    callback clear-filters();
+    callback select-row(int);
+    callback sort-by(int);
+    callback search(string);
+    callback close-detail();
+    callback confirm-reading();
+    callback add-row(int);
+    callback alert-action();
+}
+
+component CourseMarks {
+    in property <[CourseMark]> marks;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: Theme.space;
+        if root.marks.length == 0: Cell {
+            text: "—";
+            color: Theme.text-secondary;
+        }
+        for mark in root.marks: HorizontalLayout {
+            spacing: Theme.space-small;
+            VerticalLayout {
+                alignment: center;
+                CourseChip { tone: mark.tone; }
+            }
+            Cell { text: mark.letter; }
+        }
+    }
+}
+
+component BatteryCell {
+    in property <StationRow> entry;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        if !root.entry.low-battery: Cell {
+            text: root.entry.battery;
+            color: Theme.text-secondary;
+        }
+        if root.entry.low-battery: VerticalLayout {
+            alignment: center;
+            StatusBadge { status: Home.status-of({ word: root.entry.battery, kind: to-check }); }
+        }
+    }
+}
+
+// The button of a row, when it has one. Only « Ajouter à la course » works for now.
+component RowAction {
+    in property <string> label;
+    in property <int> index;
+    in property <bool> can-add;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        alignment: start;
+        if root.label != "": PrimaryButton {
+            label: root.label;
+            in-row: true;
+            clicked => {
+                if root.can-add {
+                    Stations.add-row(root.index);
+                }
+            }
+        }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. It scrolls sideways when it does not fit.
+component StationsTable {
+    in property <length> available-width;
+
+    property <bool> wide: root.available-width >= Theme.station-full-width;
+    property <length> serial-width: root.wide ? Theme.station-serial-width : Theme.station-light-serial-width;
+    property <length> state-width: root.wide ? Theme.station-state-width : Theme.station-light-state-width;
+    property <length> action-width: root.wide ? Theme.station-action-width : Theme.station-light-action-width;
+    property <length> fixed: root.serial-width + root.state-width + root.action-width
+        + (root.wide ? Theme.station-courses-width + Theme.station-battery-width : 0px);
+    property <length> table-width: max(root.width, root.fixed + Theme.station-name-width);
+    property <length> name-width: root.table-width - root.fixed;
+
+    Flickable {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-width: root.table-width;
+        content-height: root.height;
+        VerticalLayout {
+            width: root.table-width;
+            height: root.height;
+            HorizontalLayout {
+                vertical-stretch: 0;
+                height: Theme.table-header-height + Theme.space;
+                Title { width: root.name-width; label: "Besoin"; sorted: Stations.sort-column == 0; ascending: Stations.sort-ascending; clicked => { Stations.sort-by(0); } }
+                if root.wide: HorizontalLayout {
+                    width: Theme.station-courses-width;
+                    padding-left: Theme.space;
+                    Text {
+                        text: "Circuits";
+                        color: Theme.text;
+                        font-size: Theme.text-help;
+                        font-weight: Theme.weight-block-title;
+                        vertical-alignment: center;
+                    }
+                }
+                Title { width: root.serial-width; label: "Boîtier"; sorted: Stations.sort-column == 1; ascending: Stations.sort-ascending; clicked => { Stations.sort-by(1); } }
+                Title { width: root.state-width; label: "État"; sorted: Stations.sort-column == 2; ascending: Stations.sort-ascending; clicked => { Stations.sort-by(2); } }
+                if root.wide: Title { width: Theme.station-battery-width; label: "Pile"; sorted: Stations.sort-column == 3; ascending: Stations.sort-ascending; clicked => { Stations.sort-by(3); } }
+                Rectangle { width: root.action-width; }
+            }
+            RowLine { vertical-stretch: 0; }
+            Flickable {
+                vertical-stretch: 1;
+                content-height: lines.preferred-height;
+                lines := VerticalLayout {
+                    width: root.table-width;
+                    for row[n] in Stations.rows: VerticalLayout {
+                        if n > 0: RowLine { }
+                        Rectangle {
+                            min-height: Theme.zone;
+                            background: row.selected ? Theme.row-selected : row.to-handle ? Theme.row-to-handle : transparent;
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { Stations.select-row(row.index); }
+                            }
+                            HorizontalLayout {
+                                HorizontalLayout {
+                                    width: root.name-width;
+                                    padding-left: Theme.space;
+                                    Cell {
+                                        text: row.name;
+                                        font-weight: Theme.weight-screen-title;
+                                    }
+                                }
+                                if root.wide: HorizontalLayout {
+                                    width: Theme.station-courses-width;
+                                    padding-left: Theme.space;
+                                    CourseMarks { marks: row.courses; }
+                                }
+                                HorizontalLayout {
+                                    width: root.serial-width;
+                                    padding-left: Theme.space;
+                                    Cell { text: root.wide ? row.serial-long : row.serial; }
+                                }
+                                HorizontalLayout {
+                                    width: root.state-width;
+                                    padding-left: Theme.space;
+                                    padding-top: Theme.space-small;
+                                    padding-bottom: Theme.space-small;
+                                    alignment: start;
+                                    VerticalLayout {
+                                        alignment: center;
+                                        spacing: Theme.space-small;
+                                        StatusBadge { status: Home.status-of(row.badge); }
+                                        // Without the Pile column, the weak battery goes under the state.
+                                        if !root.wide && row.low-battery: StatusBadge {
+                                            status: Home.status-of({ word: row.battery, kind: to-check });
+                                        }
+                                    }
+                                }
+                                if root.wide: BatteryCell { width: Theme.station-battery-width; entry: row; }
+                                RowAction {
+                                    width: root.action-width;
+                                    label: root.wide ? row.action : row.action-short;
+                                    index: row.index;
+                                    can-add: row.can-add;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: the need and its state › the button of the row.
+component StationsList {
+    VerticalLayout {
+        for row[n] in Stations.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : row.to-handle ? Theme.row-to-handle : transparent;
+                TouchArea {
+                    clicked => { Stations.select-row(row.index); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: Theme.space-small;
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Theme.space;
+                            Cell {
+                                text: row.name;
+                                font-weight: Theme.weight-screen-title;
+                            }
+                            Cell {
+                                text: row.serial;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Theme.space-small;
+                            StatusBadge { status: Home.status-of(row.badge); }
+                            if row.low-battery: StatusBadge { status: Home.status-of({ word: row.battery, kind: to-check }); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        RowAction {
+                            label: row.action-short;
+                            index: row.index;
+                            can-add: row.can-add;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// What the reader just read, in big, outlined in green: answered before the next station
+// (prototype: bxBig, and mBoitiers on a phone).
+component ReadingCard inherits Rectangle {
+    in property <bool> stacked;   // the buttons under the question, when the row is too narrow
+    in property <bool> narrow;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.tag-outline;
+    border-color: Theme.live;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        HorizontalLayout {
+            spacing: Theme.space-medium;
+            VerticalLayout {
+                alignment: center;
+                if !root.narrow: SmallText {
+                    text: Stations.reading-label;
+                    wrap: no-wrap;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: Stations.reading-code;
+                    color: Theme.text;
+                    font-size: Theme.reading-code-size;
+                    font-weight: Theme.weight-screen-title;
+                    horizontal-alignment: center;
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: Theme.space-small;
+                Text {
+                    text: Stations.reading-question;
+                    color: Theme.text;
+                    font-size: Theme.text-block-title;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: root.narrow ? Stations.reading-detail-short : Stations.reading-detail; }
+            }
+            if !root.stacked: VerticalLayout {
+                alignment: center;
+                PrimaryButton {
+                    label: Stations.reading-button;
+                    clicked => { Stations.confirm-reading(); }
+                }
+            }
+            if !root.stacked && Stations.reading-can-refuse: VerticalLayout {
+                alignment: center;
+                SecondaryButton { label: "Non, c'est un autre numéro…"; }
+            }
+        }
+        if root.stacked: HorizontalLayout {
+            spacing: Theme.space;
+            alignment: end;
+            if Stations.reading-can-refuse: SecondaryButton { label: root.narrow ? "Non, un autre…" : "Non, c'est un autre numéro…"; }
+            PrimaryButton {
+                label: root.narrow ? Stations.reading-button-short : Stations.reading-button;
+                clicked => { Stations.confirm-reading(); }
+            }
+        }
+    }
+}
+
+component StationsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Stations.search-text != "";
+    property <bool> roomy: !root.narrow && root.available-width >= Theme.stations-head-roomy;
+    property <bool> search-below: !root.narrow && root.available-width < Theme.stations-head-search;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        if Stations.reading: ReadingCard {
+            vertical-stretch: 0;
+            narrow: root.narrow;
+            stacked: root.available-width < Theme.reading-card-row-width;
+        }
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    // The add action, then on the right the alert, the filters and the search
+                    // (brief zones-onglets § 6). Orange: a button used often (Robin, 11/11).
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        PrimaryButton {
+                            label: "Boîtier spécial";
+                            icon: Icons.plus;
+                            has-icon: true;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        if Stations.alert-title != "": AlertPill {
+                            title: Stations.alert-title;
+                            count: Stations.alert-count;
+                            bubble: 11;
+                            compact: !root.roomy;
+                        }
+                        FilterButton {
+                            filters: Stations.active-filters;
+                            narrow: root.narrow;
+                            open: Courses.open-bubble == 25;
+                            open-down: Courses.bubble-down;
+                            clicked => {
+                                Courses.open-at(25, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                            }
+                            remove(g, c) => { Stations.toggle-filter(g, c); }
+                            clear => { Stations.clear-filters(); }
+                        }
+                        if root.narrow: SearchToggle {
+                            open: root.search-open;
+                            clicked => {
+                                if root.search-open {
+                                    Stations.search("");
+                                }
+                                root.search-open = !root.search-open;
+                            }
+                        }
+                        if !root.narrow && !root.search-below: VerticalLayout {
+                            alignment: center;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Poste ou n°…";
+                                text: Stations.search-text;
+                                edited(text) => { Stations.search(text); }
+                            }
+                        }
+                    }
+                    if root.search-below: InputField {
+                        placeholder: "Poste ou n°…";
+                        text: Stations.search-text;
+                        edited(text) => { Stations.search(text); }
+                    }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Poste ou n°…";
+                            text: Stations.search-text;
+                            edited(text) => { Stations.search(text); }
+                        }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: StationsList { }
+                if !root.narrow: StationsTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+            }
+        }
+    }
+}
+
+component GaugeCard inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Stations.gauge-title;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            Text {
+                text: Stations.gauge-count;
+                color: Theme.text;
+                font-size: Theme.text-screen-title;
+                font-weight: Theme.weight-screen-title;
+                vertical-alignment: center;
+            }
+            SmallText {
+                text: Stations.gauge-total;
+                wrap: no-wrap;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            height: Theme.gauge-height;
+            border-radius: self.height / 2;
+            background: Theme.surface;
+            clip: true;
+            Rectangle {
+                x: 0;
+                width: parent.width * Stations.gauge-share;
+                background: Theme.live;
+            }
+        }
+        if Stations.gauge-detail != "": SmallText { text: Stations.gauge-detail; }
+    }
+}
+
+// The reader of the tab: the code read and its label. The question and the detail go in
+// the reading card, above the table (prototype: tile(3) and bxBig).
+component StationsReader inherits ReaderTile {
+    reader: Readers.free;
+    with-result: true;
+    stations: true;
+    message: "Posez un boîtier sur la station";
+    state: Stations.reading ? ReaderState.read : ReaderState.waiting;
+    code: Stations.reading-code;
+    verdict: Stations.reading-label;
+}
+
+// While collecting: the stations worth reading to settle a doubt, ticked once read.
+component UsefulCard inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: "Utiles pour lever un doute";
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            wrap: word-wrap;
+        }
+        for item in Stations.useful: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: item.label;
+                    color: Theme.text;
+                    font-size: Theme.text-help;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: item.detail; }
+            }
+            // Never by its color alone: the tick and its word.
+            if item.done: HorizontalLayout {
+                spacing: Theme.space-small;
+                VerticalLayout {
+                    alignment: center;
+                    Image {
+                        source: Icons.check;
+                        colorize: Theme.valid.badge-text;
+                        width: Theme.button-icon;
+                        height: Theme.button-icon;
+                    }
+                }
+                SmallText { text: "lu"; wrap: no-wrap; vertical-alignment: center; }
+            }
+        }
+    }
+}
+
+export component StationDetail inherits Rectangle {
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: Stations.detail-name;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: Stations.detail-subtitle; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Stations.close-detail(); }
+                }
+            }
+        }
+        if !Stations.detail-has-station: SmallText { text: "Aucun boîtier affecté"; }
+        if Stations.detail-has-station: VerticalLayout {
+            spacing: Theme.button-margin;
+            HorizontalLayout {
+                spacing: Theme.space;
+                SmallText { horizontal-stretch: 1; text: "Boîtier"; }
+                BubbleLabel { text: Stations.detail-serial; wrap: no-wrap; }
+            }
+            HorizontalLayout {
+                spacing: Theme.space;
+                SmallText { horizontal-stretch: 1; text: "Parc"; }
+                BubbleLabel { text: Stations.detail-park; wrap: no-wrap; }
+            }
+            HorizontalLayout {
+                spacing: Theme.space;
+                SmallText { horizontal-stretch: 1; text: "Pile"; vertical-alignment: center; }
+                if !Stations.detail-low-battery: BubbleLabel { text: "OK"; wrap: no-wrap; }
+                if Stations.detail-low-battery: VerticalLayout {
+                    alignment: center;
+                    StatusBadge { status: Home.status-of({ word: "Pile faible", kind: to-check }); }
+                }
+            }
+            HorizontalLayout {
+                spacing: Theme.space;
+                SmallText { horizontal-stretch: 1; text: "Écart d'heure"; }
+                BubbleLabel { text: Stations.detail-gap; wrap: no-wrap; }
+            }
+            HorizontalLayout {
+                spacing: Theme.space;
+                SmallText { horizontal-stretch: 1; text: "Poinçons lus"; }
+                BubbleLabel { text: Stations.detail-punches; wrap: no-wrap; }
+            }
+        }
+        RowLine { }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Remplacer le boîtier…"; } }
+        if Stations.detail-has-station: HorizontalLayout { alignment: start; SecondaryButton { label: "Voir la mémoire"; } }
+        HorizontalLayout { alignment: start; SecondaryButton { label: "Retirer de la course"; danger: true; } }
+    }
+}
+
+export component StationsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
+
+    VerticalLayout {
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            StationsReader { compact: true; }
+            Tabs {
+                tabs: Stations.modes;
+                active: Stations.active-mode;
+                clicked(i) => { Stations.select-mode(i); }
+            }
+            StationsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+            if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
+        }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left (brief zones-onglets § 3).
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.button-margin;   // the reader close to the edges, as on Participants (Robin, 11/11)
+                        alignment: start;
+                        spacing: Theme.space;
+                        StationsReader { }
+                        Rectangle { height: Theme.space; }
+                        Tabs {
+                            tabs: Stations.modes;
+                            active: Stations.active-mode;
+                            clicked(i) => { Stations.select-mode(i); }
+                        }
+                        GaugeCard { }
+                        if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
+                    }
+                }
+                StationsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
+                }
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Stations.detail-open;
+                close => { Stations.close-detail(); }
+                StationDetail { in-sheet: true; }
+            }
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom.
+export component StationOverlay {
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: Stations.detail-open;
+        close => { Stations.close-detail(); }
+        StationDetail { in-sheet: true; }
+    }
+}
+
+// A value of a setting (prototype: .val): a small framed box, unlike the filter pills.
+component ValueTag inherits Rectangle {
+    in property <string> label;
+    in property <bool> removable;
+
+    height: Theme.zone;
+    accessible-role: text;
+    accessible-label: root.label;
+    Rectangle {
+        height: Theme.highlight-chip-height;
+        border-radius: Theme.value-tag-radius;
+        background: Theme.surface;
+        HorizontalLayout {
+            padding-left: Theme.space;
+            padding-right: Theme.space;
+            spacing: Theme.space-small;
+            Text {
+                text: root.label;
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+            if root.removable: VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text;
+                    width: Theme.badge-icon;
+                    height: Theme.badge-icon;
+                    accessible-role: button;
+                    accessible-label: "Retirer";
+                }
+            }
+        }
+    }
+}
+
+// One setting: its name and its short description, its value on the right.
+component SettingLine {
+    in property <string> label;
+    in property <string> description;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            BubbleLabel { text: root.label; }
+            SmallText { text: root.description; }
+        }
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: Theme.space-small;
+            @children
+        }
+    }
+}
+
+// The same on a phone, when the value is long: the value under the name.
+component SettingBlock {
+    in property <string> label;
+    in property <string> description;
+
+    VerticalLayout {
+        spacing: Theme.space-small;
+        BubbleLabel { text: root.label; }
+        SmallText { text: root.description; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-small;
+            @children
+        }
+    }
+}
+
+component SectionTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-label;
+    font-weight: Theme.weight-screen-title;
+    wrap: word-wrap;
+}
+
+// The settings of the event's stations (prototype 22/10: bxSettings), in two sections.
+// Values from Rust; the buttons have no effect for now.
+export component StationsSettings {
+    in property <bool> narrow;
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        SectionTitle { text: "Boîtiers de la course"; }
+        SettingLine {
+            label: "Boîtiers de secours";
+            description: "Sortis en plus des besoins, au cas où.";
+            SecondaryButton { label: "−"; }
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    min-width: Theme.stepper-value-width;
+                    text: Stations.settings-spares;
+                    color: Theme.text;
+                    font-size: Theme.text-label;
+                    font-weight: Theme.weight-screen-title;
+                    horizontal-alignment: center;
+                }
+            }
+            SecondaryButton { label: "+"; }
+        }
+        RowLine { }
+        if !root.narrow: SettingLine {
+            label: "Pris dans les parcs";
+            description: "Parcs où l'on prend les boîtiers de cette course.";
+            for park in Stations.settings-parks: ValueTag { label: park; removable: true; }
+            SecondaryButton { label: "+ Parc"; }
+        }
+        if root.narrow: SettingBlock {
+            label: "Pris dans les parcs";
+            description: "Parcs où l'on prend les boîtiers de cette course.";
+            for park in Stations.settings-parks: ValueTag { label: park; removable: true; }
+            SecondaryButton { label: "+ Parc"; }
+        }
+        RowLine { }
+        if !root.narrow: SettingLine {
+            label: "Boîtiers spéciaux";
+            description: "Hors postes : effacer, contrôler les puces.";
+            for special in Stations.settings-specials: ValueTag { label: special; }
+            SecondaryButton { label: "+ Boîtier spécial"; }
+        }
+        if root.narrow: SettingBlock {
+            label: "Boîtiers spéciaux";
+            description: "Hors postes : effacer, contrôler les puces.";
+            for special in Stations.settings-specials: ValueTag { label: special; }
+            SecondaryButton { label: "+ Boîtier spécial"; }
+        }
+        Rectangle { height: Theme.space; }
+        SectionTitle { text: "À la lecture"; }
+        SettingLine {
+            label: "Vérifier l'heure du boîtier";
+            description: "Signale un boîtier dont l'heure est décalée.";
+            VerticalLayout {
+                alignment: center;
+                Switch { on: Stations.settings-check-clock; }
+            }
+        }
+        RowLine { }
+        SettingLine {
+            label: "Vérifier la pile";
+            description: "Signale une pile faible.";
+            VerticalLayout {
+                alignment: center;
+                Switch { on: Stations.settings-check-battery; }
+            }
+        }
+    }
+}
+
+// One line per problem, each with its button.
+component ProblemsContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Stations.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        for problem in Stations.problems: HorizontalLayout {
+            spacing: Theme.space;
+            BubbleLabel { horizontal-stretch: 1; text: problem.label; }
+            // Applies the matching filter, which shows in the Filtres button.
+            QuietButton {
+                label: Stations.alert-button;
+                clicked => {
+                    Courses.close-bubble();
+                    Stations.alert-action();
+                }
+            }
+        }
+    }
+}
+
+export component StationsBubble {
+    in property <length> margin;
+    in property <bool> narrow;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Courses.open-bubble == 25 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 11: ProblemsContent { }
+        if Courses.open-bubble == 25: FiltersContent {
+            groups: Stations.filter-groups;
+            toggle(g, c) => { Stations.toggle-filter(g, c); }
+            clear => { Stations.clear-filters(); }
+            close => { Courses.close-bubble(); }
+        }
+    }
+}

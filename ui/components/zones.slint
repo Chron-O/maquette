@@ -1,0 +1,555 @@
+// The zones of a tab (brief zones-onglets, 10/11/2026): the floating side panel, the
+// Paramètres tab under the tab bubble, and the Filtres button with its bubble's content.
+// Shared by every tab; each page gives its own words, rows and filters.
+
+import { Theme } from "../theme.slint";
+import { Icons } from "icons.slint";
+import { QuietButton } from "buttons.slint";
+
+// A choice of a filter group, as Rust gives it.
+export struct FilterChoice {
+    label: string,
+    tone: int,       // a course colour, or -1
+    active: bool,
+}
+
+export struct FilterGroup {
+    key: int,        // which group, for Rust: a page may leave a group out
+    title: string,
+    choices: [FilterChoice],
+}
+
+// A filter in use, shown in the button with its cross.
+export struct ActiveFilter {
+    label: string,
+    tone: int,
+    group: int,
+    choice: int,
+}
+
+// Helpers shared by the zones.
+export global Zones {
+    // The settings of a page, in one line: « A · B · C » (up to five).
+    public pure function join(chips: [string]) -> string {
+        if chips.length == 0 {
+            return "";
+        }
+        if chips.length == 1 {
+            return chips[0];
+        }
+        if chips.length == 2 {
+            return chips[0] + " · " + chips[1];
+        }
+        if chips.length == 3 {
+            return chips[0] + " · " + chips[1] + " · " + chips[2];
+        }
+        if chips.length == 4 {
+            return chips[0] + " · " + chips[1] + " · " + chips[2] + " · " + chips[3];
+        }
+        return chips[0] + " · " + chips[1] + " · " + chips[2] + " · " + chips[3] + " · " + chips[4];
+    }
+}
+
+// A course colour, as a small square (the same as CourseChip, which lives in a page file).
+component Tone inherits Rectangle {
+    in property <int> tone;
+
+    width: Theme.course-chip;
+    height: Theme.course-chip;
+    border-radius: Theme.course-chip-radius;
+    background: root.tone == 0 ? Theme.course-blue : root.tone == 1 ? Theme.course-red : Theme.course-green;
+}
+
+// The floating panel, as on macOS: off the edges, rounded, a light shadow all around.
+// No background blur (Slint has none): an opaque card. Dark: a thin outline instead.
+export component Sheet inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.sheet-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.sheet-shadow-blur;
+    drop-shadow-offset-y: Theme.sheet-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
+}
+
+// The small grey title of a section in a panel (« Lecture », « Puces prêtées »).
+export component SheetTitle inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    wrap: word-wrap;
+}
+
+// The Paramètres tab, hung under the tab bubble. A click unfolds it down, over the content:
+// nothing moves. Escape, « Refermer » or a click on its head folds it back.
+// `narrow`: the word alone; the summary is seen by opening it (Robin, 10/11).
+export component SettingsTab inherits Rectangle {
+    in property <string> label: "Paramètres";   // « Réglages » for a course, in its card
+    in property <string> summary;
+    out property <length> wanted-width: head.preferred-width;
+    in property <bool> narrow;
+    in-out property <bool> open;
+    in property <length> tuck: Theme.settings-tab-tuck;   // the part hidden under what it hangs from
+
+    out property <length> head-height: max(Theme.settings-tab-height, head.preferred-height);
+    property <length> body-height: root.open ? body.preferred-height : 0px;
+
+    height: root.head-height + root.shown-body;
+    property <length> shown-body: root.body-height;
+    animate shown-body {
+        duration: Theme.sheet-duration;
+        easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    // The shadow falls down only: it must not look hidden under the bubble.
+    background: Theme.card;
+    border-bottom-left-radius: Theme.sheet-radius;
+    border-bottom-right-radius: Theme.sheet-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.settings-tab-shadow-blur;
+    drop-shadow-offset-y: Theme.settings-tab-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape && root.open {
+                root.open = false;
+                return accept;
+            }
+            reject
+        }
+    }
+    changed open => {
+        if root.open {
+            keys.focus();
+        }
+    }
+
+    Rectangle {
+        clip: true;
+        border-bottom-left-radius: Theme.sheet-radius;
+        border-bottom-right-radius: Theme.sheet-radius;
+        head := HorizontalLayout {
+            y: 0;
+            height: root.head-height;
+            padding-top: root.tuck;
+            padding-left: Theme.button-margin;
+            padding-right: Theme.button-margin;
+            alignment: center;
+            spacing: Theme.space;
+            accessible-role: button;
+            accessible-label: root.label + " : " + root.summary;
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.settings;
+                    colorize: Theme.text;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+            }
+            Text {
+                text: root.narrow ? root.label : root.label + " :";
+                color: Theme.text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+            if !root.narrow: Text {
+                horizontal-stretch: 1;
+                text: root.summary;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: Icons.chevron-down;
+                    colorize: Theme.text;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                    transform-rotation: root.open ? 180deg : 0deg;
+                    animate transform-rotation { duration: Theme.sheet-duration; }
+                }
+            }
+        }
+        TouchArea {
+            y: 0;
+            height: root.head-height;
+            mouse-cursor: pointer;
+            clicked => { root.open = !root.open; }
+        }
+        // A line between the head and the rows, when open.
+        Rectangle {
+            y: root.head-height - Theme.thin-outline-width;
+            height: Theme.thin-outline-width;
+            background: Theme.separator;
+            visible: root.shown-body > 0;
+        }
+        body := VerticalLayout {
+            y: root.head-height;
+            height: self.preferred-height;
+            padding-bottom: Theme.space;
+            @children
+            HorizontalLayout {
+                alignment: center;
+                QuietButton {
+                    label: "Refermer";
+                    clicked => { root.open = false; }
+                }
+            }
+        }
+    }
+}
+
+// One row of the Paramètres: its name, then its control on the right.
+export component SettingRow inherits HorizontalLayout {
+    in property <string> label;
+
+    padding-left: Theme.space-medium;
+    padding-right: Theme.space-medium;
+    spacing: Theme.space;
+    min-height: Theme.field-zone;
+    Text {
+        horizontal-stretch: 1;
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.text-help;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+    @children
+}
+
+// A filter in use, inside the button: its words and its cross.
+component InUse inherits Rectangle {
+    callback removed();
+    in property <ActiveFilter> filter;
+
+    height: Theme.filter-in-use-height;
+    border-radius: self.height / 2;
+    background: Theme.card;
+    accessible-role: button;
+    accessible-label: "Retirer le filtre " + root.filter.label;
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-right: Theme.space-small;
+        spacing: Theme.space-small;
+        if root.filter.tone >= 0: VerticalLayout {
+            alignment: center;
+            Tone { tone: root.filter.tone; }
+        }
+        Text {
+            text: root.filter.label;
+            color: Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.x;
+                colorize: zone.has-hover ? Theme.text : Theme.text-secondary;
+                width: Theme.filter-cross;
+                height: Theme.filter-cross;
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.removed(); }
+    }
+}
+
+// The Filtres button: the funnel and its word; the filters in use go inside it, each with its
+// cross, and from two of them a round cross clears them all. In use, it stands out: pale green,
+// a 2 px outline. `narrow`: the funnel alone, with the number of filters in use.
+// `open`: its bubble is open, joined under it.
+export component FilterButton inherits Rectangle {
+    callback clicked();
+    callback remove(int, int);
+    callback clear();
+    in property <[ActiveFilter]> filters;
+    in property <bool> narrow;
+    in property <bool> open;
+    in property <bool> open-down: true;   // no longer used: the bubble points at it
+
+    property <bool> in-use: root.filters.length > 0;
+    property <length> radius: self.height / 2;
+
+    // Open: lit, dark green, while its bubble points at it.
+    property <color> tint: root.open ? Theme.active-tab-text : Theme.text;
+
+    height: Theme.zone;
+    border-radius: root.radius;
+    border-width: root.in-use ? Theme.filter-in-use-outline : Theme.thin-outline-width;
+    border-color: root.in-use || root.open ? Theme.active-tab-background : Theme.thin-outline;
+    background: root.open ? Theme.active-tab-background : root.in-use ? Theme.filter-in-use : zone.has-hover ? Theme.secondary-button-hover : Theme.secondary-button;
+    animate background { duration: Theme.tint-duration; }
+    accessible-role: button;
+    accessible-label: root.in-use ? "Filtres : " + root.filters.length : "Filtres";
+
+    // Under the filters in use: a click anywhere else opens the bubble.
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.button-margin;
+        padding-right: root.in-use && !root.narrow ? Theme.space-small : Theme.button-margin;
+        spacing: Theme.space;
+        VerticalLayout {
+            alignment: center;
+            Image {
+                source: Icons.funnel;
+                colorize: root.tint;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+        }
+        if !root.narrow && !root.in-use: Text {
+            text: "Filtres";
+            color: root.tint;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        if root.narrow && root.in-use: Text {
+            text: root.filters.length;
+            color: root.tint;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+            vertical-alignment: center;
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: Theme.space-small;
+            for filter in root.filters: VerticalLayout {
+                alignment: center;
+                InUse {
+                    filter: filter;
+                    removed => { root.remove(filter.group, filter.choice); }
+                }
+            }
+        }
+        if !root.narrow && root.filters.length >= 2: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.filter-in-use-height;
+                height: Theme.filter-in-use-height;
+                border-radius: self.height / 2;
+                background: Theme.active-tab-background;
+                accessible-role: button;
+                accessible-label: "Effacer tous les filtres";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.active-tab-text;
+                    width: Theme.filter-cross;
+                    height: Theme.filter-cross;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.clear(); }
+                }
+            }
+        }
+    }
+}
+
+// A choice in the Filtres bubble: a pill, filled when chosen.
+component Choice inherits Rectangle {
+    callback clicked();
+    in property <FilterChoice> choice;
+
+    height: Theme.zone;
+    width: inner.preferred-width;
+    accessible-role: checkbox;
+    accessible-checked: root.choice.active;
+    accessible-label: root.choice.label;
+    Rectangle {
+        height: Theme.highlight-chip-height + Theme.space;
+        border-radius: self.height / 2;
+        border-width: root.choice.active ? 0px : Theme.thin-outline-width;
+        border-color: Theme.thin-outline;
+        background: root.choice.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : Theme.card;
+        animate background { duration: Theme.tint-duration; }
+    }
+    inner := HorizontalLayout {
+        padding-left: Theme.button-margin;
+        padding-right: Theme.button-margin;
+        spacing: Theme.space-small;
+        if root.choice.tone >= 0: VerticalLayout {
+            alignment: center;
+            Tone { tone: root.choice.tone; }
+        }
+        Text {
+            text: root.choice.label;
+            color: root.choice.active ? Theme.active-tab-text : Theme.text;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-label;
+            vertical-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// The content of the Filtres bubble: a group per criterion, its choices in pills, then
+// « Tout effacer » and « Fermer ».
+export component FiltersContent {
+    callback toggle(int, int);
+    callback clear();
+    callback close();
+    in property <[FilterGroup]> groups;
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: "Filtres";
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+        }
+        for group in root.groups: VerticalLayout {
+            spacing: Theme.space-small;
+            Text {
+                text: group.title;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+            }
+            // Each pill is as wide as its word; they go to the next line when they do not fit.
+            // Its height is counted for the width it is given, not for its narrowest one.
+            FlexboxLayout {
+                min-width: root.width - 2 * Theme.space-medium;
+                spacing-horizontal: Theme.space;
+                spacing-vertical: 0px;
+                for choice[c] in group.choices: Choice {
+                    choice: choice;
+                    clicked => { root.toggle(group.key, c); }
+                }
+            }
+        }
+        HorizontalLayout {
+            QuietButton {
+                label: "Tout effacer";
+                clicked => { root.clear(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            QuietButton {
+                label: "Fermer";
+                clicked => { root.close(); }
+            }
+        }
+    }
+}
+
+// The detail of a row on wider windows: the same panel as on the left, sliding in from the right
+// over the content, which keeps its width (brief zones-onglets § 4). No veil: a click on another
+// row changes it. Escape or its cross closes it. Lies over the whole page area.
+export component SideDetail {
+    callback close();
+    in property <bool> shown;
+
+    Rectangle {
+        clip: true;
+        sheet := Sheet {
+            x: root.shown ? parent.width - self.width : parent.width + Theme.sheet-gap;
+            animate x {
+                duration: Theme.sheet-duration;
+                easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+            }
+            y: 0;
+            width: min(Theme.side-sheet-width, parent.width);
+            height: parent.height;
+            visible: root.shown || self.x < parent.width;
+            keys := FocusScope {
+                key-pressed(event) => {
+                    if event.text == Key.Escape {
+                        root.close();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+            Flickable {
+                content-height: inner.preferred-height;
+                inner := VerticalLayout {
+                    width: parent.width;
+                    alignment: start;
+                    @children
+                }
+            }
+        }
+    }
+    changed shown => {
+        if root.shown {
+            keys.focus();
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom, over a veil; a touch on the veil closes it.
+export component BottomDetail {
+    callback close();
+    in property <bool> shown;
+
+    Rectangle {
+        background: Theme.overlay-veil;
+        opacity: root.shown ? 1 : 0;
+        animate opacity { duration: Theme.sheet-duration; }
+    }
+    TouchArea {
+        enabled: root.shown;
+        clicked => { root.close(); }
+    }
+    Sheet {
+        x: Theme.narrow-margin;
+        y: root.shown ? Theme.bottom-sheet-top : root.height + Theme.sheet-gap;
+        animate y {
+            duration: Theme.sheet-duration;
+            easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        width: root.width - 2 * Theme.narrow-margin;
+        height: root.height - Theme.bottom-sheet-top + Theme.sheet-radius;
+        visible: root.shown || self.y < root.height;
+        clip: true;
+        TouchArea { }
+        Flickable {
+            height: parent.height - Theme.sheet-radius;
+            content-height: inner.preferred-height;
+            inner := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                @children
+            }
+        }
+    }
+}
+
+// What a row unfolds: it opens and closes smoothly, never in one go (Robin, 11/11). Always
+// there, of no height while closed; its content fades in as it opens.
+export component Unfold inherits Rectangle {
+    in property <bool> open;
+
+    clip: true;
+    height: root.open ? inner.preferred-height : 0px;
+    animate height {
+        duration: Theme.unfold-duration;
+        easing: ease-in-out;
+    }
+    inner := VerticalLayout {
+        y: 0;
+        width: root.width;
+        height: self.preferred-height;
+        opacity: root.open ? 1 : 0;
+        animate opacity { duration: Theme.unfold-duration; }
+        @children
+    }
+}

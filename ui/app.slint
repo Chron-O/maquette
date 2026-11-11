@@ -1,0 +1,935 @@
+// The shell, following the HTML prototype: a home page, the club pages, and one event
+// with its tabs. Rust owns the state; this file shows it and sends the clicks back.
+
+import { Theme, ThemeMode } from "theme.slint";
+import { Card } from "components/card.slint";
+import { HeaderButton } from "components/header-button.slint";
+import { PrimaryButton, SecondaryButton } from "components/buttons.slint";
+import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
+import { Icons } from "components/icons.slint";
+import { Readers, ReaderInfo, ReaderMode } from "components/reader-tile.slint";
+import { Navigation, Demo, LayoutMode } from "navigation.slint";
+import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue } from "pages/runner-base.slint";
+import { ClubStations, ClubStationsPage, ClubStationsSettings, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
+import { Cards, CardsPage, CardsSettings, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
+import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
+import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
+import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
+import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
+import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
+import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Unfold, Zones } from "components/zones.slint";
+import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
+import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
+import { Home, HomePage, HomeIndicators, IndicatorDots, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
+export { RunnerBase, BaseRunnerRow, BaseIssue }
+export { ClubStations, ClubStationRow, BatteryDueItem }
+export { Cards, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard }
+export { Results, ResultRanking, ResultRow }
+export { Live, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
+export { Stations, StationRow, CourseMark, StationProblem, UsefulStation }
+export { Starts, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
+export { Participants, ParticipantRow, Passage, FilterChoice, FilterGroup, ActiveFilter }
+export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
+export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
+export { Readers, ReaderInfo, ReaderMode }
+export { Equipment, EquipmentReader }
+
+component Header inherits Rectangle {
+    in property <LayoutMode> layout-mode;
+    in property <length> left-margin;
+    in property <length> right-margin;
+    in property <length> top-margin;
+    in property <bool> compact;   // a phone, the page scrolled: smaller name, the indicators as dots
+    in property <length> extra;   // a computer: room for the bubble's upper half, half of it on top
+
+    // A phone: a short event name shares its row with the indicators, when both fit on it
+    // (Robin, 11/11). Depends on the name only, never on what the indicators say.
+    // Same on iPad portrait: a name wrapped next to them would slip under the tab bubble.
+    property <bool> indicators-beside: root.layout-mode != LayoutMode.wide && Navigation.in-event
+        && name-probe.preferred-width + Theme.space-medium + indicators-probe.preferred-width
+            <= root.width - root.left-margin - root.right-margin - back-probe.preferred-width - Theme.space-medium;
+
+    background: Theme.header;
+    // Measure the name on one line and the indicators; never shown.
+    name-probe := Text {
+        visible: false;
+        text: Navigation.header-title;
+        font-size: Theme.text-screen-title;
+        font-weight: Theme.weight-screen-title;
+    }
+    indicators-probe := HomeIndicators {
+        visible: false;
+        layout-mode: root.layout-mode;
+    }
+    back-probe := HeaderButton {
+        visible: false;
+        label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
+        arrow-only: root.layout-mode == LayoutMode.narrow;
+    }
+    VerticalLayout {
+        padding-top: root.top-margin + Theme.space + root.extra / 2;   // less room on top (Robin, 11/11)
+        padding-bottom: Theme.space + root.extra;
+        padding-left: root.left-margin;
+        padding-right: root.right-margin;
+        spacing: Theme.space;
+        HorizontalLayout {
+            spacing: Theme.space-medium;
+            if !Navigation.home: VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                HeaderButton {
+                    label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
+                    arrow-only: root.layout-mode == LayoutMode.narrow;
+                    clicked => { Navigation.go-back(); }
+                }
+            }
+            if Navigation.home: VerticalLayout {
+                alignment: center;
+                min-height: Theme.zone;
+                Image {
+                    source: @image-url("logo/logo.svg");
+                    height: Theme.logo-height;
+                    image-fit: contain;
+                    horizontal-alignment: left;
+                }
+            }
+            if !Navigation.home: VerticalLayout {
+                horizontal-stretch: 1;
+                min-height: Theme.zone;
+                alignment: center;
+                // An event: its date and place above its name (prototype: header).
+                if Navigation.header-detail != "" && root.layout-mode != LayoutMode.narrow: Text {
+                    text: Navigation.header-detail;
+                    color: Theme.header-secondary;
+                    font-size: Theme.text-help;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: Navigation.header-title;
+                    color: Theme.header-text;
+                    font-size: root.compact ? Theme.header-compact-title : Theme.text-screen-title;
+                    animate font-size { duration: Theme.header-compact-duration; }
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+            }
+            if root.compact: IndicatorDots { }
+            if root.indicators-beside && !root.compact: HomeIndicators {
+                horizontal-stretch: 0;
+                layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
+            }
+            if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.wide: HomeIndicators {
+                horizontal-stretch: 1;
+                layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
+            }
+            // iPad portrait: next to the name when it fits, so the header keeps one row (Robin, 11/11).
+            if Navigation.home && root.layout-mode == LayoutMode.medium: HomeIndicators {
+                horizontal-stretch: 0;
+                layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
+            }
+        }
+        // A phone or iPad portrait: the indicators under the name, on the right, unless they fit
+        // beside it.
+        // Tucked, the row folds up smoothly (Robin, 11/11).
+        if (Navigation.home && root.layout-mode == LayoutMode.narrow)
+            || (Navigation.in-event && root.layout-mode != LayoutMode.wide && !root.indicators-beside): Unfold {
+            open: !root.compact;
+            HomeIndicators {
+                layout-mode: root.layout-mode;
+                open-bubble: Courses.open-bubble;
+                open-down: Courses.bubble-down;
+                opened(b, x, y, w, h) => { Courses.open-at(b, x, y, w, h); }
+            }
+        }
+    }
+}
+
+component Page {
+    in property <LayoutMode> layout-mode;
+    in property <length> left-margin;
+    in property <length> right-margin;
+    in property <length> bottom-margin;
+    in property <length> top-room;     // a phone: the room of the header, which lies over the page
+    out property <length> scrolled;    // how far the page has scrolled
+
+    property <bool> on-courses: Navigation.in-event && Navigation.active-tab == 0;
+    property <bool> on-participants: Navigation.in-event && Navigation.active-tab == 1;
+    property <bool> on-starts: Navigation.in-event && Navigation.active-tab == 2;
+    property <bool> on-stations: Navigation.in-event && Navigation.active-tab == 3;
+    property <bool> on-results: Navigation.in-event && Navigation.active-tab == 4;
+    property <bool> on-cards: Navigation.cards-page;
+    property <bool> on-club-stations: Navigation.stations-page;
+    property <bool> on-runner-base: Navigation.runners-page;
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+
+    // Another tab: its page comes in a short fade, sliding from the side of the tab chosen
+    // (Robin, 11/11). It starts from there at once, then moves into place.
+    property <int> tab: Navigation.in-event ? Navigation.active-tab : -1;
+    property <int> previous-tab: root.tab;
+    property <int> direction: 1;
+    property <bool> entering;
+    changed tab => {
+        root.direction = root.tab >= root.previous-tab ? 1 : -1;
+        root.entering = root.tab >= 0 && root.previous-tab >= 0;
+        root.previous-tab = root.tab;
+    }
+    Timer {
+        interval: 1ms;
+        running: root.entering;
+        triggered => { root.entering = false; }
+    }
+
+    layer := Rectangle {
+        width: root.width;
+        height: root.height;
+        // These tabs keep their column and their titles in place: only the content scrolls.
+        if (root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) && !root.narrow: VerticalLayout {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.height;
+            padding-top: Theme.space-medium;
+            padding-bottom: Theme.space-medium;
+            padding-left: root.left-margin;
+            padding-right: root.right-margin;
+            if root.on-courses: CoursesPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-participants: ParticipantsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-starts: StartsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-stations: StationsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-results: ResultsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-cards: CardsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-club-stations: ClubStationsPage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+            if root.on-runner-base: RunnerBasePage {
+                layout-mode: root.layout-mode;
+                available-width: root.width - root.left-margin - root.right-margin;
+            }
+        }
+        if !(root.on-courses || root.on-participants || root.on-starts || root.on-stations || root.on-results || root.on-cards || root.on-club-stations || root.on-runner-base) || root.narrow: scroller := Flickable {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.height;
+            init => { root.scrolled = 0; }
+            changed content-y => { root.scrolled = -self.content-y; }
+            content := VerticalLayout {
+                width: scroller.width;
+                alignment: start;
+                padding-top: root.top-room;
+                padding-bottom: root.bottom-margin + Theme.space-medium;
+                if root.on-courses: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    CoursesPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-participants: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    ParticipantsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-stations: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    StationsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-runner-base: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    RunnerBasePage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-club-stations: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    ClubStationsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-cards: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    CardsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-results: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    ResultsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if root.on-starts: VerticalLayout {
+                    padding-top: Theme.space-medium;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    StartsPage {
+                        layout-mode: root.layout-mode;
+                        available-width: scroller.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if Navigation.home: HomePage {
+                    layout-mode: root.layout-mode;
+                    available-width: scroller.width;
+                    left-margin: root.left-margin;
+                    right-margin: root.right-margin;
+                }
+            }
+            content-height: max(self.height, content.preferred-height);
+        }
+    }
+    states [
+        entering when root.entering: {
+            layer.opacity: 0;
+            layer.x: root.direction * Theme.page-travel;
+            out {
+                animate layer.opacity, layer.x {
+                    duration: Theme.page-duration;
+                    easing: ease-out;
+                }
+            }
+        }
+    ]
+}
+
+component DemoRow {
+    in property <string> label;
+    in property <string> value;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        Text {
+            text: root.label;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-regular;
+        }
+        Text {
+            horizontal-stretch: 1;
+            horizontal-alignment: right;
+            text: root.value;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-label;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component DemoLabel inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-label;
+    font-weight: Theme.weight-regular;
+}
+
+component DemoPanel {
+    in property <string> layout-name;
+    in property <length> window-width;
+
+    Card {
+        title: "Démo";
+        margin: Theme.space-medium;
+        drop-shadow-blur: Theme.demo-shadow;
+        DemoLabel { text: "Données de test"; }
+        Tabs {
+            tabs: Demo.test-data-options;
+            active: Demo.active-test-data;
+            clicked(i) => { Demo.select-test-data(i); }
+        }
+        if (Navigation.in-event && Navigation.active-tab == 3) || Navigation.stations-page: DemoLabel { text: "Lecture"; }
+        if (Navigation.in-event && Navigation.active-tab == 3) || Navigation.stations-page: SecondaryButton {
+            label: "Lire un boîtier";
+            clicked => { Demo.read-station(); }
+        }
+        if Navigation.in-event: DemoLabel { text: "Lecteur"; }
+        if Navigation.in-event: SecondaryButton {
+            label: Readers.finish.length > 0 && Readers.finish[0].mode == ReaderMode.unplugged
+                ? "Rebrancher Arrivée 1" : "Débrancher Arrivée 1";
+            clicked => { Demo.toggle-unplugged(); }
+        }
+        if Navigation.cards-page: DemoLabel { text: "Lecture"; }
+        if Navigation.cards-page: SecondaryButton {
+            label: "Lire une puce";
+            clicked => { Demo.read-card(); }
+        }
+        DemoLabel { text: "Appareil"; }
+        Tabs {
+            tabs: Demo.devices;
+            active: Demo.active-device;
+            clicked(i) => { Demo.select-device(i); }
+        }
+        DemoRow {
+            label: "Tailles";
+            value: (Theme.touch ? "Tactile, " : "Souris, ") + Theme.zone / 1px + " px";
+        }
+        DemoRow {
+            label: "Disposition";
+            value: root.layout-name + ", " + floor(root.window-width / 1px) + " px";
+        }
+        DemoRow {
+            label: "Thème";
+            value: Theme.dark ? "Sombre" : "Clair";
+        }
+    }
+}
+
+export component App inherits Window {
+    title: "Chron'O — maquette";
+    icon: @image-url("logo/app-icon.png");
+    preferred-width: Theme.window-width;
+    preferred-height: Theme.window-height;
+    min-width: Theme.window-min-width;
+    min-height: Theme.window-min-height;
+    // No maximum: the fixed sizes of the elements laid over the page must not limit the window.
+    max-width: Theme.unbounded;
+    max-height: Theme.unbounded;
+    background: Theme.page-background;
+    default-font-family: Theme.font;
+
+    in-out property <bool> demo-open: false;
+
+    property <int> tab: Navigation.active-tab;
+    changed tab => { Navigation.settings-open = false; }
+
+    property <LayoutMode> layout-mode: root.width < Theme.medium-threshold ? LayoutMode.narrow
+        : root.width <= Theme.wide-threshold ? LayoutMode.medium
+        : LayoutMode.wide;
+    property <length> margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    // A bubble of the page; 31 to 33 are the header indicators' own (equipment.slint).
+    property <bool> page-bubble: Courses.open-bubble > 0 && Courses.open-bubble < 31;
+    // A computer: the name and the indicators are centred in the whole green band, the bubble's
+    // upper half included, which they never reach (Robin, 11/11). The bubble's top is then inside
+    // the header.
+    property <bool> header-centred: root.layout-mode == LayoutMode.wide && Navigation.in-event;
+    property <length> bubble-top: root.header-centred ? header.height - Theme.tab-bubble-height / 2 : header.height;
+    // A phone: the header's full height, kept while it is tucked, so the page never jumps.
+    property <length> header-rest;
+    property <bool> header-compact: root.narrow && Navigation.in-event && !Navigation.live-open
+        && page.scrolled > Theme.header-compact-after;
+    property <length> header-room: root.header-rest
+        + (Navigation.in-event ? Theme.tab-bubble-height + Theme.settings-tab-height - Theme.settings-tab-tuck
+            : Navigation.cards-page || Navigation.stations-page ? Theme.settings-tab-height : 0px);
+    property <length> left-margin: root.margin + root.safe-area-insets.left;
+    property <length> right-margin: root.margin + root.safe-area-insets.right;
+    // On a phone, a bubble stops above the band and the Direct bar, never over them.
+    property <length> bubble-floor: root.layout-mode == LayoutMode.narrow && !Navigation.live-open ? band-zone.y : 0px;
+    init => { Courses.bubble-floor = root.bubble-floor; }
+    changed bubble-floor => { Courses.bubble-floor = root.bubble-floor; }
+
+    // The Direct open: a click outside it only closes it (prototype, 26/10). Under the tabs and
+    // the Direct button, which keep their own clicks (30/10: a tab closes it and opens).
+    if Navigation.in-event && Navigation.live-open: TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: drawer.y;
+        clicked => { Navigation.toggle-live(); }
+    }
+
+    // Explicit size: the layout's own minimum must not feed back into the window width,
+    // which picks the layout mode. The window minimum above stays the only limit.
+    VerticalLayout {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        // The header's room. On a phone the header lies over the page instead, which scrolls
+        // under it (Robin, 11/11).
+        if !root.narrow: Rectangle {
+            vertical-stretch: 0;
+            height: header.height;
+        }
+        // The lower part of the header, under the tab bubble (brief zones-onglets § 1), then the
+        // room of the bubble's lower half and of the Paramètres tab: every tab starts at the
+        // same height, with Paramètres or without.
+        if Navigation.in-event && root.layout-mode == LayoutMode.medium: Rectangle {
+            vertical-stretch: 0;
+            height: Theme.tab-bubble-height / 2;
+            background: Theme.header;
+        }
+        if Navigation.in-event && !root.narrow: Rectangle {
+            vertical-stretch: 0;
+            height: Theme.tab-bubble-height / 2 + Theme.settings-tab-height - Theme.settings-tab-tuck;
+        }
+        // A club page: no tabs, the Paramètres tab hangs under the header (brief zones-onglets).
+        // Coureurs et clubs has no Paramètres: its content starts right under the header (Robin, 11/11).
+        if (Navigation.cards-page || Navigation.stations-page) && !root.narrow: Rectangle {
+            vertical-stretch: 0;
+            height: Theme.settings-tab-height;
+        }
+        page := Page {
+            vertical-stretch: 1;
+            top-room: root.narrow ? root.header-room : 0px;
+            layout-mode: root.layout-mode;
+            left-margin: root.left-margin;
+            right-margin: root.right-margin;
+            // Keeps the end of the page clear of the Démo button.
+            bottom-margin: Theme.zone + root.safe-area-insets.bottom + Theme.space-medium;
+        }
+        // Empty without the band, so the Démo button can sit just above it.
+        band-zone := VerticalLayout {
+            vertical-stretch: 0;
+            if Navigation.runners-page: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? RunnerBase.summary-short : RunnerBase.summary;
+                first-action: "Fusionner des clubs";
+                first-alone: true;   // the long warning takes the whole width on a phone
+                can-import: true;
+                import-label: "Importer FFCO";
+                can-print: false;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
+            if Navigation.stations-page: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? ClubStations.summary-short : ClubStations.summary;
+                first-action: "Inventaire";
+                can-import: true;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
+            if Navigation.cards-page: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? Cards.summary-short : Cards.summary;
+                first-action: "Inventaire";
+                can-import: true;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
+            if Navigation.in-event && Navigation.active-tab == 4: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? Results.summary-short : Results.summary;
+                can-publish: true;
+                phone-publish-only: true;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: 0px;   // the Direct bar is below
+            }
+            if Navigation.in-event && Navigation.active-tab == 3: PageBand {
+                summary: Stations.summary;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: 0px;   // the Direct bar is below
+            }
+            if Navigation.in-event && Navigation.active-tab == 2: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? Starts.summary-short : Starts.summary;
+                can-publish: true;
+                publish-label: Starts.publish-label;
+                publish-enabled: Starts.publish-enabled;
+                publish => { Starts.publish(); }
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: 0px;   // the Direct bar is below
+            }
+            if Navigation.in-event && Navigation.active-tab == 1: PageBand {
+                summary: root.layout-mode == LayoutMode.narrow ? Participants.summary-short : Participants.summary;
+                can-import: true;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: 0px;   // the Direct bar is below
+            }
+            if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && !Courses.empty
+                && (root.layout-mode != LayoutMode.narrow || Courses.list-only): PageBand {
+                summary: Courses.summary;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: 0px;   // the Direct bar is below
+            }
+            // Keeps the place of the Direct bar, which lies over it.
+            if Navigation.in-event: Rectangle { height: live-bar.closed-height; }
+        }
+    }
+
+    // The header, over the page. On a phone the page scrolls under it, and once it has scrolled
+    // the header tucks: a smaller name, the indicators as dots, the Paramètres tab under the
+    // bubble. All comes back at the top of the page (Robin, 11/11).
+    if root.narrow && Navigation.in-event: Rectangle {
+        x: 0;
+        y: header.height;
+        width: root.width;
+        height: Theme.tab-bubble-height / 2;
+        background: Theme.header;
+    }
+    header := Header {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: self.preferred-height;
+        layout-mode: root.layout-mode;
+        left-margin: root.left-margin;
+        right-margin: root.right-margin;
+        top-margin: root.safe-area-insets.top;
+        compact: root.header-compact;
+        extra: root.header-centred ? Theme.tab-bubble-height / 2 : 0px;
+        changed height => {
+            if !self.compact {
+                root.header-rest = self.height;
+            }
+        }
+    }
+
+    // Over the header: ‹ Accueil and the indicators only close the open Direct (26/10).
+    if Navigation.in-event && Navigation.live-open: TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: header.height;
+        clicked => { Navigation.toggle-live(); }
+    }
+
+    // The Direct drawer (prototype: #dr): its bar at the bottom, over the band's last place;
+    // open, it rises up to the tabs and covers the page.
+    drawer := Rectangle {
+        property <length> open-y: root.bubble-top + Theme.tab-bubble-height + Theme.space;
+        property <length> closed-y: root.height - live-bar.closed-height;
+        property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+        // Keeps the end of the Direct clear of the Démo button.
+        property <length> demo-room: Theme.zone + root.safe-area-insets.bottom + 2 * Theme.space-medium;
+
+        visible: Navigation.in-event;
+        x: 0;
+        y: Navigation.live-open ? self.open-y : self.closed-y;
+        width: root.width;
+        height: root.height - self.open-y;
+        animate y {
+            duration: Theme.drawer-duration;
+            easing: cubic-bezier(0.3, 0.8, 0.3, 1);
+        }
+        // Under the bar's lower half: no seam between the bar and the page of the Direct.
+        Rectangle {
+            y: live-bar.height / 2;
+            height: parent.height - self.y;
+            background: Theme.page-background;
+        }
+        VerticalLayout {
+            live-bar := LiveBar {
+                vertical-stretch: 0;
+                layout-mode: root.layout-mode;
+                left-margin: root.left-margin;
+                right-margin: root.right-margin;
+                bottom-margin: root.safe-area-insets.bottom;
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                background: Theme.page-background;
+                if !drawer.narrow: VerticalLayout {
+                    x: 0;
+                    y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    padding-top: Theme.space-medium;
+                    padding-bottom: drawer.demo-room;
+                    padding-left: root.left-margin;
+                    padding-right: root.right-margin;
+                    LivePage {
+                        layout-mode: root.layout-mode;
+                        available-width: drawer.width - root.left-margin - root.right-margin;
+                    }
+                }
+                if drawer.narrow: live-scroller := Flickable {
+                    x: 0;
+                    y: 0;
+                    width: parent.width;
+                    height: parent.height;
+                    live-content := VerticalLayout {
+                        width: live-scroller.width;
+                        alignment: start;
+                        padding-top: Theme.space-medium;
+                        padding-bottom: drawer.demo-room;
+                        padding-left: root.left-margin;
+                        padding-right: root.right-margin;
+                        LivePage {
+                            layout-mode: root.layout-mode;
+                            available-width: live-scroller.width - root.left-margin - root.right-margin;
+                        }
+                    }
+                    content-height: max(self.height, live-content.preferred-height);
+                }
+            }
+        }
+    }
+
+    // Paramètres open: a click anywhere else only closes it, and selects nothing (Robin, 11/11).
+    if Navigation.settings-open: TouchArea {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        clicked => { Navigation.settings-open = false; }
+    }
+
+    // The Paramètres tab, hung under the bubble; open, it lies over the content. The Direct and
+    // a tab without settings have none, but their content starts at the same height.
+    property <int> settings-tab: !Navigation.in-event || Navigation.live-open ? -1 : Navigation.active-tab;
+    property <int> club-settings: Navigation.cards-page ? 0 : Navigation.stations-page ? 1 : -1;
+    if root.club-settings >= 0: SettingsTab {
+        x: (root.width - self.width) / 2;
+        y: header.height;
+        width: min(root.width - root.left-margin - root.right-margin, Theme.club-settings-width);
+        tuck: 0px;
+        summary: root.club-settings == 0 ? Zones.join(Cards.chips) : Zones.join(ClubStations.chips);
+        narrow: root.layout-mode == LayoutMode.narrow;
+        open <=> Navigation.settings-open;
+        if root.club-settings == 0: CardsSettings { }
+        if root.club-settings == 1: ClubStationsSettings { }
+    }
+    if root.settings-tab >= 0: SettingsTab {
+        // Tucked: hidden under the bubble, until the page is back at its top.
+        property <bool> tucked: root.header-compact && !Navigation.settings-open;
+        x: (root.width - self.width) / 2;
+        y: self.tucked ? root.bubble-top + Theme.tab-bubble-height - self.height
+            : root.bubble-top + Theme.tab-bubble-height - Theme.settings-tab-tuck;
+        animate y { duration: Theme.header-compact-duration; }
+        opacity: self.tucked ? 0 : 1;
+        animate opacity { duration: Theme.header-compact-duration; }
+        width: bubble.width - 2 * (root.layout-mode == LayoutMode.narrow ? Theme.settings-tab-narrow-inset : Theme.settings-tab-inset);
+        summary: root.settings-tab == 0 ? Zones.join(Courses.chips)
+            : root.settings-tab == 1 ? Zones.join(Participants.chips)
+            : root.settings-tab == 2 ? Zones.join(Starts.chips)
+            : root.settings-tab == 3 ? Zones.join(Stations.chips)
+            : Zones.join(Results.chips);
+        narrow: root.layout-mode == LayoutMode.narrow;
+        open <=> Navigation.settings-open;
+        if root.settings-tab == 0: CoursesSettings { }
+        if root.settings-tab == 1: ParticipantSettings { }
+        if root.settings-tab == 2: StartsSettings { }
+        if root.settings-tab == 3: StationsSettings { narrow: root.layout-mode == LayoutMode.narrow; }
+        if root.settings-tab == 4: ResultsSettings { }
+    }
+
+    // A layer of the window's size: the bubble's own fixed height must not limit the window.
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        bubble := Rectangle {
+            visible: Navigation.in-event;
+            x: (root.width - self.width) / 2;
+            y: root.bubble-top;
+            // As wide as its tabs, centred; a phone gives it the whole width.
+            width: root.layout-mode == LayoutMode.narrow
+                ? root.width - 2 * Theme.narrow-margin - root.safe-area-insets.left - root.safe-area-insets.right
+                : min(root.width - root.left-margin - root.right-margin, self.preferred-width);
+            height: Theme.tab-bubble-height;
+            border-radius: self.height / 2;
+            background: Theme.card;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            drop-shadow-blur: Theme.tab-bubble-shadow-blur;
+            drop-shadow-offset-y: Theme.tab-bubble-shadow-offset;
+            drop-shadow-color: Theme.sheet-shadow;
+            HorizontalLayout {
+                padding: Theme.tab-bubble-padding;
+                spacing: Theme.space;
+                if root.layout-mode == LayoutMode.narrow: IconTabs {
+                    horizontal-stretch: 1;
+                    bare: true;
+                    tabs: Navigation.tabs;
+                    active: Navigation.active-tab;
+                    ghost: Navigation.live-open;
+                    clicked(i) => { Navigation.select-tab(i); }
+                }
+                if root.layout-mode != LayoutMode.narrow: Tabs {
+                    bare: true;
+                    with-icons: root.layout-mode == LayoutMode.wide;
+                    tabs: Navigation.tabs;
+                    active: Navigation.active-tab;
+                    ghost: Navigation.live-open;
+                    clicked(i) => { Navigation.select-tab(i); }
+                }
+                LiveTabButton {
+                    horizontal-stretch: 0;
+                    narrow: root.layout-mode == LayoutMode.narrow;
+                }
+            }
+            // Paramètres open: the tabs and the Direct button only close it.
+            if Navigation.settings-open: TouchArea {
+                clicked => { Navigation.settings-open = false; }
+            }
+        }
+    }
+
+    // Closes the panel when clicking anywhere else.
+    if root.demo-open: TouchArea {
+        clicked => { root.demo-open = false; }
+    }
+
+    if root.demo-open: DemoPanel {
+        x: root.left-margin;
+        y: demo-button.y - self.preferred-height - Theme.space;
+        width: min(Theme.demo-width, root.width - root.left-margin - root.right-margin);
+        height: self.preferred-height;
+        layout-name: root.layout-mode == LayoutMode.narrow ? "Étroite"
+            : root.layout-mode == LayoutMode.medium ? "Moyenne"
+            : "Large";
+        window-width: root.width;
+    }
+
+    demo-button := SecondaryButton {
+        x: root.left-margin;
+        y: root.height - self.height - max(band-zone.height, root.safe-area-insets.bottom) - Theme.space;
+        height: Theme.zone;
+        label: "Démo";
+        clicked => { root.demo-open = !root.demo-open; }
+    }
+
+    if Navigation.runners-page && root.page-bubble: RunnerBaseBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.runners-page && root.layout-mode == LayoutMode.narrow: BaseRunnerOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.stations-page && root.page-bubble: ClubStationsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.stations-page && root.layout-mode == LayoutMode.narrow: ClubStationOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.cards-page && root.page-bubble: CardsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.cards-page && root.layout-mode == LayoutMode.narrow: CardOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 4 && root.page-bubble: ResultsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.in-event && Navigation.live-open && root.page-bubble: LiveBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.in-event && (Navigation.live-open || Navigation.active-tab == 4) && root.layout-mode == LayoutMode.narrow: LiveOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 3 && root.page-bubble: StationsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+        narrow: root.layout-mode == LayoutMode.narrow;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 3 && root.layout-mode == LayoutMode.narrow: StationOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && root.page-bubble: StartsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 2 && root.layout-mode == LayoutMode.narrow: StartOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && root.page-bubble: ParticipantsBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 1 && root.layout-mode == LayoutMode.narrow: ParticipantSheet {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && root.page-bubble: BubbleOverlay {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+
+    if Navigation.in-event && !Navigation.live-open && Navigation.active-tab == 0 && root.layout-mode == LayoutMode.narrow: DetailOverlay {
+        width: 100%;
+        height: 100%;
+    }
+
+    if Courses.open-bubble >= 31 && Courses.open-bubble <= 33: EquipmentBubble {
+        width: 100%;
+        height: 100%;
+        margin: root.layout-mode == LayoutMode.narrow ? Theme.narrow-margin : Theme.margin;
+    }
+}

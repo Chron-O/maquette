@@ -1,0 +1,822 @@
+// The home page, following 01-accueil.png. Everything shown comes from Rust:
+// without test data, the page only shows what is really there, which is nothing yet.
+
+import { Theme } from "../theme.slint";
+import { Navigation, LayoutMode } from "../navigation.slint";
+import { Icons } from "../components/icons.slint";
+import { Card } from "../components/card.slint";
+import { Indicator } from "../components/indicator.slint";
+import { LiveDot } from "../components/dot.slint";
+import { BarReader, Readers } from "../components/reader-tile.slint";
+import { PrimaryButton, SecondaryButton, QuietButton } from "../components/buttons.slint";
+import { Status, Statuses, StatusBadge, StatusBlock } from "../components/status.slint";
+
+export enum BadgeKind { none, valid, racing, to-check, inactive, ok, pm, unknown }
+
+export struct Badge {
+    word: string,
+    kind: BadgeKind,
+}
+
+export struct Stat {
+    value: string,
+    label: string,
+}
+
+export struct CurrentEvent {
+    id: int,
+    name: string,
+    detail: string,
+    stats: [Stat],
+}
+
+export struct Reading {
+    badge: Badge,
+    name: string,
+    time: string,
+    clock: string,
+}
+
+// The last reading, while it is live (prototype: homeLive).
+export struct HomeLast {
+    live: bool,
+    badge: Badge,
+    name: string,
+    category: string,
+    time: string,
+    place: string,
+    left: float,    // what is left of its live time, 1 down to 0
+}
+
+export struct EventRow {
+    id: int,
+    day: string,
+    month: string,
+    name: string,
+    place: string,
+    participants: string,
+    courses: string,
+    badge: Badge,
+}
+
+export struct ClubCard {
+    title: string,
+    value: string,
+    detail: string,
+    badge: Badge,
+}
+
+export struct IndicatorItem {
+    icon: image,
+    long-text: string,
+    short-text: string,
+    long-reserve: string,   // the longest text this indicator may show
+    short-reserve: string,
+    has-dot: bool,
+    attention: bool,
+}
+
+export global Home {
+    in property <bool> has-current-event;
+    in property <CurrentEvent> current-event;
+    in property <string> to-handle;
+    in property <HomeLast> last;
+    in property <[Reading]> readings;   // before the last one, newest first
+    in property <[EventRow]> upcoming;
+    in property <[EventRow]> past;
+    in property <[ClubCard]> club;
+    in property <[IndicatorItem]> indicators;
+
+    public pure function status-of(badge: Badge) -> Status {
+        if badge.kind == BadgeKind.valid {
+            return { word: badge.word, state: Theme.valid, icon: Icons.check };
+        }
+        if badge.kind == BadgeKind.racing {
+            return { word: badge.word, state: Theme.in-progress, dot: true };
+        }
+        if badge.kind == BadgeKind.to-check {
+            return { word: badge.word, state: Theme.to-check, icon: Icons.triangle-alert };
+        }
+        if badge.kind == BadgeKind.ok {
+            return { word: badge.word, state: Theme.valid, icon: Icons.check };
+        }
+        if badge.kind == BadgeKind.pm {
+            return { word: badge.word, state: Theme.problem, icon: Icons.x };
+        }
+        if badge.kind == BadgeKind.unknown {
+            return { word: badge.word, state: Theme.to-check, icon: Icons.circle-help };
+        }
+        return { word: badge.word, state: Theme.inactive };
+    }
+}
+
+export component HomeIndicators {
+    in property <LayoutMode> layout-mode;
+    in property <int> open-bubble;      // the bubble open in the window
+    in property <bool> open-down: true;
+    // A click opens its bubble (31, 32, 33), which points at the pill.
+    callback opened(int, length, length, length, length);
+
+    // Always on the right, a phone included (Robin, 11/11).
+    HorizontalLayout {
+        alignment: end;
+        spacing: Theme.indicator-compact-gap;
+        for item[i] in Home.indicators: VerticalLayout {
+            alignment: center;
+            Indicator {
+                open: root.open-bubble == 31 + i;
+                open-down: root.open-down;
+                clicked => {
+                    root.opened(31 + i, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                }
+                icon: item.icon;
+                text: item.short-text;
+                reserve: item.short-reserve;
+                sentence: item.long-text;
+                compact: true;
+                has-dot: item.has-dot;
+                attention: item.attention;
+            }
+        }
+    }
+}
+
+// A phone's tucked header: the three indicators as dots (Robin, 11/11). Their state stays
+// readable by screen readers; the whole pills come back at the top of the page.
+export component IndicatorDots {
+    HorizontalLayout {
+        spacing: Theme.header-compact-gap;
+        for item in Home.indicators: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.indicator-dot;
+                height: Theme.indicator-dot;
+                border-radius: self.width / 2;
+                border-width: item.has-dot ? 0px : Theme.thin-outline-width;
+                border-color: Theme.header-outline;
+                background: !item.has-dot ? transparent : item.attention ? Theme.attention : Theme.live;
+                accessible-role: AccessibleRole.text;
+                accessible-label: item.long-text;
+            }
+        }
+    }
+}
+
+component StatColumn {
+    in property <Stat> stat;
+
+    VerticalLayout {
+        Text {
+            text: root.stat.value;
+            color: Theme.text;
+            font-size: Theme.text-stat;
+            font-weight: Theme.weight-screen-title;
+        }
+        Text {
+            text: root.stat.label;
+            color: Theme.text-secondary;
+            font-size: Theme.text-help;
+        }
+    }
+}
+
+component CurrentEventCard inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.demo-shadow;
+    drop-shadow-color: Theme.card-shadow;
+
+    VerticalLayout {
+        padding: Theme.margin;
+        spacing: Theme.space;
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                LiveDot {
+                    size: Theme.direct-dot;
+                    tone: Theme.in-progress.badge-text;
+                }
+            }
+            Text {
+                text: "Aujourd'hui, en cours";
+                color: Theme.in-progress.badge-text;
+                font-size: Theme.text-help;
+                font-weight: Theme.weight-block-title;
+            }
+        }
+        Text {
+            text: Home.current-event.name;
+            color: Theme.text;
+            font-size: Theme.text-hero;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        Text {
+            text: Home.current-event.detail;
+            color: Theme.text-secondary;
+            font-size: Theme.text-body;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.margin;
+            padding-top: Theme.space;
+            padding-bottom: Theme.space;
+            for stat in Home.current-event.stats: StatColumn { stat: stat; }
+        }
+        HorizontalLayout {
+            alignment: start;
+            PrimaryButton {
+                label: "Ouvrir l'événement";
+                clicked => { Navigation.open-event(Home.current-event.id); }
+            }
+        }
+    }
+}
+
+// What waits to be handled, drawn like the alert of a page (AlertPill): outlined in red,
+// with its warning icon.
+export component ToHandleButton {
+    callback clicked();
+    in property <string> label;
+    // Its bubble is open: lit, pale red, while the bubble points at it.
+    in property <bool> joined;
+    in property <bool> joined-down: true;
+    // Where the drawn pill is, inside the touch zone: the bubble is joined to the pill.
+    out property <length> pill-y: (root.height - root.pill-height) / 2;
+    out property <length> pill-height: Theme.badge-height + Theme.space;
+
+    min-height: Theme.zone;
+    accessible-role: button;
+    accessible-label: root.label;
+    HorizontalLayout {
+        alignment: end;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: root.pill-height;
+                border-radius: self.height / 2;
+                background: root.joined ? Theme.problem.badge-background : zone.has-hover ? Theme.tab-hover : Theme.card;
+                border-width: Theme.attention-outline;
+                border-color: Theme.to-handle-outline;
+                HorizontalLayout {
+                    padding-left: Theme.button-margin;
+                    padding-right: Theme.button-margin;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        alignment: center;
+                        Image {
+                            source: Icons.triangle-alert;
+                            colorize: Theme.problem.badge-text;
+                            width: Theme.badge-icon;
+                            height: Theme.badge-icon;
+                        }
+                    }
+                    Text {
+                        text: root.label;
+                        color: Theme.text;
+                        font-size: Theme.text-help;
+                        font-weight: Theme.weight-screen-title;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component DirectBlock inherits Rectangle {
+    in property <length> tucked: 0px;   // the width hidden under the event card
+    // The small rows: 3 on a phone. Beside the event card (`fill`), the block has the card's
+    // height and shows the rows that fit whole, never more (prototype: overflow hidden).
+    in property <int> rows-shown: 3;
+    in property <bool> fill: false;
+
+    // A reading: its line, then its row, as high as a badge.
+    property <length> reading-height: Theme.thin-outline-width + Theme.space + Theme.badge-height + Theme.space;
+
+    background: Theme.direct-background;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.demo-shadow;
+    drop-shadow-color: Theme.card-shadow;
+    clip: root.fill;
+
+    VerticalLayout {
+        padding: Theme.direct-padding;
+        padding-left: Theme.direct-padding + root.tucked;
+        spacing: Theme.space;
+        // The title row keeps the button's height, there or not: the block never changes size.
+        HorizontalLayout {
+            vertical-stretch: 0;
+            min-height: Theme.zone;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                LiveDot {
+                    size: Theme.direct-dot;
+                    tone: Theme.live;
+                }
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: "Direct";
+                color: Theme.header-text;
+                font-size: Theme.text-block-title;
+                font-weight: Theme.weight-block-title;
+                vertical-alignment: center;
+            }
+            if Home.to-handle != "": ToHandleButton {
+                label: Home.to-handle;
+                clicked => { Navigation.open-direct(); }
+            }
+        }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            alignment: start;
+            spacing: Theme.space;
+            for reader in Readers.finish: BarReader { reader: reader; }
+        }
+        // The last reading in big while it is live, in a room of fixed height.
+        Rectangle {
+            vertical-stretch: 0;
+            height: Theme.home-last-height;
+            if !Home.last.live: Text {
+                x: 0;
+                y: Theme.space;
+                width: parent.width;
+                text: "En attente de la prochaine lecture";
+                color: Theme.header-secondary;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+            if Home.last.live: VerticalLayout {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: parent.height;
+                alignment: center;
+                spacing: Theme.space;
+                HorizontalLayout {
+                    spacing: Theme.button-margin;
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBlock { status: Home.status-of(Home.last.badge); }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: Home.last.name;
+                            color: Theme.header-text;
+                            font-size: Theme.home-last-name-size;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: Theme.space-small;
+                            Text {
+                                text: Home.last.category + " ·";
+                                color: Theme.header-secondary;
+                                font-size: Theme.text-help;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: Home.last.time;
+                                color: Theme.header-text;
+                                font-size: Theme.home-last-name-size;
+                                font-weight: Theme.weight-screen-title;
+                                vertical-alignment: center;
+                            }
+                            if Home.last.place != "" && Home.last.place != "—": Text {
+                                text: "· " + Home.last.place;
+                                color: Theme.header-secondary;
+                                font-size: Theme.text-help;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+                // What is left of its live time (prototype: .x-drain).
+                Rectangle {
+                    height: Theme.live-drain-height;
+                    border-radius: self.height / 2;
+                    background: Theme.live-drain-track;
+                    Rectangle {
+                        x: 0;
+                        width: parent.width * max(0, min(1, Home.last.left));
+                        animate width { duration: Theme.live-drain-step; easing: linear; }
+                        border-radius: parent.border-radius;
+                        background: Theme.live;
+                    }
+                }
+            }
+        }
+        // The readings keep the room of all the rows shown, there or not.
+        rows := Rectangle {
+            property <int> fitting: root.fill ? floor(self.height / root.reading-height) : root.rows-shown;
+            min-height: root.fill ? 0px : root.rows-shown * root.reading-height;
+            max-height: root.fill ? Theme.unbounded : root.rows-shown * root.reading-height;
+            vertical-stretch: 1;
+            VerticalLayout {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                alignment: start;
+                for reading[i] in Home.readings: VerticalLayout {
+                    visible: i < rows.fitting;
+                    height: i < rows.fitting ? root.reading-height : 0px;
+                    spacing: Theme.space;
+                    Rectangle {
+                        height: Theme.thin-outline-width;
+                        background: Theme.direct-separator;
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        VerticalLayout {
+                            alignment: center;
+                            StatusBadge { status: Home.status-of(reading.badge); }
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: reading.name;
+                            color: Theme.header-text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: reading.time;
+                            color: Theme.header-text;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: reading.clock;
+                            color: Theme.header-secondary;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component Hero {
+    in property <length> available-width;
+
+    property <bool> side-by-side: root.available-width >= Theme.hero-side-by-side-min;
+    property <length> left: max(Theme.margin, (root.available-width - Theme.home-max-width) / 2);
+
+    // A layout around the two `if`, so the height reaches the page.
+    VerticalLayout {
+        if root.side-by-side: Rectangle {
+            height: Theme.hero-height;
+            clip: true;
+            Image {
+                source: @image-url("../map/hero-map.svg");
+                width: 100%;
+                height: 100%;
+                image-fit: cover;
+            }
+            DirectBlock {
+                fill: true;
+                tucked: Theme.direct-tuck;
+                x: root.left + Theme.hero-card-width - Theme.direct-tuck;
+                y: (parent.height - self.height) / 2;
+                width: Theme.direct-width + Theme.direct-tuck;
+                height: card.height - 2 * Theme.space-medium;
+            }
+            card := CurrentEventCard {
+                x: root.left;
+                y: (parent.height - self.height) / 2;
+                width: Theme.hero-card-width;
+                height: self.preferred-height;
+            }
+        }
+        if !root.side-by-side: VerticalLayout {
+            spacing: Theme.space-medium;
+            VerticalLayout {
+                spacing: Theme.hero-overlap;
+                Rectangle {
+                    height: Theme.hero-narrow-height;
+                    clip: true;
+                    Image {
+                        source: @image-url("../map/hero-map.svg");
+                        width: 100%;
+                        height: 100%;
+                        image-fit: cover;
+                        horizontal-alignment: right;
+                    }
+                }
+                HorizontalLayout {
+                    padding-left: Theme.narrow-margin;
+                    padding-right: Theme.narrow-margin;
+                    CurrentEventCard { }
+                }
+            }
+            HorizontalLayout {
+                padding-left: Theme.narrow-margin;
+                padding-right: Theme.narrow-margin;
+                DirectBlock { rows-shown: root.available-width < Theme.medium-threshold ? 3 : 2; }
+            }
+        }
+    }
+}
+
+component SectionTitle inherits Text {
+    min-height: Theme.zone;
+    color: Theme.text;
+    font-size: Theme.text-screen-title;
+    font-weight: Theme.weight-screen-title;
+    vertical-alignment: center;
+    wrap: word-wrap;
+}
+
+component GroupLabel inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+}
+
+component TimelineRow inherits Rectangle {
+    in property <EventRow> entry;
+    in property <bool> narrow;
+    in property <bool> linked;
+
+    border-radius: Theme.field-radius;
+    background: zone.has-hover ? Theme.row-hover : transparent;
+    border-width: zone.has-hover ? Theme.thin-outline-width : 0px;
+    border-color: Theme.row-hover-outline;
+    animate background { duration: Theme.tint-duration; }
+
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Navigation.open-event(root.entry.id); }
+    }
+    HorizontalLayout {
+        padding-top: Theme.button-margin;
+        padding-bottom: Theme.button-margin;
+        padding-right: Theme.button-margin;
+        spacing: Theme.button-margin;
+        VerticalLayout {
+            width: root.narrow ? Theme.date-narrow-width : Theme.date-width;
+            alignment: center;
+            Text {
+                text: root.entry.day;
+                color: Theme.text;
+                font-size: Theme.text-date;
+                font-weight: Theme.weight-screen-title;
+                horizontal-alignment: right;
+            }
+            Text {
+                text: root.entry.month;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                horizontal-alignment: right;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.timeline-dot;
+                height: Theme.timeline-dot;
+                if root.linked: Rectangle {
+                    x: (parent.width - self.width) / 2;
+                    y: -self.height;
+                    width: Theme.timeline-line;
+                    height: Theme.timeline-line-height;
+                    background: Theme.purple;
+                    opacity: Theme.timeline-line-opacity;
+                }
+                Rectangle {
+                    border-radius: self.width / 2;
+                    border-width: Theme.timeline-dot-outline;
+                    border-color: Theme.purple;
+                    background: Theme.card;
+                }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: root.entry.name;
+                color: Theme.text;
+                font-size: Theme.text-body;
+                font-weight: Theme.weight-screen-title;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.entry.place;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+        }
+        if !root.narrow: VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.entry.participants;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                horizontal-alignment: right;
+            }
+            Text {
+                text: root.entry.courses;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                horizontal-alignment: right;
+            }
+        }
+        if !root.narrow: VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: end;
+                StatusBadge { status: Home.status-of(root.entry.badge); }
+            }
+        }
+    }
+}
+
+component EventsSection {
+    in property <LayoutMode> layout-mode;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <length> label-inset: (root.narrow ? Theme.date-narrow-width : Theme.date-width) + Theme.timeline-dot + 2 * Theme.button-margin;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: Theme.space;
+        if root.narrow: SectionTitle { text: "Événements"; }
+        HorizontalLayout {
+            spacing: Theme.space;
+            if !root.narrow: SectionTitle {
+                horizontal-stretch: 1;
+                text: "Événements";
+            }
+            SecondaryButton {
+                label: root.narrow ? "Rejoindre" : "Rejoindre un événement";
+                icon: Icons.qr-code;
+                has-icon: true;
+            }
+            SecondaryButton {
+                label: root.narrow ? "Nouveau" : "Nouvel événement";
+                icon: Icons.plus;
+                has-icon: true;
+            }
+        }
+        if Home.upcoming.length == 0 && Home.past.length == 0: Text {
+            text: "Aucun événement";
+            color: Theme.text-secondary;
+            font-size: Theme.text-body;
+        }
+        if Home.upcoming.length > 0: HorizontalLayout {
+            padding-left: root.label-inset;
+            GroupLabel { text: "À venir"; }
+        }
+        for entry[i] in Home.upcoming: TimelineRow {
+            entry: entry;
+            narrow: root.narrow;
+            linked: i > 0;
+        }
+        if Home.past.length > 0: HorizontalLayout {
+            padding-left: root.label-inset;
+            padding-top: Theme.space-medium;
+            GroupLabel { text: "Passés"; }
+        }
+        for entry[i] in Home.past: TimelineRow {
+            entry: entry;
+            narrow: root.narrow;
+            linked: i > 0;
+        }
+        if Home.past.length > 0: HorizontalLayout {
+            padding-left: root.label-inset;
+            QuietButton { label: "Voir tous les événements passés"; }
+        }
+    }
+}
+
+component ClubCardView {
+    in property <ClubCard> card;
+    in property <int> page;
+    in property <bool> compact;
+
+    Card {
+        title: root.card.title;
+        margin: root.compact ? Theme.narrow-margin : Theme.card-margin;
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            Text {
+                text: root.card.value;
+                color: Theme.text;
+                font-size: Theme.text-hero;
+                font-weight: Theme.weight-screen-title;
+            }
+            if root.card.detail != "" && !root.compact: VerticalLayout {
+                alignment: end;
+                padding-bottom: Theme.space;
+                Text {
+                    text: root.card.detail;
+                    color: Theme.text-secondary;
+                    font-size: Theme.text-help;
+                }
+            }
+        }
+        if root.card.badge.kind != BadgeKind.none: HorizontalLayout {
+            alignment: start;
+            StatusBadge { status: Home.status-of(root.card.badge); }
+        }
+        if !root.compact: HorizontalLayout {
+            alignment: start;
+            SecondaryButton {
+                label: "Ouvrir";
+                clicked => { Navigation.open-club-page(root.page); }
+            }
+        }
+    }
+    // On a phone, the whole card opens the page (09-telephone-boitiers.png has no room for a button).
+    if root.compact: TouchArea {
+        clicked => { Navigation.open-club-page(root.page); }
+    }
+}
+
+component ClubSection {
+    in property <LayoutMode> layout-mode;
+
+    VerticalLayout {
+        alignment: start;
+        spacing: Theme.space-medium;
+        SectionTitle { text: "Le club"; }
+        if root.layout-mode == LayoutMode.wide: VerticalLayout {
+            spacing: Theme.button-margin;
+            for card[i] in Home.club: ClubCardView { card: card; page: i; }
+        }
+        if root.layout-mode == LayoutMode.medium: HorizontalLayout {
+            spacing: Theme.button-margin;
+            for card[i] in Home.club: ClubCardView {
+                width: (root.width - 2 * Theme.button-margin) / 3;
+                card: card;
+                page: i;
+            }
+        }
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.space;
+            HorizontalLayout {
+                spacing: Theme.space;
+                ClubCardView { width: (root.width - Theme.space) / 2; card: Home.club[0]; page: 0; compact: true; }
+                ClubCardView { width: (root.width - Theme.space) / 2; card: Home.club[1]; page: 1; compact: true; }
+            }
+            ClubCardView { card: Home.club[2]; page: 2; compact: true; }
+        }
+    }
+}
+
+// The hero runs edge to edge; the two sections stay centered on large windows.
+export component HomePage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+    in property <length> left-margin;
+    in property <length> right-margin;
+
+    property <length> inset: max(0px, (root.available-width - Theme.home-max-width) / 2);
+
+    VerticalLayout {
+        if Home.has-current-event: Hero { available-width: root.available-width; }
+        VerticalLayout {
+            padding-top: Theme.margin;
+            padding-left: max(root.left-margin, root.inset);
+            padding-right: max(root.right-margin, root.inset);
+            if root.layout-mode == LayoutMode.wide: HorizontalLayout {
+                spacing: Theme.margin;
+                EventsSection {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                }
+                ClubSection {
+                    horizontal-stretch: 0;
+                    width: Theme.club-column-width;
+                    layout-mode: root.layout-mode;
+                }
+            }
+            if root.layout-mode != LayoutMode.wide: VerticalLayout {
+                spacing: Theme.margin;
+                EventsSection { layout-mode: root.layout-mode; }
+                ClubSection { layout-mode: root.layout-mode; }
+            }
+        }
+    }
+}

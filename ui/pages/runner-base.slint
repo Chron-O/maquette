@@ -1,0 +1,590 @@
+// The Coureurs et clubs page, following coureurs-clubs.md and mise-en-page-universelle.md: no
+// column, the local base in one table, and the detail of a runner.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
+import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText } from "courses.slint";
+import { Cell, Title } from "participants.slint";
+import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
+import { DetailLine, DetailTitle } from "cards.slint";
+
+export struct BaseRunnerRow {
+    id: int,
+    family: string,
+    first: string,
+    club: string,
+    league: string,
+    category: string,
+    year: string,
+    licence: string,
+    kind: string,
+    card: string,
+    points: string,
+    selected: bool,
+}
+
+export struct BaseIssue {
+    id: int,
+    label: string,
+    detail: string,
+}
+
+export global RunnerBase {
+    in property <[BaseRunnerRow]> rows;
+    in property <[LiveFilter]> filters;
+    in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    callback toggle-filter(int, int);
+    callback clear-filters();
+    in property <int> sort-column;
+    in property <bool> sort-ascending: true;
+    in property <string> title;
+    in property <string> state;
+    in property <string> empty;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> search-text;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[BaseIssue]> duplicates;
+    in property <string> duplicates-title;
+    in property <[BaseIssue]> shared-cards;
+    in property <string> shared-cards-title;
+
+    in property <bool> detail-open;
+    in property <string> detail-name;
+    in property <string> detail-subtitle;
+    in property <string> detail-kind;
+    in property <string> detail-club;
+    in property <string> detail-code;
+    in property <string> detail-league;
+    in property <bool> detail-has-licence;
+    in property <string> detail-licence;
+    in property <string> detail-licence-kind;
+    in property <string> detail-season;
+    in property <bool> detail-not-renewed;
+    in property <string> detail-points;
+    in property <string> detail-sex;
+    in property <string> detail-year;
+    in property <string> detail-category;
+    in property <string> detail-card;
+    in property <string> detail-shared;
+    in property <string> detail-loan;
+    in property <string> detail-origin;
+    in property <bool> confirming;
+
+    callback select-filter(int);
+    callback select-row(int);
+    callback open-runner(int);
+    callback sort-by(int);
+    callback search(string);
+    callback close-detail();
+    callback ask-delete();
+    callback cancel-delete();
+    callback confirm-delete();
+}
+
+// The titles stay at the top: only the rows scroll. Columns leave rather than scroll sideways.
+component RunnerBaseTable {
+    in property <length> available-width;
+
+    property <bool> full: root.available-width >= Theme.base-full-width;
+    property <length> fixed: Theme.base-club-width + Theme.base-category-width + Theme.base-kind-width + Theme.base-card-width
+        + (root.full ? Theme.base-first-width + Theme.base-league-width + Theme.base-year-width + Theme.base-licence-width + Theme.base-points-width : 0px);
+    property <length> name-width: root.available-width - root.fixed;
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            height: Theme.table-header-height + Theme.space;
+            Title { width: root.name-width; label: "Nom"; sorted: RunnerBase.sort-column == 0; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(0); } }
+            if root.full: Title { width: Theme.base-first-width; label: "Prénom"; sorted: RunnerBase.sort-column == 1; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(1); } }
+            Title { width: Theme.base-club-width; label: "Club"; sorted: RunnerBase.sort-column == 2; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(2); } }
+            if root.full: Title { width: Theme.base-league-width; label: "Ligue"; sorted: RunnerBase.sort-column == 3; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(3); } }
+            Title { width: Theme.base-category-width; label: "Cat."; sorted: RunnerBase.sort-column == 4; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(4); } }
+            if root.full: Title { width: Theme.base-year-width; label: "Année"; sorted: RunnerBase.sort-column == 5; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(5); } }
+            if root.full: Title { width: Theme.base-licence-width; label: "Licence"; sorted: RunnerBase.sort-column == 6; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(6); } }
+            Title { width: Theme.base-kind-width; label: "Type"; sorted: RunnerBase.sort-column == 7; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(7); } }
+            Title { width: Theme.base-card-width; label: "Puce"; sorted: RunnerBase.sort-column == 8; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(8); } }
+            if root.full: Title { width: Theme.base-points-width; label: "Points CN"; sorted: RunnerBase.sort-column == 9; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(9); } }
+        }
+        RowLine { vertical-stretch: 0; }
+        if RunnerBase.empty != "": Text {
+            vertical-stretch: 1;
+            text: RunnerBase.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if RunnerBase.empty == "": Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                width: root.available-width;
+                alignment: start;
+                for row[n] in RunnerBase.rows: VerticalLayout {
+                    if n > 0: RowLine { }
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: row.selected ? Theme.row-selected : transparent;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { RunnerBase.select-row(row.id); }
+                        }
+                        HorizontalLayout {
+                            HorizontalLayout {
+                                width: root.name-width;
+                                padding-left: Theme.space;
+                                alignment: start;
+                                spacing: Theme.space-small;
+                                Cell { text: row.family; font-weight: Theme.weight-screen-title; }
+                                if !root.full: Cell { text: row.first; }
+                            }
+                            if root.full: RowCell { width: Theme.base-first-width; Cell { text: row.first; } }
+                            HorizontalLayout {
+                                width: Theme.base-club-width;
+                                padding-left: Theme.space;
+                                Cell { text: row.club; wrap: word-wrap; }
+                            }
+                            if root.full: RowCell { width: Theme.base-league-width; Cell { text: row.league; } }
+                            RowCell { width: Theme.base-category-width; Cell { text: row.category; } }
+                            if root.full: RowCell { width: Theme.base-year-width; Cell { text: row.year; } }
+                            if root.full: RowCell { width: Theme.base-licence-width; Cell { text: row.licence; } }
+                            RowCell { width: Theme.base-kind-width; Cell { text: row.kind; } }
+                            RowCell { width: Theme.base-card-width; Cell { text: row.card; } }
+                            if root.full: RowCell { width: Theme.base-points-width; Cell { text: row.points; } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: who › the club and the category › the card.
+component RunnerBaseList {
+    VerticalLayout {
+        if RunnerBase.empty != "": Text {
+            height: Theme.live-card-narrow-height;
+            text: RunnerBase.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for row[n] in RunnerBase.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : transparent;
+                TouchArea {
+                    clicked => { RunnerBase.select-row(row.id); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.family + " " + row.first;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: row.club + " · " + row.category; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        SmallText { text: row.card; wrap: no-wrap; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component RunnerBaseContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: RunnerBase.search-text != "";
+    // A narrow card (iPad portrait): the title under the buttons, the search on its own row.
+    property <bool> stacked: !root.narrow && root.available-width < Theme.club-head-stacked;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            // On a phone the whole list is in the card: too tall for the layer a clip draws into.
+            clip: !root.narrow;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space-small;
+                    // The add action in orange; on the right, the alert, the filters and the search
+                    // (brief zones-onglets § 6).
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        PrimaryButton {
+                            label: root.narrow ? "Ajouter" : "Ajouter un coureur";
+                            icon: Icons.plus;
+                            has-icon: true;
+                        }
+                        if !root.narrow && !root.stacked: VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: RunnerBase.title;
+                                color: Theme.text;
+                                font-size: Theme.text-body;
+                                font-weight: Theme.weight-screen-title;
+                                wrap: word-wrap;
+                            }
+                            SmallText { text: RunnerBase.state; }
+                        }
+                        if root.narrow || root.stacked: Rectangle { horizontal-stretch: 1; }
+                        if RunnerBase.alert-title != "": VerticalLayout {
+                            alignment: center;
+                            AlertPill {
+                                title: RunnerBase.alert-title;
+                                count: RunnerBase.alert-count;
+                                bubble: 20;
+                                compact: root.narrow || root.stacked;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            FilterButton {
+                                filters: RunnerBase.active-filters;
+                                narrow: root.narrow;
+                                open: Courses.open-bubble == 30;
+                                open-down: Courses.bubble-down;
+                                clicked => {
+                                    Courses.open-at(30, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                                }
+                                remove(g, c) => { RunnerBase.toggle-filter(g, c); }
+                                clear => { RunnerBase.clear-filters(); }
+                            }
+                        }
+                        if root.narrow: VerticalLayout {
+                            alignment: start;
+                            SearchToggle {
+                                open: root.search-open;
+                                clicked => {
+                                    if root.search-open {
+                                        RunnerBase.search("");
+                                    }
+                                    root.search-open = !root.search-open;
+                                }
+                            }
+                        }
+                        if !root.narrow && !root.stacked: VerticalLayout {
+                            alignment: center;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Nom, club, licence ou puce…";
+                                text: RunnerBase.search-text;
+                                edited(text) => { RunnerBase.search(text); }
+                            }
+                        }
+                    }
+                    // A phone or a narrow card: the title under the buttons, which keep the width.
+                    if root.narrow || root.stacked: VerticalLayout {
+                        Text {
+                            text: RunnerBase.title;
+                            color: Theme.text;
+                            font-size: Theme.text-body;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: RunnerBase.state; }
+                    }
+                    if root.stacked: InputField {
+                        placeholder: "Nom, club, licence ou puce…";
+                        text: RunnerBase.search-text;
+                        edited(text) => { RunnerBase.search(text); }
+                    }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Nom, club, licence ou puce…";
+                            text: RunnerBase.search-text;
+                            edited(text) => { RunnerBase.search(text); }
+                        }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: RunnerBaseList { }
+                if !root.narrow: RunnerBaseTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+            }
+        }
+    }
+}
+
+export component BaseRunnerDetail inherits Rectangle {
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: Theme.space-small;
+                Text {
+                    text: RunnerBase.detail-name;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: RunnerBase.detail-subtitle; }
+                if RunnerBase.detail-kind != "": HorizontalLayout {
+                    alignment: start;
+                    StatusBadge { status: Home.status-of({ word: RunnerBase.detail-kind, kind: inactive }); }
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                Rectangle {
+                    width: Theme.zone;
+                    height: Theme.zone;
+                    accessible-role: button;
+                    accessible-label: "Fermer";
+                    Image {
+                        source: Icons.x;
+                        colorize: Theme.text-secondary;
+                        width: Theme.button-icon;
+                        height: Theme.button-icon;
+                    }
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { RunnerBase.close-detail(); }
+                    }
+                }
+            }
+        }
+
+        DetailTitle { text: "Club"; }
+        BubbleLabel { text: RunnerBase.detail-club; }
+        DetailLine { label: "Code"; value: RunnerBase.detail-code; }
+        VerticalLayout {
+            SmallText { text: "Ligue"; }
+            BubbleLabel { text: RunnerBase.detail-league; }
+        }
+
+        RowLine { }
+        DetailTitle { text: "Licence FFCO"; }
+        if RunnerBase.detail-has-licence: DetailLine { label: "N°"; value: RunnerBase.detail-licence; }
+        if RunnerBase.detail-has-licence: DetailLine { label: "Type"; value: RunnerBase.detail-licence-kind; }
+        if RunnerBase.detail-has-licence: VerticalLayout {
+            SmallText { text: "Saison"; }
+            Text {
+                text: RunnerBase.detail-season;
+                color: RunnerBase.detail-not-renewed ? Theme.to-check.badge-text : Theme.text;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+        }
+        if RunnerBase.detail-has-licence: DetailLine { label: "Points CN"; value: RunnerBase.detail-points; }
+        if !RunnerBase.detail-has-licence: HorizontalLayout {
+            alignment: start;
+            StatusBadge { status: Home.status-of({ word: RunnerBase.detail-licence-kind, kind: to-check }); }
+        }
+        if !RunnerBase.detail-has-licence: SmallText { text: "Fiche saisie à la main."; }
+        if !RunnerBase.detail-has-licence: HorizontalLayout { alignment: start; SecondaryButton { label: "Chercher le licencié…"; } }
+
+        RowLine { }
+        DetailTitle { text: "Coureur"; }
+        DetailLine { label: "Sexe"; value: RunnerBase.detail-sex; }
+        DetailLine { label: "Année"; value: RunnerBase.detail-year; }
+        DetailLine { label: "Catégorie"; value: RunnerBase.detail-category; }
+        DetailLine { label: "Puce"; value: RunnerBase.detail-card; }
+        if RunnerBase.detail-shared != "": Text {
+            text: RunnerBase.detail-shared;
+            color: Theme.to-check.badge-text;
+            font-size: Theme.text-help;
+            wrap: word-wrap;
+        }
+        if RunnerBase.detail-loan != "": Text {
+            text: RunnerBase.detail-loan;
+            color: Theme.to-check.badge-text;
+            font-size: Theme.text-help;
+            wrap: word-wrap;
+        }
+
+        RowLine { }
+        SmallText { text: RunnerBase.detail-origin; }
+        if !RunnerBase.confirming: HorizontalLayout { alignment: start; SecondaryButton { label: "Modifier…"; } }
+        if !RunnerBase.confirming: HorizontalLayout {
+            alignment: start;
+            SecondaryButton {
+                label: "Supprimer…";
+                danger: true;
+                clicked => { RunnerBase.ask-delete(); }
+            }
+        }
+        if RunnerBase.confirming: BubbleLabel { text: "Supprimer cette fiche de la base ?"; }
+        if RunnerBase.confirming: HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            SecondaryButton {
+                label: "Annuler";
+                clicked => { RunnerBase.cancel-delete(); }
+            }
+            SecondaryButton {
+                label: "Supprimer";
+                danger: true;
+                clicked => { RunnerBase.confirm-delete(); }
+            }
+        }
+    }
+}
+
+export component RunnerBasePage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    VerticalLayout {
+        if root.layout-mode == LayoutMode.narrow: RunnerBaseContent {
+            layout-mode: root.layout-mode;
+            available-width: root.available-width;
+        }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            RunnerBaseContent {
+                width: parent.width;
+                height: parent.height;
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: RunnerBase.detail-open;
+                close => { RunnerBase.close-detail(); }
+                BaseRunnerDetail { in-sheet: true; }
+            }
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom.
+export component BaseRunnerOverlay {
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: RunnerBase.detail-open;
+        close => { RunnerBase.close-detail(); }
+        BaseRunnerDetail { in-sheet: true; }
+    }
+}
+
+// One line per point to check, each with its button.
+component IssueLine {
+    in property <BaseIssue> issue;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            BubbleLabel { text: root.issue.label; }
+            SmallText { text: root.issue.detail; }
+        }
+        VerticalLayout {
+            alignment: center;
+            // A look, not the screen's action: secondary (one orange button per screen).
+            SecondaryButton {
+                label: "Voir";
+                clicked => {
+                    Courses.close-bubble();
+                    RunnerBase.open-runner(root.issue.id);
+                }
+            }
+        }
+    }
+}
+
+component IssueGroupTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    wrap: word-wrap;
+}
+
+// The two checks of coureurs-clubs.md § 7, each under its own title.
+component IssuesContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: RunnerBase.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        if RunnerBase.duplicates.length > 0: IssueGroupTitle { text: RunnerBase.duplicates-title; }
+        for issue in RunnerBase.duplicates: IssueLine { issue: issue; }
+        if RunnerBase.duplicates.length > 0 && RunnerBase.shared-cards.length > 0: RowLine { }
+        if RunnerBase.shared-cards.length > 0: IssueGroupTitle { text: RunnerBase.shared-cards-title; }
+        for issue in RunnerBase.shared-cards: IssueLine { issue: issue; }
+        SmallText { text: "Rien n'est changé sans votre accord"; }
+    }
+}
+
+export component RunnerBaseBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Courses.open-bubble == 30 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 20: IssuesContent { }
+        if Courses.open-bubble == 30: FiltersContent {
+            groups: RunnerBase.filter-groups;
+            toggle(g, c) => { RunnerBase.toggle-filter(g, c); }
+            clear => { RunnerBase.clear-filters(); }
+            close => { Courses.close-bubble(); }
+        }
+    }
+}

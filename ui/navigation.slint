@@ -1,0 +1,39 @@
+import { TabItem } from "components/tabs.slint";
+
+// What Rust gives to the shell, and the clicks it gets back.
+export global Navigation {
+    in property <bool> home;
+    in property <bool> in-event;
+    in property <bool> cards-page;
+    in property <bool> stations-page;
+    in property <bool> runners-page;
+    in property <string> header-title;
+    in property <string> header-detail;   // an event: its date and place
+    in property <string> back-label;
+    in property <[TabItem]> tabs;
+    in property <int> active-tab;
+    in property <bool> live-open;
+    in-out property <bool> settings-open;   // the Paramètres tab unfolded; folded on a tab change
+    in property <bool> live-running;
+    callback open-event(int);
+    callback open-direct();
+    callback open-club-page(int);
+    callback select-tab(int);
+    callback toggle-live();
+    callback go-back();
+}
+
+// The demo panel: touch or mouse sizes, and the test data generator.
+export global Demo {
+    in property <[TabItem]> devices;
+    in property <int> active-device;
+    in property <[TabItem]> test-data-options;
+    in property <int> active-test-data;
+    callback select-device(int);
+    callback select-test-data(int);
+    callback read-station();
+    callback read-card();
+    callback toggle-unplugged();   // unplugs or plugs back the first finish reader
+}
+
+export enum LayoutMode { narrow, medium, wide }

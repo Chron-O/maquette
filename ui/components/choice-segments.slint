@@ -1,0 +1,76 @@
+// A setting that changes the course: filled green segments, and only that
+// (departs-tirage-v2.md § A). A view or a sort keeps the grey `Tabs`.
+
+import { Theme } from "../theme.slint";
+
+component Segment {
+    callback clicked();
+    in property <string> label;
+    in property <bool> active;
+
+    // The touch zone keeps its height; the segment is drawn smaller inside it.
+    min-height: Theme.zone;
+    min-width: reference.preferred-width + 2 * Theme.choice-margin;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+    accessible-action-default => { root.clicked(); }
+
+    // Width reserved for the bold text: segments do not move when the choice changes.
+    reference := Text {
+        text: root.label;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-block-title;
+        opacity: 0;
+    }
+    Rectangle {
+        height: Theme.choice-height;
+        border-radius: Theme.choice-radius;
+        border-width: Theme.thin-outline-width;
+        border-color: root.active ? Theme.choice-active-background : Theme.choice-outline;
+        background: root.active ? Theme.choice-active-background
+            : zone.has-hover ? Theme.choice-hover
+            : Theme.choice-background;
+        animate background { duration: Theme.tint-duration; }
+    }
+    Text {
+        text: root.label;
+        color: root.active ? Theme.choice-active-text : Theme.choice-text;
+        font-size: Theme.text-help;
+        font-weight: Theme.weight-block-title;
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ChoiceSegments {
+    callback clicked(int);
+    in property <[string]> choices;
+    in property <int> active: -1;
+    // One per line, on the left (a phone's bubble): long choices never pass the edge.
+    in property <bool> stacked;
+
+    // A layout around the two `if`, so their size reaches the parent.
+    VerticalLayout {
+        if !root.stacked: HorizontalLayout {
+            spacing: Theme.space-small;
+            for choice[i] in root.choices: Segment {
+                label: choice;
+                active: i == root.active;
+                clicked => { root.clicked(i); }
+            }
+        }
+        if root.stacked: VerticalLayout {
+            for choice[i] in root.choices: HorizontalLayout {
+                alignment: start;
+                Segment {
+                    label: choice;
+                    active: i == root.active;
+                    clicked => { root.clicked(i); }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,637 @@
+// Chron'O theme: single source of colors, sizes and radii.
+// Values: references/charte.md.
+
+import { Palette } from "std-widgets.slint";
+
+// Fonts embedded in the program (IBM Plex Sans, OFL license).
+import "fonts/IBMPlexSans-Regular.ttf";
+import "fonts/IBMPlexSans-Medium.ttf";
+import "fonts/IBMPlexSans-SemiBold.ttf";
+import "fonts/IBMPlexSans-Bold.ttf";
+
+export enum ThemeMode { auto, light, dark }
+
+// A state family: the color gives the family, the icon and the word give the status.
+export struct StateFamily {
+    badge-text: color,
+    badge-background: color,
+    block-text: color,
+    block-background: color,
+    outline: color,     // the family's own color, for a frame around a whole card
+}
+
+export global Theme {
+    // `auto` follows the system setting; the others are only used by the capture tool.
+    in-out property <ThemeMode> mode: ThemeMode.auto;
+    out property <bool> dark: mode == ThemeMode.auto
+        ? Palette.color-scheme == ColorScheme.dark
+        : mode == ThemeMode.dark;
+
+    // Animations. Off when the system asks for reduced motion (set from Rust).
+    in-out property <bool> reduced-motion: false;
+    out property <duration> tint-duration: reduced-motion ? 0ms : 120ms;
+    out property <duration> tab-duration: reduced-motion ? 0ms : 220ms;
+    out property <duration> arrival-duration: reduced-motion ? 0ms : 220ms;
+    out property <duration> drawer-duration: reduced-motion ? 0ms : 600ms;   // the Direct drawer (prototype: .6s)
+    out property <duration> breathing-period: 1800ms;
+    out property <duration> rotation-period: 1200ms;
+    out property <float> breathing-size-min: 0.8;
+    out property <float> breathing-opacity-min: 0.55;
+
+    // Font
+    out property <string> font: "IBM Plex Sans";
+
+    // Base colors
+    out property <color> page-background: dark ? #0F1A14 : #F5F8F4;
+    out property <color> header: dark ? #17241C : #163628;   // dark: neutral, like the cards
+    out property <color> header-text: dark ? #E8F0EA : #FFFFFF;
+    out property <color> card: dark ? #17241C : #FFFFFF;
+    out property <color> card-outline: dark ? #24352B : transparent;
+    out property <length> card-outline-width: dark ? 1px : 0px;
+    out property <color> card-shadow: dark ? transparent : #16362814;
+    out property <color> surface: dark ? #1F2F26 : #F0F5F1;
+    out property <color> text: dark ? #E8F0EA : #163628;
+    out property <color> text-secondary: dark ? #8FA398 : #4A5D52;   // light: measured on the captures
+    out property <color> thin-outline: dark ? #24352B : #C9D6CE;        // light: measured on the captures
+
+    // Selected tab
+    out property <color> active-tab-background: dark ? #E8F0EA : #163628;
+    out property <color> active-tab-text: dark ? #0F1A14 : #FFFFFF;
+    // The tab under the open Direct: still marked, pale (prototype: .x-tab.on.ghost).
+    out property <color> ghost-tab-background: dark ? #2C4034 : #C3DCCC;
+    out property <color> ghost-tab-text: dark ? #E8F0EA : #163628;
+
+    // Buttons
+    out property <color> primary-button: #D9650C;
+    out property <color> primary-button-text: #FFFFFF;
+    out property <color> secondary-button: dark ? #1F2F26 : #FFFFFF;   // light: white, as on the captures
+
+    // Button on the header (tint changes on hover and press)
+    out property <color> header-button: dark ? #1F2F26 : #FFFFFF1F;
+    out property <color> header-button-hover: dark ? #24352B : #FFFFFF33;
+    out property <color> header-button-pressed: dark ? #2C4034 : #FFFFFF47;
+
+    // Accents
+    out property <color> live: #3DDC97;
+    out property <color> purple: #B5179E;
+    out property <color> purple-band: #FFFFFF;
+
+    // Input field
+    out property <color> field-editing-background: dark ? #17241C : #FFFFFF;
+    out property <color> field-editing-outline: dark ? #3DDC97 : #163628;
+    out property <color> field-error-outline: dark ? #FF6B5E : #D92D20;
+    out property <length> field-outline-width: 2px;
+
+    // Tabs. Light: measured on 02-participants.png and 08-direct.png.
+    out property <color> tabs-background: dark ? #1F2F26 : #E3EEE6;
+    out property <color> tab-text: dark ? #8FA398 : #2F4A3B;
+    out property <color> tab-hover: dark ? #24352B : #D3E3D9;
+
+    // Hover and press feedback: a tint change, never a shadow.
+    out property <color> primary-button-hover: #C65A09;
+    out property <color> primary-button-pressed: #AE4F07;
+    out property <color> secondary-button-hover: dark ? #24352B : #F0F5F1;
+    out property <color> secondary-button-pressed: dark ? #2C4034 : #E3EEE6;
+
+    // List row. Light: measured on the captures. Dark: neutral surfaces.
+    out property <color> row-to-handle: dark ? #17241C : #FFF7F0;
+    // Rows of a family (charte, familles d'états): its pale background; neutral in dark.
+    out property <color> row-problem: problem.badge-background;
+    out property <color> row-to-check: to-check.badge-background;
+    out property <color> separator: dark ? #24352B : #EEF2EF;
+
+    // Courses (square chip), measured on 08-direct.png
+    out property <color> course-red: #E0402B;
+    out property <color> course-green: #1E9E4A;
+    out property <color> course-blue: #2B6CD8;
+
+    // State families. Dark: color on the text only, neutral surface.
+    out property <StateFamily> valid: {
+        badge-text: dark ? #7EE2A0 : #17663A,
+        badge-background: dark ? surface : #DDF3E5,
+        block-text: dark ? #7EE2A0 : #0E4F2A,
+        block-background: dark ? surface : #A8E5BF,
+        outline: dark ? #7EE2A0 : #A8E5BF,
+    };
+    out property <StateFamily> in-progress: {
+        badge-text: dark ? #5FE0C8 : #0B6B5A,
+        badge-background: dark ? surface : #D3F5EC,
+        block-text: dark ? #5FE0C8 : #074B3F,
+        block-background: dark ? surface : #A7EBDA,
+        outline: dark ? #5FE0C8 : #A7EBDA,
+    };
+    out property <StateFamily> to-check: {
+        badge-text: dark ? #FFE066 : #6B5200,
+        badge-background: dark ? surface : #FFF1B8,
+        block-text: dark ? #FFE066 : #4D3B00,
+        block-background: dark ? surface : #FFE07A,
+        outline: dark ? #FFE066 : #FFE07A,
+    };
+    out property <StateFamily> problem: {
+        badge-text: dark ? #FF6B5E : #D92D20,
+        badge-background: dark ? surface : #FDE4E1,
+        block-text: dark ? #FF6B5E : #A3170D,
+        block-background: dark ? surface : #FFCBC4,
+        outline: dark ? #FF6B5E : #FFCBC4,
+    };
+    out property <StateFamily> inactive: {
+        badge-text: dark ? #B4BEC6 : #4F5A63,
+        badge-background: dark ? surface : #ECEFF1,
+        block-text: dark ? #B4BEC6 : #39434B,
+        block-background: dark ? surface : #D5DBDF,
+        outline: dark ? #B4BEC6 : #D5DBDF,
+    };
+
+    // Header indicators and tables. Light: measured on 08-direct.png.
+    out property <color> header-secondary: dark ? #8FA398 : #9FD9B8;
+    out property <color> header-outline: dark ? #2C4034 : #60766D;
+    out property <color> attention: #E5B400;
+    out property <color> table-outline: dark ? #24352B : #E3EAE5;
+
+    // Text scale
+    out property <length> text-time-giant: 48px;
+    out property <length> text-screen-title: 22px;
+    out property <length> text-primary-button: 18px;
+    out property <length> text-block-title: 17px;
+    out property <length> text-body: 16px;
+    out property <length> text-label: 14px;
+    out property <length> text-help: 13px;
+
+    // Font weights
+    out property <int> weight-regular: 400;
+    out property <int> weight-label: 500;
+    out property <int> weight-block-title: 600;
+    out property <int> weight-screen-title: 700;
+
+    // Sizes follow the device, not the width: touch 48 px, mouse 36 px (set from Rust).
+    in-out property <bool> touch: false;
+    out property <length> zone: touch ? 48px : 36px;
+    out property <length> field-zone: 56px;
+    out property <length> field-height: touch ? 48px : 36px;
+    out property <length> primary-button-height: touch ? 48px : 36px;
+    out property <length> row-action-height: touch ? 40px : 32px;
+    out property <length> secondary-button-height: touch ? 40px : 32px;
+    out property <length> tab-bar-height: touch ? 52px : 40px;
+    out property <length> tab-height: touch ? 44px : 32px;
+
+    // Shapes
+    out property <length> card-radius: 16px;
+    out property <length> field-radius: 12px;
+    out property <length> secondary-button-radius: 10px;
+    out property <length> block-radius: 12px;
+    out property <length> thin-outline-width: 1px;
+    out property <length> shadow-blur: 12px;
+    out property <length> demo-shadow: 24px;
+
+    // Status badge and block (measured on 08-direct.png)
+    out property <length> badge-height: 22px;
+    out property <length> block-width: 80px;
+    out property <length> block-height: 54px;
+
+    // Buttons (measured on the captures). The click area stays the one from the charter.
+    out property <length> small-button-height: 24px;
+    out property <length> small-button-width: 32px;
+    out property <length> underline: 1px;
+    out property <length> time-strike: 1px;
+    out property <length> time-strike-large: 2px;
+    out property <length> button-margin: 12px;
+    out property <length> primary-button-margin: 16px;
+    out property <length> space-small: 4px;
+    out property <length> button-icon-gap: 6px;
+    out property <length> badge-margin: 7px;
+    out property <length> badge-icon-gap: 2px;
+
+    // Tabs (measured on 02-participants.png)
+    out property <length> tab-margin: 15px;
+
+    // Home page. Text sizes from 01-accueil.png, outside the charter scale (see ECRANS.md).
+    out property <length> text-hero: 34px;
+    out property <length> text-stat: 28px;
+    out property <length> logo-height: 36px;
+    out property <length> hero-height: 400px;
+    out property <length> hero-narrow-height: 260px;
+    out property <length> hero-overlap: -40px;
+    out property <length> hero-card-width: 400px;
+    out property <length> hero-side-by-side-min: 760px;
+    out property <length> direct-width: 340px;
+    out property <length> direct-dot: 10px;
+    out property <length> direct-tuck: 30px;
+    out property <length> direct-padding: 18px;
+    out property <length> home-last-height: 78px;      // the last reading in big, live or not
+    out property <length> home-last-name-size: 18px;   // prototype: homeLive
+    out property <color> direct-background: dark ? #17241C : #163628;
+    out property <color> direct-pill: dark ? #24352B : #324E42;
+    out property <color> direct-separator: dark ? #24352B : #2C4A3B;
+    out property <color> to-handle-outline: #D92D20;
+    out property <color> row-hover: dark ? #17241C : #FFFFFF;
+    out property <color> row-hover-outline: table-outline;   // prototype: .h-ev:hover
+    out property <length> date-width: 62px;
+    out property <length> date-narrow-width: 40px;
+    out property <length> timeline-dot: 14px;
+    out property <length> timeline-dot-outline: 3px;
+    out property <length> timeline-line: 2px;
+    out property <length> timeline-line-height: 32px;
+    out property <float> timeline-line-opacity: 0.35;
+    out property <length> text-date: 24px;
+
+    // Courses page. Course colors and tag sizes from 03-circuits-tous-les-postes.png.
+    out property <color> course-yellow: #F5D90A;
+    out property <color> course-violet: #7A3FC8;
+    out property <color> course-yellow-mark: #B89C00;
+    out property <color> tag-background: #FFFFFF;
+    out property <color> tag-selected-background: #F6E3F2;
+    out property <color> tag-unused: #C98BBE;
+    // A control in two courses or more (tous-les-postes.md § 5): pale purple, same outline.
+    out property <color> tag-shared-background: #F9EAF4;
+    // The chosen control keeps its circle: a thin ring around it, on a map or a plan.
+    out property <length> station-ring-gap: 3px;
+    out property <length> station-ring-width: 1.5px;
+    // "Tous les postes" in the course list: three controls on a pale purple card.
+    out property <length> mini-control: 12px;
+    out property <color> rank-text: #163628;
+    out property <color> control-selected: dark ? #24352B : #FDF3FB;
+    out property <color> toggle-off: dark ? #2C4034 : #C9D6CE;
+    out property <color> toggle-knob: #FFFFFF;
+    out property <length> tag-height: 24px;
+    out property <length> tag-min-width: 34px;
+    out property <length> tag-radius: 7px;
+    out property <length> tag-outline: 2px;
+    out property <length> rank-size: 24px;
+    out property <length> no-rank-dot: 5px;
+    out property <color> no-rank-dot-color: dark ? #4A5D52 : #C9D6CE;   // dark: apart from the selected row
+    out property <length> sequence-link: 12px;
+    out property <length> course-list-width: touch ? 270px : 260px;
+    out property <length> code-search-width: 200px;
+    out property <length> highlight-chip-width: 92px;
+    out property <length> highlight-chip-height: 28px;
+    out property <length> view-tabs-width: 230px;
+    out property <length> bubble-width: 340px;   // brief zones-onglets, captures 03 and 04
+    out property <color> bubble-shadow: overlay-veil;
+    out property <length> menu-mark: 9px;          // the open mark after a column title (« État ▾ »)
+    out property <length> menu-mark-stroke: 1.6px;
+    out property <length> menu-bubble-width: 240px;
+    out property <length> equipment-bubble-width: 560px;   // the header indicators' bubbles (prototype: bulRd)
+    // The miniature of a public screen (prototype: preview), 16:9.
+    out property <length> screen-preview-width: 224px;
+    out property <length> screen-preview-height: 126px;
+    out property <length> screen-preview-radius: 6px;
+    out property <length> screen-preview-outline: 3px;
+    out property <color> screen-preview-frame: #1A1A1A;
+    out property <color> preview-half: dark ? #1A2A21 : #1F3A2D;
+    out property <length> preview-text: 9px;
+    out property <length> preview-title: 11px;
+    out property <length> preview-big: 20px;
+    out property <length> preview-rings: 22px;
+    out property <length> bubble-narrow-below: 480px;   // a narrower bubble: long choices one per line, a screen's settings under its preview   // prototype: lDots
+    out property <length> bubble-gap: 12px;     // between the button and the bubble, room for its pointer
+    out property <length> bubble-pointer: 14px; // the side of the pointer, a square turned a quarter (Robin, 11/11)
+    out property <length> bubble-extra: 24px;   // a bubble is at least its button plus this
+    out property <color> column-title-hover: dark ? #1F2F26 : #F0F5F1;   // charte-ui.md, Tableaux
+    out property <length> station-size: 34px;
+    out property <color> row-selected: dark ? #24352B : #E3EEE6;
+    // Reader tile (encart-lecture.md § 2, 3, 11): one dark green tile wherever a reader is shown.
+    out property <color> reader-ring: #7EE0A6;
+    out property <color> reader-detail: #9FD9B8;
+    out property <color> reader-unknown: #E8B931;   // amber: "à ranger", neither error nor success
+    out property <color> reader-error: #FF6B5E;
+    out property <color> reader-error-background: #2A1B1A;   // prototype: .tile with a problem
+    out property <length> reader-icon: 40px;
+    out property <length> reader-code-small-size: 28px;
+    // Fixed height in every state: the result zone and one button row are always kept.
+    out property <length> reader-zone-height: 56px;   // the medium format: two lines, or a row of buttons
+    out property <length> reader-padding: 14px;   // prototype: .tile padding 11px 14px
+    out property <duration> reader-shift-duration: reduced-motion ? 0ms : 350ms;
+    // Reader ready (prototype: .tile, .wave): a ring leaving the two others.
+    out property <duration> reader-wave-period: 2400ms;
+    out property <duration> reader-reading-period: 900ms;   // reading: fast waves
+    out property <duration> reader-bar-period: 1200ms;      // reading: the bar along a compact reader
+    out property <length> reader-bar-height: 3px;
+    out property <float> reader-wave-start: 0.6;
+    out property <float> reader-wave-end: 1.5;
+    out property <float> reader-wave-opacity: 0.8;
+    out property <float> reader-wave-stroke: 0.075;   // 3 px on a 40 px icon
+    // Light: a clear shadow all around, no outline. Dark: a shadow does not show, so a light green outline.
+    out property <length> reader-outline-width: dark ? 2px : 0px;
+    out property <length> reader-state-outline-width: 2px;   // reading (green), unknown (amber)
+    // A screen of stations: a thick orange outline (Robin, 11/11).
+    out property <length> reader-stations-outline-width: 4px;
+    out property <color> reader-stations-outline: primary-button;
+    out property <length> reader-shadow-blur: 24px;
+    out property <color> reader-shadow: dark ? transparent : #16362866;
+    out property <length> reader-compact-icon: 18px;
+    out property <length> reader-compact-shadow-blur: 10px;
+    out property <color> reader-raised-pill: dark ? #24352B : #163628;   // the bar readers on the light Direct
+    out property <length> reader-compact-radius: 8px;   // a small tile, not a pill
+    out property <length> reader-line-icon: 34px;   // prototype: compact tile
+    // Full tile a bit taller than the prototype's 11 px (Robin), compact as .tile compact.
+    out property <length> reader-padding-y: 14px;
+    out property <length> reader-compact-padding-x: 12px;   // prototype: compact .tile padding 9px 12px
+    out property <length> reader-compact-padding-y: 9px;
+    out property <length> reader-line-gap: 2px;
+    out property <length> reader-pin-icon: 13px;   // prototype: pin 12 px after the name
+    out property <length> reader-pin-hit: 10px;    // the pin is easier to hit than to see
+    out property <float> reader-pin-off-opacity: 0.55;   // not pinned: faint, still findable
+    out property <float> reader-cross-stroke: 0.077;   // the stroke across an unplugged target: 4 on 52
+    out property <length> participant-state-width: 120px;
+    out property <length> participant-name-width: 160px;
+    out property <length> participant-club-width: 100px;
+    out property <length> participant-category-width: 160px;
+    out property <length> participant-card-width: 140px;
+    out property <length> participant-card-button-width: 185px;   // the card's place holds « Attribuer une puce »
+    out property <length> participant-action-width: 195px;      // « Attribuer une puce »
+    out property <length> participant-start-width: 70px;
+    out property <length> participant-chip-width: 92px;
+    out property <length> station-name-width: 115px;
+    out property <length> station-courses-width: 125px;
+    out property <length> station-serial-width: 150px;
+    out property <length> station-light-serial-width: 85px;
+    out property <length> station-state-width: 175px;
+    out property <length> station-light-state-width: 165px;
+    out property <length> station-battery-width: 90px;
+    out property <length> station-action-width: 210px;   // « Corriger les temps… »
+    out property <length> station-light-action-width: 110px;
+    out property <length> station-full-width: 850px;
+    out property <length> gauge-height: 6px;
+    out property <length> reading-code-size: 40px;
+    out property <length> reading-card-row-width: 760px;   // below: the reading card puts its buttons under the question
+    out property <length> station-settings-width: 600px;   // prototype: bxSettings bubble, w 600
+    out property <length> stepper-value-width: 34px;
+    out property <length> value-tag-radius: 6px;
+    out property <length> start-time-width: 115px;
+    out property <length> start-category-width: 80px;
+    out property <length> start-light-category-width: 70px;
+    out property <length> start-club-width: 100px;
+    out property <length> start-card-width: 100px;
+    out property <length> start-state-width: 170px;
+    out property <length> start-light-state-width: 145px;
+    out property <length> start-full-width: 730px;
+    out property <length> start-phone-time-width: 70px;
+    out property <length> frise-cell-width: 44px;
+    out property <length> frise-cell-height: 34px;
+    out property <length> frise-name-width: 90px;
+    out property <length> frise-lock: 10px;
+    out property <length> participant-full-width: 805px;
+    out property <length> participant-action-full-width: 955px;   // room for the Action column too
+    out property <length> participant-light-category-width: 100px;
+    out property <length> participant-light-card-width: 110px;
+    out property <color> mandatory-blue: #1F5FBF;   // always on a light control, in both themes
+    out property <length> free-cell-width: 56px;
+    out property <color> free-zone-text: #6B1460;
+    out property <length> metro-link: 18px;
+    out property <length> metro-trace: 3px;
+    out property <int> metro-per-row: 5;
+    out property <length> legend-mark: 18px;
+    out property <length> legend-item-width: 170px;
+    out property <length> legend-row-height: 26px;
+    out property <length> course-views-width: 300px;
+    out property <length> others-switch-width: 240px;
+    out property <float> others-opacity: 0.3;
+    out property <length> control-detail-width: 290px;
+    out property <length> result-place-width: 70px;
+    out property <length> result-club-width: 110px;
+    out property <length> result-category-width: 80px;
+    out property <length> result-time-width: 90px;
+    out property <length> result-gap-width: 90px;
+    out property <length> result-state-width: 90px;
+    out property <length> result-full-width: 700px;
+    out property <length> result-action-width: 100px;   // « Action ▾ » over the rows' « ⋯ »
+    out property <length> base-chip-width: 112px;
+    out property <length> base-first-width: 90px;
+    out property <length> base-club-width: 150px;
+    out property <length> base-league-width: 70px;
+    out property <length> base-category-width: 70px;
+    out property <length> base-year-width: 70px;
+    out property <length> base-licence-width: 90px;
+    out property <length> base-kind-width: 110px;
+    out property <length> base-card-width: 90px;
+    out property <length> base-points-width: 90px;
+    out property <length> base-full-width: 1020px;
+    out property <length> stock-chip-width: 156px;   // "Pile à changer · 12"
+    out property <length> stock-code-width: 70px;
+    out property <length> stock-serial-width: 100px;
+    out property <length> stock-state-width: 170px;
+    out property <length> stock-measure-width: 130px;
+    out property <length> stock-full-width: 900px;
+    out property <length> stock-medium-width: 580px;
+    out property <length> card-chip-width: 140px;   // "En service · 120"
+    out property <length> card-park-chip-width: 140px;
+    out property <length> card-number-width: 100px;
+    out property <length> card-kind-width: 100px;
+    out property <length> card-state-width: 130px;
+    out property <length> card-battery-width: 110px;
+    out property <length> card-borrower-width: 150px;
+    out property <length> card-loans-width: 60px;
+    out property <length> card-note-width: 170px;
+    out property <length> card-full-width: 1000px;
+    out property <length> card-medium-width: 700px;
+    out property <length> live-state-width: 120px;
+    out property <length> live-name-width: 130px;
+    out property <length> live-category-width: 110px;
+    out property <length> live-time-width: 90px;
+    out property <length> live-place-width: 60px;
+    out property <length> live-clock-width: 90px;
+    out property <length> live-action-width: 150px;
+    out property <length> live-light-state-width: 110px;
+    out property <length> live-chip-narrow-width: 56px;
+    out property <length> live-reader-chip-width: 84px;
+    out property <length> live-light-time-width: 105px;
+    out property <length> live-light-action-width: 112px;
+    out property <length> live-full-width: 780px;
+    out property <length> live-card-height: 222px;
+    out property <length> live-card-narrow-height: 124px;
+    out property <length> live-time-size: 36px;   // prototype: bigLast
+    // The open bar's second line (prototype: x-r2, bigLast, mDrBar).
+    out property <length> live-open-row-height: 204px;
+    out property <length> live-open-row-narrow-height: 122px;
+    out property <length> live-second-padding: 12px;
+    out property <length> live-second-narrow-padding: 10px;
+    out property <length> live-second-gap: 18px;
+    out property <length> live-readers-width: 290px;
+    out property <length> live-big-full-width: 720px;   // under it, the category goes under the name
+    out property <length> live-big-gap: 22px;
+    out property <length> live-big-name-width: 200px;
+    out property <length> live-place-size: 20px;
+    out property <length> live-small-name-size: 18px;
+    out property <length> live-small-time-size: 20px;
+    out property <length> live-search-width: 280px;   // its placeholder whole (prototype: 260 px)
+    out property <length> live-drain-height: 3px;
+    out property <color> live-drain-track: dark ? #FFFFFF1F : #1636281F;
+    // The open Direct and its bar (Robin, 11/11): light green, so that the dark reader tiles stand
+    // out with their shadow, as in the side panels. Dark theme: as before, for now.
+    out property <color> live-drawer: dark ? #17241C : #DCEBE2;
+    out property <color> live-ink: dark ? #E8F0EA : #163628;
+    out property <color> live-ink-soft: dark ? #9FD9B8 : #2F4A3B;
+    out property <color> live-accent: dark ? #3DDC97 : #1F9D5B;   // the dot, the clock, « il y a »
+    out property <duration> live-drain-step: reduced-motion ? 0ms : 1000ms;   // one tick of the race clock
+    out property <length> live-narrow-time-size: 24px;
+    out property <length> live-stop-step: 62px;
+    out property <length> live-stop-size: 30px;
+    out property <length> live-strip-height: 96px;
+    out property <length> live-code-height: 20px;       // the code box under a control of the strip
+    out property <length> live-code-margin: 4px;
+    out property <length> live-status-width: 112px;     // the status block and what it means, under it
+    out property <length> live-card-status-outline: 2px;
+    out property <length> live-split-rank-width: 30px;
+    out property <length> live-split-code-width: 56px;
+    // The closed Direct bar: from these widths, the last reading, then the readers, have their room.
+    out property <length> live-bar-reading-room: 940px;
+    out property <length> live-bar-readers-room: 1240px;
+    out property <length> unbounded: 100000px;          // no maximum
+    out property <length> live-alert-mark: 18px;        // the mark on the phone Direct button
+    out property <length> live-alert-mark-icon: 11px;
+    out property <length> live-count-height: 62px;
+    out property <length> live-reader-dot: 8px;
+    // Direct drawer bar, measured on the HTML prototype (.x-bar, .x-hdl)
+    out property <color> live-handle: dark ? #3A5446 : #4C7360;
+    out property <length> live-handle-width: 44px;
+    out property <length> live-handle-height: 5px;
+    out property <length> live-bar-shadow-offset: -10px;
+    out property <length> live-bar-shadow-blur: 30px;
+    out property <color> live-bar-shadow: dark ? #00000066 : #0F1A1440;
+    out property <color> live-strip-background: #FFFFFF;
+    out property <color> live-strip-text: #163628;
+    out property <color> live-strip-missed: #FDE4E1;
+    out property <length> mini-map-width: 54px;
+    out property <length> mini-map-height: 36px;
+    out property <length> table-code-width: 84px;
+    out property <length> table-course-width: 96px;
+    out property <length> table-usage-width: 148px;
+    out property <length> map-marker: 26px;
+    out property <length> map-trace: 2px;
+    out property <length> sort-mark: 8px;
+    out property <color> sort-mark-fill: primary-button;   // the orange sort arrow (mise-en-page-universelle.md § 3)
+
+    // Setting that changes the course: filled green segments, its only use (departs-tirage-v2.md § A).
+    out property <color> choice-background: dark ? #1F2F26 : #F0F5F1;
+    out property <color> choice-outline: dark ? #2C4034 : #C9D6CE;
+    out property <color> choice-text: dark ? #E8F0EA : #163628;
+    out property <color> choice-hover: dark ? #24352B : #E3EEE6;
+    out property <color> choice-active-background: dark ? #7EE2A0 : #17663A;
+    out property <color> choice-active-text: dark ? #0F1A14 : #FFFFFF;
+    out property <length> choice-height: touch ? 40px : 28px;
+    out property <length> choice-radius: 7px;
+    out property <length> choice-margin: 10px;
+    out property <length> toggle-width: 36px;
+    out property <length> toggle-height: 20px;
+    out property <length> toggle-knob-size: 16px;
+    out property <length> detail-overlay-width: 340px;
+    out property <color> overlay-veil: #0F1A144D;
+    out property <float> dimmed-opacity: 0.35;
+
+    // Back arrow on the narrow header
+    out property <length> back-arrow-size: 32px;
+    out property <length> back-arrow-lift: 3px;
+
+    // Tab icons
+    out property <length> tab-icon: 20px;
+
+    // Header indicator (measured on 08-direct.png)
+    out property <length> indicator-height: 29px;
+    out property <length> indicator-margin: 12px;
+    out property <length> indicator-compact-margin: 9px;   // prototype, phone: padding 7px 9px
+    out property <length> indicator-compact-gap: 5px;
+    out property <length> indicator-icon: 16px;
+    out property <length> indicator-dot: 8px;
+    // A phone's header, tucked once the page has scrolled (Robin, 11/11).
+    out property <length> header-compact-after: 16px;   // how far the page scrolls before it tucks
+    out property <length> header-compact-title: 16px;
+    out property <length> header-compact-gap: 6px;      // between the three dots
+    out property <duration> header-compact-duration: reduced-motion ? 0ms : 200ms;
+    out property <length> attention-outline: 2px;
+
+    // Icons and markers
+    out property <length> badge-icon: 14px;
+    out property <length> button-icon: 18px;
+    out property <length> message-icon: 16px;
+    out property <length> block-icon: 18px;
+    out property <length> badge-dot: 6px;
+    out property <length> block-dot: 10px;
+    out property <length> course-chip: 11px;
+    out property <length> course-chip-radius: 2px;
+    out property <length> swatch-size: 18px;        // a course colour to choose (prototype: tabCircuits)
+    out property <length> swatch-icon: 12px;
+    out property <length> action-column-width: 120px;
+
+    // Table (08-direct.png, fitted to the window width)
+    out property <length> table-row-height: 39px;
+    out property <length> table-column-state: 120px;
+    out property <length> table-column-category: 110px;
+    out property <length> table-column-time: 90px;
+    out property <length> table-column-place: 70px;
+    out property <length> table-column-read: 90px;
+
+    // Table columns, as a share of the usable width (08-direct.png)
+    out property <float> table-x-name: 0.1664;
+    out property <float> table-x-category: 0.3638;
+    out property <float> table-x-time: 0.5104;
+    out property <float> table-x-place: 0.6336;
+    out property <float> table-x-read: 0.7244;
+
+    // Table header
+    out property <length> table-header-height: 31px;
+
+    // Layout: the width picks the layout (narrow, medium, wide).
+    out property <length> medium-threshold: 600px;
+    out property <length> wide-threshold: 1000px;
+    out property <length> window-width: 1100px;
+    out property <length> window-height: 700px;
+    out property <length> window-min-width: 320px;
+    out property <length> window-min-height: 480px;
+    out property <length> narrow-margin: 16px;
+    out property <length> demo-width: 288px;
+    out property <length> home-max-width: 1072px;
+    out property <length> club-column-width: 340px;
+    out property <length> margin: 24px;
+    out property <length> card-margin: 24px;
+    out property <length> space: 8px;
+    out property <length> space-medium: 16px;
+
+
+    // Zones of a tab (brief zones-onglets, 10/11/2026). The prototype's values are a guide.
+    // The tab bubble, astride the header and the page.
+    out property <length> tab-bubble-padding: 4px;   // thin, Robin 11/11
+    out property <length> tab-bubble-height: tab-height + 2 * tab-bubble-padding;
+    out property <length> tab-bubble-shadow-blur: 12px;
+    out property <length> tab-bubble-shadow-offset: 3px;
+    // The Paramètres tab, hung under the bubble.
+    out property <length> settings-tab-height: touch ? 48px : 46px;
+    out property <length> settings-tab-tuck: 10px;        // how far it goes under the bubble
+    out property <length> settings-tab-inset: 56px;       // narrower than the bubble, each side
+    out property <length> settings-tab-narrow-inset: 16px;
+    out property <length> club-settings-width: 640px;   // a club page: no bubble to take the width from
+    out property <length> settings-tab-shadow-blur: 14px;
+    out property <length> settings-tab-shadow-offset: 6px;
+    // The floating panels, left (the column) and right (the detail).
+    out property <length> sheet-radius: 16px;
+    out property <length> sheet-gap: 12px;                // off the edges
+    out property <length> sheet-shadow-blur: dark ? 0px : 24px;
+    out property <length> sheet-shadow-offset: 4px;
+    out property <color> sheet-shadow: dark ? transparent : #16362824;
+    out property <duration> sheet-duration: reduced-motion ? 0ms : 300ms;
+    out property <duration> unfold-duration: reduced-motion ? 0ms : 220ms;   // a row that unfolds (Robin, 11/11)
+    out property <duration> bubble-duration: reduced-motion ? 0ms : 140ms;   // a bubble that opens or closes
+    out property <length> bubble-travel: 6px;                                // how far it slides as it comes
+    out property <duration> page-duration: reduced-motion ? 0ms : 220ms;     // another tab's page comes in
+    out property <length> page-travel: 24px;
+    out property <length> side-sheet-width: 380px;
+    out property <length> bottom-sheet-top: 96px;         // a phone: what stays seen above it
+    // The Filtres button and its bubble.
+    out property <color> filter-in-use: tabs-background;  // pale green (« soft »)
+    out property <length> filter-in-use-outline: 2px;
+    out property <length> filter-in-use-height: touch ? 32px : 26px;
+    out property <length> filter-cross: 14px;
+    out property <length> filter-bubble-width: bubble-width;
+    // Participants, head of the content: full labels from this width; the search under them below.
+    out property <length> participants-head-roomy: 820px;
+    out property <length> participants-head-search: 580px;
+    out property <length> courses-head-roomy: 940px;
+    out property <length> courses-head-search: 680px;
+    out property <length> starts-head-roomy: 960px;
+    out property <length> starts-head-search: 700px;
+    out property <length> stations-head-roomy: 860px;
+    out property <length> stations-head-search: 640px;
+    // Under this card width, a club page puts its title and search under the buttons.
+    out property <length> club-head-stacked: 800px;
+    out property <length> live-head-roomy: 760px;
+    out property <length> live-head-search: 600px;
+}

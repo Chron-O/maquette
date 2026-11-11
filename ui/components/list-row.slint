@@ -1,0 +1,247 @@
+import { Theme } from "../theme.slint";
+import { StatusBlock, StatusBadge, Status } from "status.slint";
+import { PrimaryButton, MoreButton } from "buttons.slint";
+
+// A time. `struck`: the time does not count (PM): gray, lighter, struck through.
+// Slint cannot strike through: the line is drawn over the text, at its width.
+component Time inherits Rectangle {
+    in property <string> text;
+    in property <length> size;
+    in property <int> weight;
+    in property <int> struck-weight;
+    in property <length> thickness;
+    in property <bool> struck: false;
+
+    min-width: value.preferred-width;
+    min-height: value.preferred-height;
+
+    value := Text {
+        text: root.text;
+        color: root.struck ? Theme.text-secondary : Theme.text;
+        font-size: root.size;
+        font-weight: root.struck ? root.struck-weight : root.weight;
+        vertical-alignment: center;
+    }
+    if root.struck: Rectangle {
+        height: root.thickness;
+        y: (root.height - self.height) / 2;
+        background: Theme.text-secondary;
+    }
+}
+
+// Narrow form. List row: status › who and where › details.
+export component ListRow inherits Rectangle {
+    callback action-clicked();
+    in property <Status> status;
+    in property <string> name;
+    in property <string> course;
+    in property <color> course-color: transparent;
+    in property <string> time;
+    in property <bool> time-struck: false;
+    in property <string> precision;
+    in property <bool> precision-problem: false;
+    in property <string> action;
+    in property <length> margin: Theme.card-margin;   // same as the card title
+
+    background: action != "" ? Theme.row-to-handle : transparent;
+
+    HorizontalLayout {
+        padding-top: Theme.space;
+        padding-bottom: Theme.space;
+        padding-left: root.margin;
+        padding-right: root.margin;
+        spacing: Theme.space;
+
+        StatusBlock { status: root.status; }
+
+        // Who and where
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: Theme.space-small;
+            Text {
+                text: root.name;
+                color: Theme.text;
+                font-size: Theme.text-block-title;
+                font-weight: Theme.weight-block-title;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: Theme.space-small;
+                alignment: start;
+                if root.course-color != transparent: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: Theme.course-chip;
+                        height: Theme.course-chip;
+                        border-radius: Theme.course-chip-radius;
+                        background: root.course-color;
+                    }
+                }
+                Text {
+                    text: root.course;
+                    color: Theme.text-secondary;
+                    font-size: Theme.text-label;
+                    font-weight: Theme.weight-label;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Details. An action takes their place: the row must fit on a phone.
+        if root.action == "": VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: end;
+                Time {
+                    text: root.time;
+                    struck: root.time-struck;
+                    size: Theme.text-screen-title;
+                    weight: Theme.weight-screen-title;
+                    struck-weight: Theme.weight-label;
+                    thickness: Theme.time-strike-large;
+                }
+            }
+            if root.precision != "": Text {
+                text: root.precision;
+                color: root.precision-problem ? Theme.problem.badge-text : Theme.text-secondary;
+                font-size: Theme.text-label;
+                font-weight: root.precision-problem ? Theme.weight-block-title : Theme.weight-regular;
+                horizontal-alignment: right;
+            }
+        }
+        if root.action != "": VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                in-row: true;
+                label: root.action;
+                clicked => { root.action-clicked(); }
+            }
+        }
+    }
+}
+
+// Wide form: table with columns (08-direct.png). Same statuses, badge instead of block.
+// Columns are placed as a share of the width: header and rows stay aligned.
+component ColumnText inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-regular;
+    vertical-alignment: center;
+}
+
+component ColumnHeader inherits Text {
+    color: Theme.text-secondary;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-block-title;
+    vertical-alignment: center;
+}
+
+export component TableHeader inherits Rectangle {
+    in property <length> margin: Theme.card-margin;
+    property <length> utile: self.width - 2 * self.margin;
+
+    height: Theme.table-header-height;
+
+    ColumnHeader { x: root.margin; text: "État"; }
+    ColumnHeader { x: root.margin + root.utile * Theme.table-x-name; text: "Nom"; }
+    ColumnHeader { x: root.margin + root.utile * Theme.table-x-category; text: "Catégorie"; }
+    ColumnHeader { x: root.margin + root.utile * Theme.table-x-time; text: "Temps"; }
+    ColumnHeader { x: root.margin + root.utile * Theme.table-x-place; text: "Place"; }
+    ColumnHeader { x: root.margin + root.utile * Theme.table-x-read; text: "Lu à"; }
+    ColumnHeader {
+        x: root.margin;
+        width: root.utile;
+        text: "Action";
+        horizontal-alignment: right;
+    }
+}
+
+export component TableRow inherits Rectangle {
+    callback action-clicked();
+    in property <Status> status;
+    in property <string> name;
+    in property <string> category;
+    in property <color> category-color: transparent;
+    in property <string> time;
+    in property <bool> time-struck: false;
+    in property <string> place;
+    in property <string> read-at;
+    in property <string> action;
+    in property <length> margin: Theme.card-margin;
+    property <length> utile: self.width - 2 * self.margin;
+
+    height: Theme.table-row-height;
+    background: action != "" ? Theme.row-to-handle : transparent;
+
+    HorizontalLayout {
+        x: root.margin;
+        height: parent.height;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            StatusBadge { status: root.status; }
+        }
+    }
+    ColumnText {
+        x: root.margin + root.utile * Theme.table-x-name;
+        text: root.name;
+        font-weight: Theme.weight-block-title;
+    }
+    HorizontalLayout {
+        x: root.margin + root.utile * Theme.table-x-category;
+        height: parent.height;
+        spacing: Theme.space-small;
+        alignment: start;
+        if root.category-color != transparent: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.course-chip;
+                height: Theme.course-chip;
+                border-radius: Theme.course-chip-radius;
+                background: root.category-color;
+            }
+        }
+        ColumnText { text: root.category; }
+    }
+    HorizontalLayout {
+        x: root.margin + root.utile * Theme.table-x-time;
+        height: parent.height;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Time {
+                text: root.time;
+                struck: root.time-struck;
+                size: Theme.text-help;
+                weight: Theme.weight-block-title;
+                struck-weight: Theme.weight-regular;
+                thickness: Theme.time-strike;
+            }
+        }
+    }
+    ColumnText { x: root.margin + root.utile * Theme.table-x-place; text: root.place; }
+    ColumnText {
+        x: root.margin + root.utile * Theme.table-x-read;
+        text: root.read-at;
+        color: Theme.text-secondary;
+    }
+    HorizontalLayout {
+        x: root.width - root.margin - self.width;
+        width: Theme.action-column-width;
+        height: parent.height;
+        alignment: end;
+        if root.action != "": VerticalLayout {
+            alignment: center;
+            PrimaryButton {
+                in-row: true;
+                label: root.action;
+                clicked => { root.action-clicked(); }
+            }
+        }
+        if root.action == "": VerticalLayout {
+            alignment: center;
+            MoreButton { }
+        }
+    }
+}

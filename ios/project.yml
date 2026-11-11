@@ -1,0 +1,55 @@
+# Describes the Xcode project. Recreate it with: xcodegen (in this folder).
+name: Maquette
+options:
+  bundleIdPrefix: fr.ateliersapi
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+settings:
+  ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  Maquette:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: "Chron'O maquette"
+        CADisableMinimumFrameDurationOnPhone: true
+        UILaunchScreen:
+          - ImageRespectSafeAreaInsets: false
+        # iPhone in portrait only: Slint does not move the content away from the notch in landscape.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Slint
+                UISceneDelegateClassName: SlintWindowSceneDelegate
+    sources:
+      - Assets.xcassets
+    settings:
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    postCompileScripts:
+      - script: |
+          ./build_for_ios_with_cargo.bash maquette
+        basedOnDependencyAnalysis: false   # always run cargo: it knows whether the code changed
+        outputFiles:
+          - $TARGET_BUILD_DIR/$EXECUTABLE_PATH
+schemes:
+  Maquette:
+    build:
+      targets:
+        Maquette: all
+    # Xcode crashes in its GPU gauge while debugging (IDEDebugGaugeTrayCell), so GPU capture stays off.
+    run:
+      config: Debug
+      enableGPUFrameCaptureMode: disabled
+      enableGPUValidationMode: disabled

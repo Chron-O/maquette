@@ -1,0 +1,753 @@
+// The Puces de prêt page, following puces-pret-parc.md § 10 to 13 and GestionPuces.html: the
+// parks in the column, the cards of the chosen park in a table, and the detail of a card.
+
+import { Theme } from "../theme.slint";
+import { LayoutMode } from "../navigation.slint";
+import { InputField } from "../components/field.slint";
+import { Icons } from "../components/icons.slint";
+import { QuietButton, SecondaryButton, PrimaryButton } from "../components/buttons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
+import { StatusBadge } from "../components/status.slint";
+import { Badge, Home } from "home.slint";
+import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
+import { Cell } from "participants.slint";
+import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
+import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
+
+export struct CardParkItem {
+    index: int,
+    name: string,
+    count: string,
+}
+
+export struct CardRow {
+    number: int,
+    kind: string,
+    badge: Badge,
+    place: string,
+    place-detail: string,
+    battery: string,
+    borrower: string,
+    loans: string,
+    note: string,
+    to-handle: bool,
+    selected: bool,
+}
+
+export struct CardEntry {
+    date: string,
+    text: string,
+}
+
+export struct CardAction {
+    id: int,
+    label: string,
+    danger: bool,
+}
+
+export struct OverdueCard {
+    number: int,
+    detail: string,
+}
+
+export global Cards {
+    in property <[CardParkItem]> parks;
+    in property <[LiveFilter]> park-chips;
+    in property <int> active-park;
+    in property <[LiveFilter]> filters;
+    in property <int> active-filter;
+    in property <[FilterGroup]> filter-groups;
+    in property <[ActiveFilter]> active-filters;
+    callback toggle-filter(int, int);
+    callback clear-filters();
+    in property <[CardRow]> rows;
+    in property <[string]> chips;
+    in property <string> title;
+    in property <string> description;
+    in property <string> state;
+    in property <string> empty;
+    in property <string> summary;
+    in property <string> summary-short;
+    in property <string> search-text;
+    in property <string> alert-title;
+    in property <string> alert-count;
+    in property <[OverdueCard]> overdue;
+
+    in property <bool> has-reading;
+    in property <string> read-code;
+    in property <string> read-identity;
+    in property <string> read-verdict;
+    in property <bool> read-unknown;     // in none of the parks: the tile asks what to do
+
+    in property <bool> detail-open;
+    in property <string> detail-number;
+    in property <string> detail-subtitle;
+    in property <string> detail-kind;
+    in property <string> detail-park;
+    in property <Badge> detail-badge;
+    in property <string> detail-since;
+    in property <string> detail-place-label;
+    in property <string> detail-place;
+    in property <string> detail-place-detail;
+    in property <bool> detail-has-battery;
+    in property <string> detail-battery;
+    in property <string> detail-note;
+    in property <string> detail-loans;
+    in property <[CardAction]> actions;
+    in property <[CardEntry]> history;
+    in property <string> confirm-question;
+    in property <string> confirm-button;
+
+    callback select-park(int);
+    callback select-filter(int);
+    callback select-row(int);
+    callback search(string);
+    callback close-detail();
+    callback open-card(int);
+    callback act(int);
+    callback confirm();
+    callback cancel-confirm();
+}
+
+// The parks: the column's navigation.
+export component ParkColumn inherits Rectangle {
+    callback selected(int);
+    in property <[CardParkItem]> parks;
+    in property <int> active;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    clip: true;
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space-small;
+        HorizontalLayout {
+            vertical-stretch: 0;
+            min-height: Theme.zone;
+            padding-left: Theme.space;
+            Head { text: "Parcs"; }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            // The end of the list stays clear of the Démo button.
+            lines := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                spacing: Theme.space-small;
+                padding-bottom: Theme.zone + Theme.space-medium;
+                for park in root.parks: Rectangle {
+                    height: Theme.zone;
+                    border-radius: Theme.block-radius;
+                    background: root.active == park.index ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+                    accessible-role: button;
+                    accessible-label: park.name;
+                    HorizontalLayout {
+                        padding-left: Theme.space;
+                        padding-right: Theme.space;
+                        spacing: Theme.space;
+                        Text {
+                            horizontal-stretch: 1;
+                            text: park.name;
+                            color: root.active == park.index ? Theme.active-tab-text : Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-block-title;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: park.count;
+                            color: root.active == park.index ? Theme.active-tab-text : Theme.text-secondary;
+                            font-size: Theme.text-help;
+                            vertical-alignment: center;
+                        }
+                    }
+                    zone := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.selected(park.index); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component StateCell {
+    in property <Badge> badge;
+
+    RowCell {
+        VerticalLayout {
+            alignment: center;
+            StatusBadge { status: Home.status-of(root.badge); }
+        }
+    }
+}
+
+// Where the card is, then who has it. `note`: when the table has no column left for it.
+component PlaceCell {
+    in property <string> place;
+    in property <string> detail;
+    in property <string> note;
+
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-top: Theme.space-small;
+        padding-bottom: Theme.space-small;
+        VerticalLayout {
+            alignment: center;
+            Cell {
+                text: root.place;
+                wrap: word-wrap;
+            }
+            if root.detail != "": SmallText { text: root.detail; }
+            if root.note != "": SmallText { text: root.note; }
+        }
+    }
+}
+
+// The titles stay at the top: only the rows scroll. Columns leave rather than scroll sideways.
+component CardsTable {
+    in property <length> available-width;
+
+    property <bool> full: root.available-width >= Theme.card-full-width;
+    property <bool> has-kind: root.available-width >= Theme.card-medium-width;
+    property <length> fixed: Theme.card-number-width + Theme.card-state-width
+        + (root.has-kind ? Theme.card-kind-width + Theme.card-loans-width : 0px)
+        + (root.full ? Theme.card-battery-width + Theme.card-borrower-width + Theme.card-note-width : 0px);
+    property <length> place-width: root.available-width - root.fixed;
+
+    VerticalLayout {
+        HorizontalLayout {
+            vertical-stretch: 0;
+            height: Theme.table-header-height + Theme.space;
+            RowCell { width: Theme.card-number-width; Head { text: "Numéro SI"; } }
+            if root.has-kind: RowCell { width: Theme.card-kind-width; Head { text: "Type"; } }
+            RowCell { width: Theme.card-state-width; Head { text: "État"; } }
+            RowCell { width: root.place-width; Head { text: "Emplacement"; } }
+            if root.full: RowCell { width: Theme.card-battery-width; Head { text: "Pile changée"; } }
+            if root.full: RowCell { width: Theme.card-borrower-width; Head { text: "Dernier emprunteur"; wrap: word-wrap; } }
+            if root.has-kind: RowCell { width: Theme.card-loans-width; Head { text: "Prêts"; } }
+            if root.full: RowCell { width: Theme.card-note-width; Head { text: "Note"; } }
+        }
+        RowLine { vertical-stretch: 0; }
+        if Cards.empty != "": Text {
+            vertical-stretch: 1;
+            text: Cards.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if Cards.empty == "": Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                width: root.available-width;
+                alignment: start;
+                for row[n] in Cards.rows: VerticalLayout {
+                    if n > 0: RowLine { }
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: row.selected ? Theme.row-selected : row.to-handle ? Theme.row-to-handle : transparent;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { Cards.select-row(row.number); }
+                        }
+                        HorizontalLayout {
+                            if root.has-kind: RowCell {
+                                width: Theme.card-number-width;
+                                Cell { text: row.number; font-weight: Theme.weight-screen-title; }
+                            }
+                            // Without the room for its column, the type goes under the number.
+                            if !root.has-kind: VerticalLayout {
+                                width: Theme.card-number-width;
+                                alignment: center;
+                                RowCell { Cell { text: row.number; font-weight: Theme.weight-screen-title; } }
+                                RowCell { SmallText { text: row.kind; wrap: no-wrap; } }
+                            }
+                            if root.has-kind: RowCell {
+                                width: Theme.card-kind-width;
+                                Cell { text: row.kind; }
+                            }
+                            StateCell { width: Theme.card-state-width; badge: row.badge; }
+                            PlaceCell {
+                                width: root.place-width;
+                                place: row.place;
+                                detail: row.place-detail;
+                                note: root.full ? "" : row.note;
+                            }
+                            if root.full: RowCell {
+                                width: Theme.card-battery-width;
+                                Cell { text: row.battery; color: Theme.text-secondary; }
+                            }
+                            if root.full: HorizontalLayout {
+                                width: Theme.card-borrower-width;
+                                padding-left: Theme.space;
+                                Cell { text: row.borrower; wrap: word-wrap; }
+                            }
+                            if root.has-kind: RowCell {
+                                width: Theme.card-loans-width;
+                                Cell { text: row.loans; }
+                            }
+                            if root.full: HorizontalLayout {
+                                width: Theme.card-note-width;
+                                padding-left: Theme.space;
+                                Cell { text: row.note; color: Theme.text-secondary; wrap: word-wrap; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: the number › where it is › its state.
+component CardsList {
+    VerticalLayout {
+        if Cards.empty != "": Text {
+            height: Theme.live-card-narrow-height;
+            text: Cards.empty;
+            color: Theme.text-secondary;
+            font-size: Theme.text-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        for row[n] in Cards.rows: VerticalLayout {
+            if n > 0: RowLine { }
+            Rectangle {
+                min-height: Theme.zone;
+                background: row.selected ? Theme.row-selected : row.to-handle ? Theme.row-to-handle : transparent;
+                TouchArea {
+                    clicked => { Cards.select-row(row.number); }
+                }
+                HorizontalLayout {
+                    padding: Theme.space;
+                    spacing: Theme.space;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        Text {
+                            text: row.number + " · " + row.kind;
+                            color: Theme.text;
+                            font-size: Theme.text-help;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: row.place-detail != "" ? row.place + " · " + row.place-detail : row.place; }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        StatusBadge { status: Home.status-of(row.badge); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component CardsContent {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <bool> narrow: root.layout-mode == LayoutMode.narrow;
+    property <bool> search-open: Cards.search-text != "";
+    // A narrow card (iPad portrait): the title under the buttons, the search on its own row.
+    property <bool> stacked: !root.narrow && root.available-width < Theme.club-head-stacked;
+
+    VerticalLayout {
+        spacing: root.narrow ? Theme.button-margin : Theme.space;
+        Rectangle {
+            vertical-stretch: root.narrow ? 0 : 1;
+            background: Theme.card;
+            border-radius: Theme.card-radius;
+            border-width: Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            clip: true;
+            VerticalLayout {
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    padding: Theme.space;
+                    spacing: Theme.space-small;
+                    // The add action in orange; on the right, the alert, the filters and the search
+                    // (brief zones-onglets § 6).
+                    HorizontalLayout {
+                        spacing: Theme.space;
+                        if !Cards.read-unknown: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
+                        if Cards.read-unknown: SecondaryButton { label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
+                        if !root.narrow && !root.stacked: VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: Cards.title;
+                                color: Theme.text;
+                                font-size: Theme.text-body;
+                                font-weight: Theme.weight-screen-title;
+                                wrap: word-wrap;
+                            }
+                            SmallText { text: Cards.state; }
+                        }
+                        if root.narrow || root.stacked: Rectangle { horizontal-stretch: 1; }
+                        if Cards.alert-title != "": VerticalLayout {
+                            alignment: center;
+                            AlertPill {
+                                title: Cards.alert-title;
+                                count: Cards.alert-count;
+                                bubble: 16;
+                                compact: root.narrow || root.stacked;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            FilterButton {
+                                filters: Cards.active-filters;
+                                narrow: root.narrow;
+                                open: Courses.open-bubble == 28;
+                                open-down: Courses.bubble-down;
+                                clicked => {
+                                    Courses.open-at(28, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+                                }
+                                remove(g, c) => { Cards.toggle-filter(g, c); }
+                                clear => { Cards.clear-filters(); }
+                            }
+                        }
+                        if root.narrow: VerticalLayout {
+                            alignment: start;
+                            SearchToggle {
+                                open: root.search-open;
+                                clicked => {
+                                    if root.search-open {
+                                        Cards.search("");
+                                    }
+                                    root.search-open = !root.search-open;
+                                }
+                            }
+                        }
+                        if !root.narrow && !root.stacked: VerticalLayout {
+                            alignment: center;
+                            InputField {
+                                width: Theme.code-search-width;
+                                placeholder: "Numéro, nom ou note…";
+                                text: Cards.search-text;
+                                edited(text) => { Cards.search(text); }
+                            }
+                        }
+                    }
+                    // A phone or a narrow card: the title under the buttons, which keep the width.
+                    if root.narrow || root.stacked: VerticalLayout {
+                        Text {
+                            text: Cards.title;
+                            color: Theme.text;
+                            font-size: Theme.text-body;
+                            font-weight: Theme.weight-screen-title;
+                            wrap: word-wrap;
+                        }
+                        SmallText { text: Cards.state; }
+                    }
+                    if root.stacked: InputField {
+                        placeholder: "Numéro, nom ou note…";
+                        text: Cards.search-text;
+                        edited(text) => { Cards.search(text); }
+                    }
+                    // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
+                    if root.narrow: Unfold {
+                        open: root.search-open;
+                        InputField {
+                            // Opened, it takes the keyboard.
+                            property <bool> wanted: root.search-open;
+                            changed wanted => {
+                                if self.wanted {
+                                    self.take-focus();
+                                }
+                            }
+                            placeholder: "Numéro, nom ou note…";
+                            text: Cards.search-text;
+                            edited(text) => { Cards.search(text); }
+                        }
+                    }
+                }
+                RowLine { vertical-stretch: 0; }
+                if root.narrow: CardsList { }
+                if !root.narrow: CardsTable {
+                    vertical-stretch: 1;
+                    available-width: root.available-width;
+                }
+            }
+        }
+    }
+}
+
+export component DetailLine {
+    in property <string> label;
+    in property <string> value;
+
+    HorizontalLayout {
+        spacing: Theme.space;
+        SmallText { horizontal-stretch: 1; text: root.label; }
+        BubbleLabel { text: root.value; wrap: no-wrap; }
+    }
+}
+
+export component DetailTitle inherits Text {
+    color: Theme.text;
+    font-size: Theme.text-help;
+    font-weight: Theme.weight-screen-title;
+}
+
+export component CardDetail inherits Rectangle {
+    in property <bool> in-sheet;   // inside the side or bottom panel: no frame of its own
+
+    background: root.in-sheet ? transparent : Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: root.in-sheet ? 0px : Theme.thin-outline-width;
+    border-color: Theme.thin-outline;
+
+    // Behind the content, so that a click in the detail does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.button-margin;
+        alignment: start;
+        HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: Cards.detail-number;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                }
+                SmallText { text: Cards.detail-subtitle; }
+            }
+            Rectangle {
+                width: Theme.zone;
+                height: Theme.zone;
+                accessible-role: button;
+                accessible-label: "Fermer";
+                Image {
+                    source: Icons.x;
+                    colorize: Theme.text-secondary;
+                    width: Theme.button-icon;
+                    height: Theme.button-icon;
+                }
+                TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { Cards.close-detail(); }
+                }
+            }
+        }
+
+        DetailTitle { text: "Identité"; }
+        DetailLine { label: "Type"; value: Cards.detail-kind; }
+        DetailLine { label: "Parc"; value: Cards.detail-park; }
+
+        RowLine { }
+        DetailTitle { text: "État"; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                StatusBadge { status: Home.status-of(Cards.detail-badge); }
+            }
+            SmallText { text: Cards.detail-since; wrap: no-wrap; vertical-alignment: center; }
+        }
+        VerticalLayout {
+            SmallText { text: Cards.detail-place-label; }
+            BubbleLabel { text: Cards.detail-place; }
+            if Cards.detail-place-detail != "": SmallText { text: Cards.detail-place-detail; }
+        }
+        if Cards.confirm-question == "": VerticalLayout {
+            spacing: Theme.space;
+            for action in Cards.actions: HorizontalLayout {
+                alignment: start;
+                SecondaryButton {
+                    label: action.label;
+                    danger: action.danger;
+                    clicked => { Cards.act(action.id); }
+                }
+            }
+        }
+        if Cards.confirm-question != "": VerticalLayout {
+            spacing: Theme.space;
+            BubbleLabel { text: Cards.confirm-question; }
+            HorizontalLayout {
+                alignment: start;
+                spacing: Theme.space;
+                SecondaryButton {
+                    label: "Annuler";
+                    clicked => { Cards.cancel-confirm(); }
+                }
+                SecondaryButton {
+                    label: Cards.confirm-button;
+                    danger: true;
+                    clicked => { Cards.confirm(); }
+                }
+            }
+        }
+
+        if Cards.detail-has-battery: RowLine { }
+        if Cards.detail-has-battery: DetailTitle { text: "Pile"; }
+        if Cards.detail-has-battery: DetailLine { label: "Changée en"; value: Cards.detail-battery; }
+        if Cards.detail-has-battery: HorizontalLayout { alignment: start; SecondaryButton { label: "Pile changée…"; } }
+
+        RowLine { }
+        DetailTitle { text: "Note"; }
+        SmallText { text: Cards.detail-note; }
+
+        RowLine { }
+        DetailTitle { text: "Historique"; }
+        SmallText { text: Cards.detail-loans; }
+        for entry in Cards.history: VerticalLayout {
+            BubbleLabel { text: entry.text; }
+            SmallText { text: entry.date; }
+        }
+    }
+}
+
+// The reader: the number read, the card, its state. The rest is in its detail, which opens.
+component CardReader inherits ReaderTile {
+    reader: Readers.free;
+    with-result: true;
+    // An unknown card asks a question (encart-lecture.md § 5, § 9): its buttons take the zone.
+    message: "Posez une puce sur la station";
+    state: !Cards.has-reading ? ReaderState.waiting : Cards.read-unknown ? ReaderState.unknown : ReaderState.read;
+    primary-label: Cards.read-unknown ? "Ajouter ▾" : "";   // to a park: the menu lists them
+    secondary-label: Cards.read-unknown ? "Ignorer" : "";
+    code: Cards.read-code;
+    identity: Cards.read-identity;
+    verdict: Cards.read-verdict;
+}
+
+export component CardsPage {
+    in property <LayoutMode> layout-mode;
+    in property <length> available-width;
+
+    property <length> content-width: root.available-width - Theme.course-list-width - Theme.button-margin;
+
+    VerticalLayout {
+        if root.layout-mode == LayoutMode.narrow: VerticalLayout {
+            spacing: Theme.button-margin;
+            CardReader { compact: true; }
+            ChipFlow {
+                items: Cards.park-chips;
+                active: Cards.active-park;
+                chip-width: Theme.card-park-chip-width;
+                clicked(i) => { Cards.select-park(i); }
+            }
+            CardsContent {
+                layout-mode: root.layout-mode;
+                available-width: root.available-width;
+            }
+        }
+        if root.layout-mode != LayoutMode.narrow: Rectangle {
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                // The floating panel on the left (brief zones-onglets § 3).
+                Sheet {
+                    width: Theme.course-list-width;
+                    VerticalLayout {
+                        padding: Theme.button-margin;   // the reader close to the edges, as on Participants (Robin, 11/11)
+                        spacing: Theme.space;
+                        CardReader { vertical-stretch: 0; }
+                        ParkColumn {
+                            vertical-stretch: 1;
+                            parks: Cards.parks;
+                            active: Cards.active-park;
+                            selected(i) => { Cards.select-park(i); }
+                        }
+                    }
+                }
+                CardsContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.content-width;
+                }
+            }
+            SideDetail {
+                width: parent.width;
+                height: parent.height;
+                shown: Cards.detail-open;
+                close => { Cards.close-detail(); }
+                CardDetail { in-sheet: true; }
+            }
+        }
+    }
+}
+
+// On a phone, the detail rises from the bottom.
+export component CardOverlay {
+    BottomDetail {
+        width: root.width;
+        height: root.height;
+        shown: Cards.detail-open;
+        close => { Cards.close-detail(); }
+        CardDetail { in-sheet: true; }
+    }
+}
+
+// One line per card, each with its button.
+component OverdueContent {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space;
+        Text {
+            text: Cards.alert-title;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            wrap: word-wrap;
+        }
+        for card in Cards.overdue: HorizontalLayout {
+            spacing: Theme.space;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                BubbleLabel { text: card.number; }
+                SmallText { text: card.detail; }
+            }
+            VerticalLayout {
+                alignment: center;
+                QuietButton {
+                    label: "Voir";
+                    clicked => {
+                        Courses.close-bubble();
+                        Cards.open-card(card.number);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The rows of the Paramètres tab: the description of the park.
+export component CardsSettings {
+    VerticalLayout {
+        padding: Theme.space-medium;
+        spacing: Theme.space-small;
+        SmallText { text: "Description"; }
+        BubbleLabel { text: Cards.description; }
+    }
+}
+
+export component CardsBubble {
+    in property <length> margin;
+
+    BubbleFrame {
+        width: 100%;
+        height: 100%;
+        margin: root.margin;
+        wanted-width: Courses.open-bubble == 28 ? Theme.filter-bubble-width : Theme.bubble-width;
+        if Courses.open-bubble == 28: FiltersContent {
+            groups: Cards.filter-groups;
+            toggle(g, c) => { Cards.toggle-filter(g, c); }
+            clear => { Cards.clear-filters(); }
+            close => { Courses.close-bubble(); }
+        }
+        if Courses.open-bubble == 16: OverdueContent { }
+    }
+}
