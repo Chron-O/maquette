@@ -67,10 +67,6 @@ fn state_label(runner: &Runner) -> Label {
     }
 }
 
-fn initials(runner: &Runner) -> String {
-    format!("{}{}", runner.first.chars().next().unwrap_or(' '), runner.family.chars().next().unwrap_or(' '))
-}
-
 impl StartsState {
     pub fn select_view(&mut self, view: usize) {
         self.view = view;
@@ -403,10 +399,12 @@ impl StartsState {
                     let course = &event.courses[i];
                     let empty = FriseCell {
                         index: -1,
-                        label: SharedString::new(),
+                        family: SharedString::new(),
+                        first: SharedString::new(),
                         vacant: false,
                         locked: false,
                         moved: false,
+                        left: false,
                         dimmed: false,
                     };
                     let mut cells = vec![empty; columns];
@@ -416,12 +414,20 @@ impl StartsState {
                     for index in starters.iter().copied().filter(|r| runners[*r].runs[0].course == i) {
                         let time = self.time_of(event, index);
                         let moved = time != runners[index].start;
+                        if moved {
+                            let old = ((runners[index].start.saturating_sub(first)) / MINUTE) as usize;
+                            if let Some(cell) = cells.get_mut(old).filter(|c| c.index < 0) {
+                                cell.left = true;
+                            }
+                        }
                         cells[((time - first) / MINUTE) as usize] = FriseCell {
                             index: index as i32,
-                            label: initials(&runners[index]).into(),
+                            family: runners[index].family.into(),
+                            first: runners[index].first.into(),
                             vacant: false,
                             locked: runners[index].locked,
                             moved,
+                            left: false,
                             dimmed: !self.shown(event, index),
                         };
                     }

@@ -64,10 +64,12 @@ export struct StartPointSetting {
 
 export struct FriseCell {
     index: int,         // -1 when no runner
-    label: string,
+    family: string,
+    first: string,
     vacant: bool,
     locked: bool,
-    moved: bool,
+    moved: bool,        // a draw proposes this time
+    left: bool,         // empty: a runner the draw moves started here
     dimmed: bool,
 }
 
@@ -639,18 +641,33 @@ component FriseBox inherits Rectangle {
     height: Theme.frise-cell-height;
     border-radius: Theme.tag-radius;
     opacity: root.cell.dimmed ? Theme.dimmed-opacity : 1;
-    background: root.cell.index >= 0 ? Courses.tone-color(root.tone) : root.cell.vacant ? transparent : Theme.surface;
-    border-width: root.cell.moved ? Theme.tag-outline : root.cell.vacant ? Theme.thin-outline-width : 0;
-    border-color: root.cell.moved ? Theme.primary-button : Theme.thin-outline;
+    // A draw not applied yet: the proposed place outlined in orange, the place it leaves
+    // tinted, as the list marks « Proposé » and strikes the old time.
+    background: root.cell.index >= 0 ? Courses.tone-color(root.tone)
+        : root.cell.left ? Theme.row-to-handle
+        : root.cell.vacant ? transparent : Theme.surface;
+    border-width: root.cell.moved || root.cell.left ? Theme.tag-outline : root.cell.vacant ? Theme.thin-outline-width : 0;
+    border-color: root.cell.moved || root.cell.left ? Theme.primary-button : Theme.thin-outline;
     property <color> ink: root.tone == 4 ? Theme.rank-text : Theme.tag-background;
+    // The name, then the first name, cut when too long.
     VerticalLayout {
+        padding-left: Theme.frise-cell-padding;
+        padding-right: Theme.frise-cell-padding;
         alignment: center;
         Text {
-            text: root.cell.label;
+            text: root.cell.family;
             color: root.ink;
-            font-size: Theme.text-help;
+            font-size: Theme.frise-text;
             font-weight: Theme.weight-screen-title;
             horizontal-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: root.cell.first;
+            color: root.ink;
+            font-size: Theme.frise-text;
+            horizontal-alignment: center;
+            overflow: elide;
         }
     }
     if root.cell.locked: Image {
@@ -696,6 +713,8 @@ component StartsFrise {
             }
             for row in Starts.frise-rows: VerticalLayout {
                 spacing: Theme.space-small;
+                // A start point apart from the one before it (Robin, 11/11).
+                if row.point != "": Rectangle { height: Theme.space-medium; }
                 if row.point != "": Text {
                     text: row.point;
                     color: Theme.text;
@@ -1195,13 +1214,14 @@ export component StartsPage {
                 VerticalLayout {
                     horizontal-stretch: 1;
                     spacing: Theme.space-medium;
-                    if Starts.preview: DrawPreview {
-                        vertical-stretch: 0;
-                        narrow: false;
-                    }
                     StartsHead {
                         vertical-stretch: 0;
                         available-width: root.content-width;
+                    }
+                    // A draw not applied yet: under the card head, over what it changes (Robin, 11/11).
+                    if Starts.preview: DrawPreview {
+                        vertical-stretch: 0;
+                        narrow: false;
                     }
                     if Starts.active-view == 0: StartsBlocks {
                         vertical-stretch: 1;
