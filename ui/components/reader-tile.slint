@@ -117,6 +117,7 @@ export component ReaderTile inherits Rectangle {
 
     in property <ReaderInfo> reader;
     in property <bool> compact;          // the Direct, phones
+    in property <bool> on-dark;          // on the dark green Direct: a shadow does not show, so the outline
     in property <bool> with-result;      // the page shows what was read, under the two lines
     in property <bool> with-buttons;     // a question may come with what was read: its row is kept
     in property <ReaderState> state: ReaderState.waiting;
@@ -139,7 +140,7 @@ export component ReaderTile inherits Rectangle {
     background: root.unplugged ? Theme.reader-error-background : Theme.header;
     border-radius: Theme.card-radius;
     // Light: a clear shadow all around, no outline. Dark: the light green outline.
-    border-width: Theme.reader-outline-width;
+    border-width: root.on-dark ? Theme.reader-state-outline-width : Theme.reader-outline-width;
     border-color: root.accent;
     drop-shadow-blur: Theme.reader-shadow-blur;
     drop-shadow-color: Theme.reader-shadow;
