@@ -112,34 +112,20 @@ export global Home {
 
 export component HomeIndicators {
     in property <LayoutMode> layout-mode;
-    in property <bool> stacked;   // one above the other, next to the name (iPad portrait)
 
-    VerticalLayout {
-        if root.stacked: VerticalLayout {
-            spacing: Theme.indicator-compact-gap;
-            for item in Home.indicators: Indicator {
+    HorizontalLayout {
+        alignment: root.layout-mode == LayoutMode.narrow ? start : end;
+        spacing: Theme.indicator-compact-gap;
+        for item in Home.indicators: VerticalLayout {
+            alignment: center;
+            Indicator {
                 icon: item.icon;
                 text: item.short-text;
                 reserve: item.short-reserve;
                 sentence: item.long-text;
+                compact: true;
                 has-dot: item.has-dot;
                 attention: item.attention;
-            }
-        }
-        if !root.stacked: HorizontalLayout {
-            alignment: root.layout-mode == LayoutMode.narrow ? start : end;
-            spacing: root.layout-mode == LayoutMode.narrow ? Theme.indicator-compact-gap : Theme.space;
-            for item in Home.indicators: VerticalLayout {
-                alignment: center;
-                Indicator {
-                    icon: item.icon;
-                    text: item.short-text;
-                    reserve: item.short-reserve;
-                    sentence: item.long-text;
-                    compact: root.layout-mode == LayoutMode.narrow;
-                    has-dot: item.has-dot;
-                    attention: item.attention;
-                }
             }
         }
     }

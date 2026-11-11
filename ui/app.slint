@@ -92,16 +92,10 @@ component Header inherits Rectangle {
                 horizontal-stretch: 1;
                 layout-mode: root.layout-mode;
             }
-            // iPad portrait: one above the other, next to the name, so the header keeps one row
-            // (Robin, 11/11).
-            if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.medium: VerticalLayout {
+            // iPad portrait: short, next to the name, so the header keeps one row (Robin, 11/11).
+            if (Navigation.home || Navigation.in-event) && root.layout-mode == LayoutMode.medium: HomeIndicators {
                 horizontal-stretch: 0;
-                alignment: center;
-                min-width: stack.preferred-width;
-                stack := HomeIndicators {
-                    layout-mode: root.layout-mode;
-                    stacked: true;
-                }
+                layout-mode: root.layout-mode;
             }
         }
         // A phone: the indicators under the name.
