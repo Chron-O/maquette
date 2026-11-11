@@ -353,6 +353,8 @@ component CardsContent {
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: Cards.search-text != "";
+    // A narrow card (iPad portrait): the title under the buttons, the search on its own row.
+    property <bool> stacked: !root.narrow && root.available-width < Theme.club-head-stacked;
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
@@ -374,7 +376,7 @@ component CardsContent {
                         spacing: Theme.space;
                         if !Cards.read-unknown: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
                         if Cards.read-unknown: SecondaryButton { label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.stacked: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
@@ -386,14 +388,14 @@ component CardsContent {
                             }
                             SmallText { text: Cards.state; }
                         }
-                        if root.narrow: Rectangle { horizontal-stretch: 1; }
+                        if root.narrow || root.stacked: Rectangle { horizontal-stretch: 1; }
                         if Cards.alert-title != "": VerticalLayout {
                             alignment: center;
                             AlertPill {
                                 title: Cards.alert-title;
                                 count: Cards.alert-count;
                                 bubble: 16;
-                                compact: root.narrow;
+                                compact: root.narrow || root.stacked;
                             }
                         }
                         VerticalLayout {
@@ -422,7 +424,7 @@ component CardsContent {
                                 }
                             }
                         }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.stacked: VerticalLayout {
                             alignment: center;
                             InputField {
                                 width: Theme.code-search-width;
@@ -432,8 +434,8 @@ component CardsContent {
                             }
                         }
                     }
-                    // A phone: the title under the buttons, which keep the width.
-                    if root.narrow: VerticalLayout {
+                    // A phone or a narrow card: the title under the buttons, which keep the width.
+                    if root.narrow || root.stacked: VerticalLayout {
                         Text {
                             text: Cards.title;
                             color: Theme.text;
@@ -442,6 +444,11 @@ component CardsContent {
                             wrap: word-wrap;
                         }
                         SmallText { text: Cards.state; }
+                    }
+                    if root.stacked: InputField {
+                        placeholder: "Numéro, nom ou note…";
+                        text: Cards.search-text;
+                        edited(text) => { Cards.search(text); }
                     }
                     // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
                     if root.narrow: Unfold {

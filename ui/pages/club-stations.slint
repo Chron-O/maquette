@@ -273,6 +273,8 @@ component ClubStationsContent {
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: ClubStations.search-text != "";
+    // A narrow card (iPad portrait): the title under the buttons, the search on its own row.
+    property <bool> stacked: !root.narrow && root.available-width < Theme.club-head-stacked;
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
@@ -293,7 +295,7 @@ component ClubStationsContent {
                     HorizontalLayout {
                         spacing: Theme.space;
                         if ClubStations.can-add: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow ? "Ajouter" : "Ajouter des boîtiers…"; }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.stacked: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
@@ -305,14 +307,14 @@ component ClubStationsContent {
                             }
                             SmallText { text: ClubStations.state; }
                         }
-                        if root.narrow: Rectangle { horizontal-stretch: 1; }
+                        if root.narrow || root.stacked: Rectangle { horizontal-stretch: 1; }
                         if ClubStations.alert-title != "": VerticalLayout {
                             alignment: center;
                             AlertPill {
                                 title: ClubStations.alert-title;
                                 count: ClubStations.alert-count;
                                 bubble: 18;
-                                compact: root.narrow;
+                                compact: root.narrow || root.stacked;
                             }
                         }
                         VerticalLayout {
@@ -341,7 +343,7 @@ component ClubStationsContent {
                                 }
                             }
                         }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.stacked: VerticalLayout {
                             alignment: center;
                             InputField {
                                 width: Theme.code-search-width;
@@ -351,8 +353,8 @@ component ClubStationsContent {
                             }
                         }
                     }
-                    // A phone: the title under the buttons, which keep the width.
-                    if root.narrow: VerticalLayout {
+                    // A phone or a narrow card: the title under the buttons, which keep the width.
+                    if root.narrow || root.stacked: VerticalLayout {
                         Text {
                             text: ClubStations.title;
                             color: Theme.text;
@@ -361,6 +363,11 @@ component ClubStationsContent {
                             wrap: word-wrap;
                         }
                         SmallText { text: ClubStations.state; }
+                    }
+                    if root.stacked: InputField {
+                        placeholder: "Code, n° ou note…";
+                        text: ClubStations.search-text;
+                        edited(text) => { ClubStations.search(text); }
                     }
                     // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
                     if root.narrow: Unfold {

@@ -219,6 +219,8 @@ component RunnerBaseContent {
 
     property <bool> narrow: root.layout-mode == LayoutMode.narrow;
     property <bool> search-open: RunnerBase.search-text != "";
+    // A narrow card (iPad portrait): the title under the buttons, the search on its own row.
+    property <bool> stacked: !root.narrow && root.available-width < Theme.club-head-stacked;
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
@@ -244,7 +246,7 @@ component RunnerBaseContent {
                             icon: Icons.plus;
                             has-icon: true;
                         }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.stacked: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
                             Text {
@@ -256,14 +258,14 @@ component RunnerBaseContent {
                             }
                             SmallText { text: RunnerBase.state; }
                         }
-                        if root.narrow: Rectangle { horizontal-stretch: 1; }
+                        if root.narrow || root.stacked: Rectangle { horizontal-stretch: 1; }
                         if RunnerBase.alert-title != "": VerticalLayout {
                             alignment: center;
                             AlertPill {
                                 title: RunnerBase.alert-title;
                                 count: RunnerBase.alert-count;
                                 bubble: 20;
-                                compact: root.narrow;
+                                compact: root.narrow || root.stacked;
                             }
                         }
                         VerticalLayout {
@@ -292,7 +294,7 @@ component RunnerBaseContent {
                                 }
                             }
                         }
-                        if !root.narrow: VerticalLayout {
+                        if !root.narrow && !root.stacked: VerticalLayout {
                             alignment: center;
                             InputField {
                                 width: Theme.code-search-width;
@@ -302,8 +304,8 @@ component RunnerBaseContent {
                             }
                         }
                     }
-                    // A phone: the title under the buttons, which keep the width.
-                    if root.narrow: VerticalLayout {
+                    // A phone or a narrow card: the title under the buttons, which keep the width.
+                    if root.narrow || root.stacked: VerticalLayout {
                         Text {
                             text: RunnerBase.title;
                             color: Theme.text;
@@ -312,6 +314,11 @@ component RunnerBaseContent {
                             wrap: word-wrap;
                         }
                         SmallText { text: RunnerBase.state; }
+                    }
+                    if root.stacked: InputField {
+                        placeholder: "Nom, club, licence ou puce…";
+                        text: RunnerBase.search-text;
+                        edited(text) => { RunnerBase.search(text); }
                     }
                     // On a phone, the search unfolds smoothly under the head (Robin, 11/11).
                     if root.narrow: Unfold {
