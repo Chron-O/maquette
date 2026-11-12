@@ -4,10 +4,13 @@
 use crate::home::badge;
 use crate::test_data::{Event, GroupKind, Kind, Label, Runner, START_STEP, format_clock};
 use crate::participants::card_label;
-use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, GroupMember, GroupRule, StartGroup, StartPoint, StartCourse, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
+use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, GroupMember, GroupRule, StartGroup, StartPoint, StartCourse, StartPointSetting, StartRow, StartSection, Starts, TabItem, model, StatBlock};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 2] = ["Liste", "Frise"];
+// The État filter of the starts, and the blocks of figures (brief Cowork, 12/11).
+const STATES: [&str; 5] = ["Sans horaire", "Vacants", "Verrouillés", "À partir", "Partis"];
+const VACANTS: usize = 1;
 
 // The Frise has one column per minute, and a time written every 2 minutes (prototype: depFrise).
 const MINUTE: u32 = 60;
@@ -33,6 +36,7 @@ pub struct StartsState {
     ascending: bool,
     point: usize,       // 0 all, otherwise a start point
     course: Option<usize>,   // the course chosen in the panel; none: all of them
+    state: Option<usize>,    // Filtres › État, one of STATES
     group: Option<usize>,
     search: String,
     selected: Option<usize>,
@@ -47,6 +51,7 @@ impl Default for StartsState {
             ascending: true,
             point: 0,
             course: None,
+            state: None,
             group: None,
             search: String::new(),
             selected: None,
@@ -98,11 +103,22 @@ impl StartsState {
 
     // The Filtres bubble: the start point only. The groups are in the panel, and a choice has
     // one place only (brief Cowork, 11/11). A second click on the chosen choice takes it away.
-    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
+    pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        if group == 1 {
+            self.state = if self.state == Some(choice) { None } else { Some(choice) };
+            return;
+        }
         self.point = if self.point == choice + 1 { 0 } else { choice + 1 };
     }
 
+    // A block of figures: its state, alone; again, it goes away.
+    pub fn pick_stat(&mut self, choice: usize) {
+        self.group = None;
+        self.toggle_filter(1, choice);
+    }
+
     pub fn clear_filters(&mut self) {
+        self.state = None;
         self.point = 0;
     }
 
@@ -151,7 +167,15 @@ impl StartsState {
     fn shown(&self, event: &Event, index: usize) -> bool {
         let runner = &event.runners[index];
         let text = format!("{} {}", runner.name(), runner.club).to_lowercase();
-        self.search.split_whitespace().all(|word| text.contains(word))
+        let in_state = match self.state {
+            None => true,
+            Some(0) => runner.start == 0,
+            Some(VACANTS) => false,
+            Some(2) => runner.locked,
+            Some(3) => !runner.started,
+            Some(_) => runner.started,
+        };
+        in_state && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event, course: usize) -> Vec<usize> {
@@ -316,8 +340,9 @@ impl StartsState {
 
         // The filters: the start point, when there are several.
         let point_names: Vec<String> = if points.len() > 1 { points.iter().map(|p| format!("Départ S{p}")).collect() } else { Vec::new() };
-        let chosen = [self.point.checked_sub(1)];
-        let lists = [("Point de départ", &point_names)];
+        let state_names: Vec<String> = STATES.iter().map(|s| s.to_string()).collect();
+        let chosen = [self.point.checked_sub(1), self.state];
+        let lists = [("Point de départ", &point_names), ("État", &state_names)];
         page.set_filter_groups(model(
             lists
                 .iter()
@@ -380,7 +405,37 @@ impl StartsState {
         });
         page.set_sort_ascending(self.ascending);
 
-        let filtering = self.group.is_some() || !self.search.is_empty();
+        // The vacants show with no filter, or alone with theirs.
+        let filtering = (self.group.is_some() || !self.search.is_empty() || self.state.is_some()) && self.state != Some(VACANTS);
+
+        // The blocks of figures (brief Cowork, 12/11): before the race, what the draw left;
+        // during, who is to start and who has; after, none.
+        let started = runners.iter().any(|r| r.started);
+        let racing = runners.iter().any(|r| r.is_racing() || !r.started);
+        let count = |s: usize| -> usize {
+            match s {
+                0 => starters.iter().filter(|i| runners[**i].start == 0).count(),
+                VACANTS => event.vacants.len(),
+                2 => starters.iter().filter(|i| runners[**i].locked).count(),
+                3 => starters.iter().filter(|i| !runners[**i].started).count(),
+                _ => starters.iter().filter(|i| runners[**i].started).count(),
+            }
+        };
+        let wanted: &[usize] = if !started { &[0, VACANTS, 2] } else if racing { &[3, 4] } else { &[] };
+        page.set_stats(model(
+            wanted
+                .iter()
+                .map(|s| (*s, count(*s)))
+                .filter(|(_, n)| *n > 0)
+                .map(|(s, n)| StatBlock {
+                    label: STATES[s].into(),
+                    count: n.to_string().into(),
+                    group: 1,
+                    choice: s as i32,
+                    active: self.state == Some(s),
+                })
+                .collect(),
+        ));
         let in_point = |course: usize| self.point == 0 || event.courses[course].start_point == points[self.point - 1];
         let entrants_of = |course: usize| runners.iter().filter(|r| r.runs.first().is_some_and(|run| run.course == course)).count();
         page.set_courses(model(

@@ -12,7 +12,7 @@ import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, 
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone, Switch, TitleBubble } from "courses.slint";
-import { Cell, Title } from "participants.slint";
+import { Cell, StatBlock, StatsRows, Title } from "participants.slint";
 
 export struct StartRow {
     index: int,         // -1 for a vacant start
@@ -112,6 +112,8 @@ export global Starts {
     in property <string> alert-count;
     in property <[ChangedStart]> changed;
     in property <[StartCourse]> courses;
+    in property <[StatBlock]> stats;
+    callback pick-stat(int, int);
     in property <int> active-course: -1;
     in property <[StartGroup]> groups;
     in property <int> active-group: -1;   // the group open on the right, -1 for the courses
@@ -1040,6 +1042,15 @@ component StartsPanel inherits Sheet {
                 clicked => { Starts.select-group(i); }
             }
         }
+    }
+    // The figures that matter now, at the bottom of the panel (brief Cowork, 12/11).
+    StatsRows {
+        x: Theme.space;
+        y: parent.height - self.height - Theme.space;
+        width: parent.width - 2 * Theme.space;
+        height: self.preferred-height;
+        stats: Starts.stats;
+        picked(g, c) => { Starts.pick-stat(g, c); }
     }
 }
 

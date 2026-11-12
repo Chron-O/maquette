@@ -310,6 +310,8 @@ fn connect_starts(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Starts>();
     page.on_select_row(on_click(window, state, |s, i: i32| s.select_row(i as usize)));
     page.on_sort_by(on_click(window, state, |s, i: i32| s.sort_by(i)));
+    let pick = on_click(window, state, |s, (_g, c): (i32, i32)| s.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     page.on_select_course(on_click(window, state, |s, i: i32| s.select_course(i)));
     page.on_select_group(on_click(window, state, |s, i: i32| s.select_group(i as usize)));
     page.on_select_point(on_click(window, state, |s, i: i32| s.select_point(i as usize)));
