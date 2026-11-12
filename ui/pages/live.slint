@@ -853,17 +853,28 @@ component LiveContent {
     property <bool> roomy: !root.narrow && root.available-width >= Theme.live-head-roomy;
     property <bool> search-below: !root.narrow && root.available-width < Theme.live-head-search;
 
+    // A phone: the head and the list in one card. Wider: the head is a band of its own, over
+    // the card of the table (brief Cowork, 11/11).
     Rectangle {
-        background: Theme.card;
+        background: root.narrow ? Theme.card : transparent;
         border-radius: Theme.card-radius;
-        border-width: Theme.card-outline-width;
+        border-width: root.narrow ? Theme.card-outline-width : 0px;
         border-color: Theme.card-outline;
-        clip: true;
+        clip: root.narrow;
         VerticalLayout {
+            spacing: root.narrow ? 0px : Theme.space-medium;
             // The add action in orange; on the right, the filters and the search (brief
             // zones-onglets § 6). What is to handle is in the bar above, and in the filters.
+            Rectangle {
+            vertical-stretch: 0;
+            background: root.narrow ? transparent : Theme.card;
+            border-radius: Theme.sheet-radius;
+            border-width: root.narrow ? 0px : Theme.card-outline-width;
+            border-color: Theme.card-outline;
+            drop-shadow-blur: root.narrow ? 0px : Theme.sheet-shadow-blur;
+            drop-shadow-offset-y: root.narrow ? 0px : Theme.sheet-shadow-offset;
+            drop-shadow-color: Theme.sheet-shadow;
             VerticalLayout {
-                vertical-stretch: 0;
                 padding: Theme.space;
                 spacing: Theme.space;
                 HorizontalLayout {
@@ -930,11 +941,17 @@ component LiveContent {
                     }
                 }
             }
-            RowLine { vertical-stretch: 0; }
+            }
+            if root.narrow: RowLine { vertical-stretch: 0; }
             if root.narrow: LiveList { }
-            if !root.narrow: LiveTable {
+            if !root.narrow: Sheet {
                 vertical-stretch: 1;
-                available-width: root.available-width;
+                clip: true;
+                LiveTable {
+                    width: parent.width;
+                    height: parent.height;
+                    available-width: root.available-width;
+                }
             }
         }
     }
@@ -1334,15 +1351,25 @@ export component LivePage {
         if root.layout-mode != LayoutMode.narrow: Rectangle {
             HorizontalLayout {
                 spacing: Theme.button-margin;
-                // The floating panel on the left: the race in figures, and the list opened.
-                Sheet {
+                // The floating panel on the left: the race in figures, and the list opened; then
+                // the readers apart, at the bottom left (brief Cowork, 11/11).
+                VerticalLayout {
                     width: Theme.course-list-width;
-                    VerticalLayout {
-                        padding: Theme.space;
-                        spacing: Theme.space;
-                        RaceCounts { vertical-stretch: 0; }
-                        if Live.active-list >= 0: RaceList { vertical-stretch: 1; }
-                        if Live.active-list < 0: Rectangle { vertical-stretch: 1; }
+                    spacing: Theme.button-margin;
+                    Sheet {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            padding: Theme.space;
+                            spacing: Theme.space;
+                            RaceCounts { vertical-stretch: 0; }
+                            if Live.active-list >= 0: RaceList { vertical-stretch: 1; }
+                            if Live.active-list < 0: Rectangle { vertical-stretch: 1; }
+                        }
+                    }
+                    for reader in Readers.finish: ReaderTile {
+                        vertical-stretch: 0;
+                        reader: reader;
+                        compact: true;
                     }
                 }
                 LiveContent {
@@ -1735,13 +1762,9 @@ export component LiveBar inherits Rectangle {
                 padding-top: Theme.live-second-padding;
                 spacing: Theme.live-second-gap;
                 VerticalLayout {
-                    width: Theme.live-readers-width;
-                    alignment: start;
-                    spacing: Theme.space;
-                    for reader in Readers.finish: ReaderTile {
-                        reader: reader;
-                        compact: true;
-                    }
+                    width: 0px;
+                    // The readers sit at the bottom left of the page, under the panel (brief
+                    // Cowork, 11/11): this row keeps the reading only.
                 }
                 BigReading { horizontal-stretch: 1; }
             }
