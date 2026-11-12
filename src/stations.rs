@@ -3,12 +3,14 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Kind, Label, Station, StationState, missed_control, punches_not_in_event};
-use crate::{ActiveFilter, App, CourseMark, FilterChoice, FilterGroup, StationProblem, StationRow, Stations, TabItem, UsefulStation, model};
+use crate::{ActiveFilter, App, CourseMark, FilterChoice, FilterGroup, StationProblem, StationRow, Stations, TabItem, UsefulStation, model, StatBlock};
 use slint::{ComponentHandle, SharedString};
 use std::cmp::Ordering;
 
 // The words of the prototype's sub-tabs (22/10), kept as one segment in the column.
 const MODES: [&str; 2] = ["Contrôle", "Ramassage"];
+// The state filter (brief Cowork, 12/11): the Filtres bubble and the blocks of figures.
+const STATES: [&str; 6] = ["À programmer", "À sortir", "À vérifier", "Dehors", "Rentrés", "Manquants"];
 const SPARE_PARK: &str = "Secours";
 
 fn plural(count: usize, noun: &str) -> String {
@@ -48,7 +50,7 @@ enum SortKey {
 
 pub struct StationsState {
     collecting: bool,
-    only_to_handle: bool,
+    state: Option<usize>,   // the State filter, one of STATES
     sort: SortKey,
     ascending: bool,
     search: String,
@@ -63,7 +65,7 @@ impl Default for StationsState {
     fn default() -> Self {
         StationsState {
             collecting: false,
-            only_to_handle: false,
+            state: None,
             sort: SortKey::Need,
             ascending: true,
             search: String::new(),
@@ -82,25 +84,46 @@ fn is_out(station: &Station) -> bool {
 impl StationsState {
     pub fn select_mode(&mut self, mode: usize) {
         self.collecting = mode == 1;
-        self.only_to_handle = false;
+        self.state = None;
         self.reading = None;
     }
 
-    pub fn select_filter(&mut self, filter: usize) {
-        self.only_to_handle = filter == 1;
+    // What « to handle » is: what to check while setting out, what is still out while collecting.
+    fn handle_state(&self) -> usize {
+        if self.collecting { 3 } else { 2 }
     }
 
-    // The Filtres bubble has one group, with one choice: what is to handle.
-    pub fn toggle_filter(&mut self, _group: usize, _choice: usize) {
-        self.only_to_handle = !self.only_to_handle;
+    pub fn select_filter(&mut self, filter: usize) {
+        self.state = (filter == 1).then(|| self.handle_state());
+    }
+
+    // The Filtres bubble: one group, the states. A second click takes the choice away.
+    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
+        self.state = if self.state == Some(choice) { None } else { Some(choice) };
     }
 
     pub fn clear_filters(&mut self) {
-        self.only_to_handle = false;
+        self.state = None;
     }
 
     pub fn show_only_to_handle(&mut self) {
-        self.only_to_handle = true;
+        self.state = Some(self.handle_state());
+    }
+
+    // A block of figures: its state, alone; again, it goes away.
+    pub fn pick_stat(&mut self, choice: usize) {
+        self.toggle_filter(0, choice);
+    }
+
+    fn in_state(&self, station: &Station, state: usize) -> bool {
+        match state {
+            0 => station.state == StationState::ToProgram,
+            1 => station.state == StationState::ToTakeOut,
+            2 => self.to_handle(station),
+            3 => is_out(station),
+            4 => matches!(station.state, StationState::Read(_) | StationState::Back(_)),
+            _ => station.state == StationState::Missing,
+        }
     }
 
     pub fn select_row(&mut self, index: usize) {
@@ -195,7 +218,7 @@ impl StationsState {
     }
 
     fn in_filter(&self, station: &Station) -> bool {
-        let filtered = !self.only_to_handle || if self.collecting { is_out(station) } else { self.to_handle(station) };
+        let filtered = self.state.is_none_or(|state| self.in_state(station, state));
         let text = format!("{} {}", station.name, station.serial.map_or(String::new(), |s| s.to_string())).to_lowercase();
         filtered && self.search.split_whitespace().all(|word| text.contains(word))
     }
@@ -403,7 +426,6 @@ impl StationsState {
         let out = count(&is_out);
         let back = count(&|s| matches!(s.state, StationState::Read(_) | StationState::Back(_)));
         let memories = count(&|s| matches!(s.state, StationState::Read(_)));
-        let to_take_out = count(&|s| s.state == StationState::ToTakeOut);
         let to_program = count(&|s| s.state == StationState::ToProgram);
         let missing = count(&|s| s.state == StationState::Missing);
         let gaps = count(&|s| matches!(s.state, StationState::ClockGap(_)));
@@ -416,37 +438,45 @@ impl StationsState {
 
         if self.collecting {
             page.set_filters(model(vec![word("Tous"), word(&format!("Dehors · {out}"))]));
-            page.set_gauge_title("Pas encore rentrés".into());
-            page.set_gauge_count(out.to_string().into());
-            page.set_gauge_total(format!("/ {} posés", out + back).into());
-            page.set_gauge_share(if out + back == 0 { 0.0 } else { back as f32 / (out + back) as f32 });
-            page.set_gauge_detail(SharedString::new());
             page.set_useful(model(Self::useful(event)));
         } else {
             let to_handle = to_program + missing + gaps;
             page.set_filters(model(vec![word("Tous"), word(&format!("À régler · {to_handle}"))]));
-            page.set_gauge_title("Contrôle".into());
-            page.set_gauge_count(checked.to_string().into());
-            page.set_gauge_total(format!("/ {} contrôlés", stations.len()).into());
-            page.set_gauge_share(if stations.is_empty() { 0.0 } else { checked as f32 / stations.len() as f32 });
-            page.set_gauge_detail(if to_take_out > 0 { format!("{to_take_out} encore à sortir").into() } else { SharedString::new() });
             page.set_useful(model(Vec::new()));
         }
-        page.set_active_filter(self.only_to_handle as i32);
-        // The same filter in the Filtres button (brief zones-onglets § 5).
-        let word = if self.collecting { "Dehors" } else { "À régler" };
+        page.set_active_filter((self.state == Some(self.handle_state())) as i32);
+        // The states in the Filtres button (brief zones-onglets § 5).
         page.set_filter_groups(model(vec![FilterGroup {
             search: SharedString::new(),
             searchable: false,
             key: 0,
             title: "État".into(),
-            choices: model(vec![FilterChoice { label: word.into(), tone: -1, active: self.only_to_handle }]),
+            choices: model(
+                STATES.iter().enumerate().map(|(c, w)| FilterChoice { label: (*w).into(), tone: -1, active: self.state == Some(c) }).collect(),
+            ),
         }]));
-        page.set_active_filters(model(if self.only_to_handle {
-            vec![ActiveFilter { label: word.into(), tone: -1, group: 0, choice: 0 }]
-        } else {
-            Vec::new()
-        }));
+        page.set_active_filters(model(
+            self.state.map(|c| ActiveFilter { label: STATES[c].into(), tone: -1, group: 0, choice: c as i32 }).into_iter().collect(),
+        ));
+        // The blocks of figures, by the moment of the race (brief Cowork, 12/11): before, what
+        // is to set out; during, what is out and to check; after, what is out, back, missing.
+        let racing = event.runners.iter().any(|r| r.is_racing());
+        let started = event.runners.iter().any(|r| r.started);
+        let wanted: &[usize] = if !started { &[0, 1, 2] } else if racing { &[3, 2] } else { &[3, 4, 5] };
+        page.set_stats(model(
+            wanted
+                .iter()
+                .map(|c| (*c, stations.iter().filter(|s| self.in_state(s, *c)).count()))
+                .filter(|(_, n)| *n > 0)
+                .map(|(c, n)| StatBlock {
+                    label: STATES[c].into(),
+                    count: n.to_string().into(),
+                    group: 0,
+                    choice: c as i32,
+                    active: self.state == Some(c),
+                })
+                .collect(),
+        ));
 
         let mut problems: Vec<String> = Vec::new();
         if self.collecting {

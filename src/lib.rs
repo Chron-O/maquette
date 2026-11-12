@@ -365,6 +365,8 @@ fn connect_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Stations>();
     page.on_select_mode(on_click(window, state, |s, i: i32| s.select_mode(i as usize)));
     page.on_select_filter(on_click(window, state, |s, i: i32| s.select_filter(i as usize)));
+    let pick = on_click(window, state, |s, (_g, c): (i32, i32)| s.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     let toggle = on_click(window, state, |s, (g, c): (i32, i32)| s.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |s, _: ()| s.clear_filters());
