@@ -5,18 +5,39 @@ Chaque écran : 3 dispositions (étroite, moyenne, large), tactile et souris, cl
 
 | # | Écran | Statut |
 |---|---|---|
-| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web à tester à la première fusion sur `main` |
+| 0 | Mise en place (dépôt, projet, publication web) | validé par Robin ; publication web testée et validée le 11/11 (première fusion sur `main`) |
 | 1 | Accueil | validé par Robin |
-| 2 | Course › Circuits | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Mixte à maquetter, modification des circuits à faire plus tard |
-| 3 | Course › Participants | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; nouveau participant et attribution de puce à faire plus tard |
-| 4 | Course › Départs | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; réglage des groupes, vrai tirage et modifications à faire plus tard |
-| 5 | Course › Boîtiers | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
-| 6 | Course › Direct | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
-| 7 | Course › Résultats | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
-| 8 | Puces (stock de prêt) | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
-| 9 | Boîtiers (inventaire du club) | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
-| 10 | Coureurs et clubs (base fédérale) | à revoir par Robin (zones et onglets, 10/11) ; avant : accepté par Robin sans relecture détaillée ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
+| 2 | Course › Circuits | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; Mixte à maquetter, modification des circuits à faire plus tard |
+| 3 | Course › Participants | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; nouveau participant et attribution de puce à faire plus tard |
+| 4 | Course › Départs | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; réglage des groupes, vrai tirage et modifications à faire plus tard |
+| 5 | Course › Boîtiers | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; Programmer, Choisir un boîtier, Corriger les temps et boîtiers spéciaux à faire plus tard |
+| 6 | Course › Direct | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; Arrivée manuelle, ticket et modification du participant à faire plus tard |
+| 7 | Course › Résultats | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; sous-onglets, égalités, Temps maximal, Imprimer et Exporter à faire plus tard |
+| 8 | Puces (stock de prêt) | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; Inventaire, Prêter, Ajouter, parcs et sélection multiple à faire plus tard |
+| 9 | Boîtiers (inventaire du club) | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; Inventaire, Ajouter, mémoire, parcs et sélection multiple à faire plus tard |
+| 10 | Coureurs et clubs (base fédérale) | à revoir par Robin (volet, tête de carte et bande du bas, 12/11) ; avant : accepté par Robin sans relecture détaillée ; import FFCO, contrôle des doublons, fusion et modification à faire plus tard |
 
+
+## Volet, tête de carte, blocs de chiffres (briefs Cowork des 11 et 12/11/2026)
+Règle « une place par fonction » dans `CLAUDE.md` § Placement ; charte mise à jour le 12/11 (bouton de ligne, « Pas encore parti », Absent en Inactif, Disqualifié en Problème, icônes `lock` et `search`).
+- **Tous les écrans larges** : tête de carte en bande à part (ajout à gauche, affichages au centre, alerte · Filtres · recherche à droite) ; lecteur en tuile à part, en bas à gauche sous le volet ; bande du bas sous le contenu seulement, qui compte ce qui est affiché ; choix principal du volet un cran plus grand ; bouton de ligne unique (`RowButton`) ; blocs de chiffres en bas du volet (4 au plus, 2 si la fenêtre est basse).
+- **Circuits** : bulle titre et languette Réglages sur le fond, au-dessus de la carte du circuit. Pas de blocs.
+- **Participants** : volet Tous / Clubs / Puces prêtées (tableaux à part ; « Voir ses participants › », « Rendre ») ; filtre État complet, filtre Club avec recherche ; Importer en tête de carte.
+- **Départs** : volet Tous les circuits / circuits, sous-zone Groupes de départ ; un bloc par circuit sur le fond, en-tête collé en haut pendant le défilement ; un groupe s'ouvre à droite (réglages, membres) ; Frise avec noms et tirage visible ; filtre État (Sans horaire, Vacants, Verrouillés, À partir, Partis).
+- **Boîtiers** : volet Contrôle / Ramassage et postes utiles ; la jauge laisse place aux blocs ; filtre État (À programmer, À sortir, À vérifier, Dehors, Rentrés, Manquants).
+- **Direct** : lecteurs d'arrivée sous le volet « La course en direct » ; la lecture prend toute la rangée. Pas de blocs.
+- **Résultats** : volet Classements · Analyse · Remise des prix ; Classements en colonnes parallèles (une par catégorie ou par circuit), défilement de côté avec barre ; un clic ou la recherche amène la colonne à gauche ; Analyse et Remise des prix : titre seul.
+- **Puces de prêt, Boîtiers du club** : sous-onglets Parcs / Inventaire dans le volet (Inventaire : titre seul) ; Importer en tête de carte ; filtre « Au parc » ajouté aux puces.
+- **Coureurs et clubs** (Robin, 12/11) : volet à deux sous-onglets. **Coureurs** : « Tous les coureurs », sous-zone Origine (Archive FFCO, Saisis à la main), blocs Licenciés · Non licenciés · Doublons à vérifier ; tête de carte « Ajouter un coureur » + « Importer FFCO… » ; Ligue et Points CN seulement dans la fiche. **Clubs** : « Tous les clubs », sous-zone Ligues, blocs Clubs à fusionner · Sans licencié ; tête de carte « Ajouter un club » + « Fusionner des clubs… » ; tableau Club, Ligue, N° FFCO, Coureurs, avec « Voir ses coureurs › » (filtre Club côté coureurs). Doublons : lignes teintées « À vérifier », pastille « Doublon ? » ou « Même club que … ? », bouton « Comparer » / « Fusionner » sans effet.
+
+### Écarts et points ouverts
+- **Spec à écrire : la règle de détection des doublons.** Pour l'instant, la maquette marque deux fiches de même nom et prénom dont l'une est licenciée et l'autre saisie à la main, et deux clubs dont les noms ont les mêmes lettres (« ASO Lyon » / « A.S.O. Lyon »). Le générateur fabrique ces cas exprès.
+- **Boutons dessinés sans effet** : groupes (Ajouter un coureur, + Règle, croix, Renommer, Supprimer), Importer, Fusionner ; la puce rendue n'est pas gardée dans les données de test.
+- **Moment de la course** (blocs) : tiré de l'événement en cours ; « avant » et « après » non vus en image faute d'événement de test à ces moments-là.
+- **Résultats sur téléphone** : l'ancienne liste.
+
+### Téléphone : étape à part, à faire après validation du reste
+Reprendre sur téléphone le volet (Clubs / Puces prêtées, groupes de départ, circuits de Départs, Classements / Analyse / Remise des prix, Parcs / Inventaire), les blocs de chiffres, les colonnes de Résultats (une par écran, on glisse), et la tête de carte.
 
 ## Zones et onglets (brief du 10/11/2026, `../consignes-maquette/zones-onglets/`)
 Appliqué aux écrans 2 à 10 : bulle d'onglets à cheval sur l'en-tête, languette « Paramètres : … », volet gauche flottant, fiche qui glisse depuis la droite (du bas sur téléphone), bouton Filtres avec sa bulle, action d'ajout orange à gauche dans la carte, alerte · Filtres · recherche à droite.

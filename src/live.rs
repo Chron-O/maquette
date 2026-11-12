@@ -452,6 +452,8 @@ impl LiveState {
                 .enumerate()
                 .filter(|(_, (_, choices))| !choices.is_empty())
                 .map(|(g, (title, choices))| FilterGroup {
+                    search: SharedString::new(),
+                    searchable: false,
                     key: g as i32,
                     title: (*title).into(),
                     choices: model(

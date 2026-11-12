@@ -73,7 +73,18 @@ pub struct Runner {
     pub started: bool,
     pub locked: bool,
     pub changed: bool,      // its start time moved since the publication
+    pub outcome: Outcome,   // a race that ended otherwise than by a reading
     pub runs: Vec<Run>,
+}
+
+// How a race ended when the reading does not say it.
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum Outcome {
+    #[default]
+    Normal,
+    Retired,        // Abandon
+    Disqualified,   // Disqualifié
+    Absent,         // never came
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -129,10 +140,23 @@ pub struct Vacant {
     pub time: u32,
 }
 
+// A start group (lot4-departs.md § 1): a name, a type with its setting, and members that come
+// from rules or were added by hand.
 pub struct StartGroup {
     pub name: String,
-    pub rule: String,
+    pub rule: String,              // the type and its setting, in one line
+    pub kind: GroupKind,
+    pub setting: String,           // a range « Avant 9:06 », a gap « 10 min », or nothing
+    pub rules: Vec<String>,        // « Club est OTB »
+    pub by_hand: Vec<usize>,       // the members added by hand
     pub members: Vec<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum GroupKind {
+    Range,      // they start between two times
+    Together,   // one after the other
+    Apart,      // never at the same time
 }
 
 impl Runner {
@@ -149,8 +173,14 @@ impl Runner {
     }
 
     pub fn label(&self) -> Label {
+        match self.outcome {
+            Outcome::Retired => return Label::new("Abandon", Kind::Inactive),   // charte: Inactif
+            Outcome::Disqualified => return Label::new("Disqualifié", Kind::Pm),
+            Outcome::Absent => return Label::new("Absent", Kind::Inactive),
+            Outcome::Normal => {}
+        }
         if !self.started {
-            Label::new("Inscrit", Kind::Inactive)
+            Label::new("Pas encore parti", Kind::Inactive)
         } else if self.is_racing() {
             Label::new("En course", Kind::Racing)
         } else if self.runs.iter().all(|r| matches!(r.result, Some((_, true)))) {
@@ -667,6 +697,13 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
             started,
             locked: false,
             changed: false,
+            // A few races end otherwise: given up, disqualified, or the runner never came.
+            outcome: match random.below(25) {
+                0 if started && done => Outcome::Retired,
+                1 if started && done => Outcome::Disqualified,
+                2 | 3 if !started && moment != Moment::Upcoming => Outcome::Absent,
+                _ => Outcome::Normal,
+            },
             runs,
         });
     }
@@ -689,6 +726,7 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
                 started: false,
                 locked: false,
                 changed: false,
+                outcome: Outcome::Normal,
                 runs: course.map(|course| Run { course, result: None }).into_iter().collect(),
             });
         }
@@ -774,14 +812,30 @@ fn new_groups(random: &mut Random, runners: &[Runner], first_start: u32) -> Vec<
         StartGroup {
             name: club.to_string(),
             rule: "Ensemble".into(),
+            kind: GroupKind::Together,
+            setting: String::new(),
+            rules: vec![format!("Club est {club}")],
+            by_hand: Vec::new(),
             members: in_course.iter().copied().filter(|i| runners[*i].club == club).collect(),
         },
         StartGroup {
             name: format!("Famille {family}"),
             rule: "Séparés de 10 min".into(),
+            kind: GroupKind::Apart,
+            setting: "10 min".into(),
+            rules: Vec::new(),
+            by_hand: in_course.iter().copied().filter(|i| runners[*i].family == family).collect(),
             members: in_course.iter().copied().filter(|i| runners[*i].family == family).collect(),
         },
-        StartGroup { name: "Bénévoles".into(), rule: format!("Avant {}", format_clock(first_start + 3 * START_STEP)), members: helpers },
+        StartGroup {
+            name: "Bénévoles".into(),
+            rule: format!("Avant {}", format_clock(first_start + 3 * START_STEP)),
+            kind: GroupKind::Range,
+            setting: format!("Avant {}", format_clock(first_start + 3 * START_STEP)),
+            rules: vec!["Bénévole est coché".into()],
+            by_hand: Vec::new(),
+            members: helpers,
+        },
     ]
 }
 
@@ -1167,8 +1221,30 @@ fn new_runner_base(seed: u64, events: &[Event], today: u32) -> Vec<BaseRunner> {
         person.entered_on = short_date(today.saturating_sub(random.below(30)));
         base.push(person);
     }
+    // A club typed twice (Robin, 12/11): two records typed by hand under « A.S.O. Lyon »,
+    // one of them the same person as a licensed runner of « ASO Lyon ».
+    for i in 0..2 {
+        let id = base.len() as u32;
+        let (family, first) = if i == 0 {
+            let aso: Vec<usize> = (0..base.len()).filter(|n| base[*n].club == "ASO Lyon" && base[*n].licence.is_some()).collect();
+            if aso.is_empty() { (random.pick(&BASE_FAMILY_NAMES), random.pick(&FIRST_NAMES)) } else { let n = random.pick(&aso); (base[n].family, base[n].first) }
+        } else {
+            (random.pick(&BASE_FAMILY_NAMES), random.pick(&FIRST_NAMES))
+        };
+        let mut person = new_base_runner(&mut random, id, family, first, LOOK_ALIKE_CLUB, today);
+        person.club_code = "";
+        person.licence = None;
+        person.licence_kind = None;
+        person.points = None;
+        person.card = None;
+        person.entered_on = short_date(today.saturating_sub(random.below(30)));
+        base.push(person);
+    }
     base
 }
+
+// The club typed twice: the same as « ASO Lyon », spelled otherwise.
+pub const LOOK_ALIKE_CLUB: &str = "A.S.O. Lyon";
 
 const STATION_KINDS: [&str; 3] = ["BSF7", "BSF8", "BSM8"];
 const STATION_NOTES: [&str; 3] = ["Étiquette à refaire", "Bip faible", "Support fendu"];

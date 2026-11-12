@@ -2,7 +2,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Format, Kind, Label, Run, Runner, format_clock, format_time};
-use crate::{ActiveFilter, App, FilterChoice, FilterGroup, Passage, ParticipantRow, Participants, SequenceStop, model};
+use crate::{ActiveFilter, App, ClubRow, FilterChoice, LoanRow, StatBlock, FilterGroup, Passage, ParticipantRow, Participants, PanelSet, SequenceStop, model};
 use slint::{ComponentHandle, SharedString};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -26,14 +26,32 @@ const STATE: usize = 0;
 const COURSE: usize = 1;
 const CARD: usize = 2;
 const CHECK: usize = 3;
-const STATES: [&str; 4] = ["Inscrits", "En course", "Arrivés", "PM"];
-const CARDS: [&str; 2] = ["Sans puce", "Prêtée"];
+const CLUB: usize = 4;   // last (Robin, 11/11)
+// Every state of a runner (Robin, 11/11): the word in the bubble, then the word of its label.
+const STATES: [(&str, &str); 7] = [
+    ("Pas encore parti", "Pas encore parti"),
+    ("En course", "En course"),
+    ("Arrivé", "Arrivé"),
+    ("PM", "PM"),
+    ("Abandon", "Abandon"),
+    ("Disqualifié", "Disqualifié"),
+    ("Absent", "Absent"),
+];
+const CARDS: [&str; 1] = ["Sans puce"];
+
+// The panel (Robin, 11/11): the participants, or one of two tables of their own.
+const ALL: usize = 0;   // 1: the clubs; 2: the loan cards
 const CHECKS: [&str; 2] = ["Doublons possibles", "Catégorie inconnue"];
 
 pub struct ParticipantsState {
     sort: SortKey,
     ascending: bool,
     filters: [Option<usize>; 4],   // the choice of each group, if any
+    club: Option<String>,          // the club filter, last group of the bubble
+    club_search: String,           // the field above the clubs, in the Filtres bubble
+    shown_clubs: RefCell<Vec<String>>,   // the clubs the bubble shows, set by show
+    returned: Vec<usize>,          // the loan cards given back, by runner
+    set: usize,                    // the choice of the panel
     search: String,
     selected: Option<usize>,
     problems: RefCell<Vec<(usize, usize)>>, // the filter of each line of the alert, set by show
@@ -45,6 +63,11 @@ impl Default for ParticipantsState {
             sort: SortKey::Name,
             ascending: true,
             filters: [None; 4],
+            club: None,
+            club_search: String::new(),
+            shown_clubs: RefCell::new(Vec::new()),
+            returned: Vec::new(),
+            set: ALL,
             search: String::new(),
             selected: None,
             problems: RefCell::new(Vec::new()),
@@ -90,12 +113,63 @@ impl ParticipantsState {
         self.selected = if self.selected == Some(index) { None } else { Some(index) };
     }
 
+    // « Voir ses participants » on a club, or « Filtrer sur ce club » in a detail: all the
+    // participants, with that club as a filter (Robin, 11/11).
+    pub fn show_club(&mut self, name: &str) {
+        self.club = Some(name.to_string());
+        self.set = ALL;
+        self.selected = None;
+    }
+
+    pub fn search_filter(&mut self, text: &str) {
+        self.club_search = text.trim().to_lowercase();
+    }
+
+    // « Rendre » on a loan card (Robin, 11/11): it is back at the park.
+    pub fn give_back(&mut self, runner: usize) {
+        if !self.returned.contains(&runner) {
+            self.returned.push(runner);
+        }
+    }
+
+    // A block of figures at the bottom of the panel: its filter, alone, on all the participants;
+    // a second click takes it away. Group -1: no filter; -2: the loan cards (Robin, 11/11).
+    pub fn pick_stat(&mut self, group: i32, choice: usize) {
+        match group {
+            -2 => self.set = 2,
+            -1 => {
+                self.set = ALL;
+                self.clear_filters();
+            }
+            g => {
+                let g = g as usize;
+                let again = self.filters.get(g).copied().flatten() == Some(choice);
+                self.clear_filters();
+                self.set = ALL;
+                if !again && g < self.filters.len() {
+                    self.filters[g] = Some(choice);
+                }
+            }
+        }
+        self.selected = None;
+    }
+
+    pub fn select_set(&mut self, set: usize) {
+        self.set = set;
+        self.selected = None;
+    }
+
     pub fn close_detail(&mut self) {
         self.selected = None;
     }
 
     // A second click on the chosen choice takes it away.
     pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        if group == CLUB {
+            let name = self.shown_clubs.borrow().get(choice).cloned();
+            self.club = if name.is_none() || self.club == name { None } else { name };
+            return;
+        }
         if let Some(slot) = self.filters.get_mut(group) {
             *slot = if *slot == Some(choice) { None } else { Some(choice) };
         }
@@ -103,6 +177,7 @@ impl ParticipantsState {
 
     pub fn clear_filters(&mut self) {
         self.filters = [None; 4];
+        self.club = None;
     }
 
     // « Voir » on a line of the alert: its filter, alone.
@@ -136,23 +211,17 @@ impl ParticipantsState {
     }
 
     fn matches(&self, runner: &Runner, duplicate: bool) -> bool {
-        let state = match self.filters[STATE] {
-            None => true,
-            Some(choice) => runner.label().word == ["Inscrit", "En course", "Arrivé", "PM"][choice],
-        };
+        let in_club = self.club.as_deref().is_none_or(|c| runner.club == c);
+        let state = self.filters[STATE].is_none_or(|choice| runner.label().word == STATES[choice].1);
         let course = self.filters[COURSE].is_none_or(|c| runner.runs.iter().any(|r| r.course == c));
-        let card = match self.filters[CARD] {
-            None => true,
-            Some(0) => runner.card.is_none(),
-            Some(_) => runner.lent,
-        };
+        let card = self.filters[CARD].is_none() || runner.card.is_none();
         let check = match self.filters[CHECK] {
             None => true,
             Some(0) => duplicate,
             Some(_) => runner.unknown_category,
         };
         let text = format!("{} {} {}", runner.name(), runner.club, card_text(runner)).to_lowercase();
-        state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
+        in_club && state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event) -> Vec<usize> {
@@ -186,9 +255,6 @@ impl ParticipantsState {
         page.set_chips(model(vec!["Inscription par catégorie".into(), "Sans dossards".into(), "Champs libres : repas".into()]));
 
         let lent: Vec<&Runner> = runners.iter().filter(|r| r.lent).collect();
-        page.set_lent_count(lent.len().to_string().into());
-        page.set_lent_detail(format!("en circulation · {cards_free} au parc").into());
-        page.set_lent_name(lent.first().map_or(SharedString::new(), |r| format!("{} · {}", r.name(), card_text(r)).into()));
 
         let without_card = runners.iter().filter(|r| r.card.is_none()).count();
         // « · N passages » only when someone runs more than once (participants-resultats.md § 1).
@@ -199,19 +265,129 @@ impl ParticipantsState {
             plural(runners.len(), "participant")
         };
         let clubs: BTreeSet<&str> = runners.iter().map(|r| r.club).collect();
+        page.set_sets(model(vec![
+            PanelSet { name: "Tous".into(), count: runners.len().to_string().into(), detail: SharedString::new() },
+            PanelSet { name: "Clubs".into(), count: clubs.len().to_string().into(), detail: SharedString::new() },
+            PanelSet {
+                name: "Puces prêtées".into(),
+                count: lent.len().to_string().into(),
+                detail: format!("{} au parc", cards_free + self.returned.len() as u32).into(),
+            },
+        ]));
+        page.set_active_set(self.set as i32);
+        // The loan cards: who has one, and whether it must come back now.
+        page.set_loans(model(
+            runners
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| r.lent)
+                .map(|(i, r)| LoanRow {
+                    index: i as i32,
+                    card: card_text(r).into(),
+                    family: r.family.into(),
+                    first: r.first.into(),
+                    club: r.club.into(),
+                    badge: badge(&r.label()),
+                    back: if self.returned.contains(&i) {
+                        "Rendue".into()
+                    } else if r.is_back() {
+                        "À rendre".into()
+                    } else {
+                        SharedString::new()
+                    },
+                    returned: self.returned.contains(&i),
+                })
+                .collect(),
+        ));
+        page.set_clubs(model(
+            clubs
+                .iter()
+                .map(|club| {
+                    let members: Vec<&Runner> = runners.iter().filter(|r| r.club == *club).collect();
+                    ClubRow {
+                        name: (*club).into(),
+                        entrants: members.len().to_string().into(),
+                        racing: members.iter().filter(|r| r.is_racing()).count().to_string().into(),
+                        back: members.iter().filter(|r| r.started && !r.is_racing()).count().to_string().into(),
+                        lent: members.iter().filter(|r| r.lent).count().to_string().into(),
+                    }
+                })
+                .collect(),
+        ));
+        // The band counts what is shown, not what the panel says (Robin, 11/11).
+        let shown = self.sorted(event);
+        let filtered = shown.len() < runners.len();
+        let shown_clubs: BTreeSet<&str> = shown.iter().map(|i| runners[*i].club).collect();
+        let shown_without = shown.iter().filter(|i| runners[**i].card.is_none()).count();
+        let shown_lent = shown.iter().filter(|i| runners[**i].lent).count();
         page.set_summary(
-            format!(
-                "{} · {} · {} sans puce · {} prêtée{}",
-                people,
-                plural(clubs.len(), "club"),
-                without_card,
-                lent.len(),
-                if lent.len() > 1 { "s" } else { "" }
-            )
+            if filtered {
+                format!(
+                    "{} sur {} · {} · {} sans puce",
+                    plural(shown.len(), "participant"),
+                    runners.len(),
+                    plural(shown_clubs.len(), "club"),
+                    shown_without
+                )
+            } else {
+                format!(
+                    "{} · {} · {} sans puce · {} prêtée{}",
+                    people,
+                    plural(clubs.len(), "club"),
+                    without_card,
+                    shown_lent,
+                    if shown_lent > 1 { "s" } else { "" }
+                )
+            }
             .into(),
         );
+        page.set_summary_short(
+            if filtered { format!("{} sur {}", plural(shown.len(), "participant"), runners.len()) } else { format!("{people} · {without_card} sans puce") }
+                .into(),
+        );
 
-        page.set_summary_short(format!("{people} · {without_card} sans puce").into());
+        // The blocks of figures, the most useful first for the moment of the race (Robin, 11/11):
+        // before, who is entered; during, who is to start, out, back; after, what went wrong.
+        let count = |word: &str| runners.iter().filter(|r| r.label().word == word).count();
+        let moment = if runners.iter().all(|r| !r.started) {
+            0
+        } else if runners.iter().any(|r| r.is_racing() || (!r.started && r.label().word == "Pas encore parti")) {
+            1
+        } else {
+            2
+        };
+        let loans_out = lent.len().saturating_sub(self.returned.len());
+        // (label, count, group, choice, rank before / during / after; 9: not then)
+        let all: [(&str, usize, i32, usize, [u8; 3]); 9] = [
+            ("Inscrits", runners.len(), -1, 0, [1, 9, 9]),
+            ("Sans puce", without_card, CARD as i32, 0, [2, 4, 9]),
+            ("Puces prêtées", loans_out, -2, 0, [3, 5, 4]),
+            ("À partir", count("Pas encore parti"), STATE as i32, 0, [9, 1, 9]),
+            ("En forêt", count("En course"), STATE as i32, 1, [9, 2, 9]),
+            ("Rentrés", count("Arrivé"), STATE as i32, 2, [9, 3, 9]),
+            ("PM", count("PM"), STATE as i32, 3, [9, 6, 1]),
+            ("Absents", count("Absent"), STATE as i32, 6, [9, 7, 2]),
+            ("Abandons", count("Abandon"), STATE as i32, 4, [9, 9, 3]),
+        ];
+        let mut blocks: Vec<_> = all.iter().filter(|b| b.4[moment] < 9 && b.1 > 0).collect();
+        blocks.sort_by_key(|b| b.4[moment]);
+        page.set_stats(model(
+            blocks
+                .iter()
+                .take(4)
+                .map(|(label, count, group, choice, _)| StatBlock {
+                    label: (*label).into(),
+                    count: count.to_string().into(),
+                    group: *group,
+                    choice: *choice as i32,
+                    active: match *group {
+                        -2 => self.set == 2,
+                        -1 => false,
+                        g => self.set == ALL && self.filters[g as usize] == Some(*choice),
+                    },
+                })
+                .collect(),
+        ));
 
         let names: Vec<String> = runners.iter().map(|r| r.name()).collect();
         let duplicates = names.iter().enumerate().filter(|(i, n)| names[..*i].contains(n)).count();
@@ -240,16 +416,37 @@ impl ParticipantsState {
 
         let courses: Vec<(String, i32)> = event.courses.iter().enumerate().map(|(i, c)| (c.name.clone(), i as i32)).collect();
         let groups: [(&str, Vec<(String, i32)>); 4] = [
-            ("État", STATES.iter().map(|s| (s.to_string(), -1)).collect()),
+            ("État", STATES.iter().map(|s| (s.0.to_string(), -1)).collect()),
             ("Circuit", courses),
             ("Puce", CARDS.iter().map(|s| (s.to_string(), -1)).collect()),
             ("À vérifier", CHECKS.iter().map(|s| (s.to_string(), -1)).collect()),
         ];
+        // The clubs last, with a field above them: a long list (Robin, 11/11).
+        let shown_clubs: Vec<String> = clubs
+            .iter()
+            .filter(|c| c.to_lowercase().contains(&self.club_search))
+            .map(|c| c.to_string())
+            .collect();
+        let club_group = FilterGroup {
+            search: self.club_search.as_str().into(),
+            searchable: true,
+            key: CLUB as i32,
+            title: "Club".into(),
+            choices: model(
+                shown_clubs
+                    .iter()
+                    .map(|c| FilterChoice { label: c.as_str().into(), tone: -1, active: self.club.as_deref() == Some(c.as_str()) })
+                    .collect(),
+            ),
+        };
+        *self.shown_clubs.borrow_mut() = shown_clubs;
         page.set_filter_groups(model(
             groups
                 .iter()
                 .enumerate()
                 .map(|(g, (title, choices))| FilterGroup {
+                    search: SharedString::new(),
+                    searchable: false,
                     key: g as i32,
                     title: (*title).into(),
                     choices: model(
@@ -264,8 +461,17 @@ impl ParticipantsState {
                             .collect(),
                     ),
                 })
+                .chain(std::iter::once(club_group))
                 .collect(),
         ));
+        let club_filter = self.club.as_ref().map(|club| ActiveFilter {
+            label: format!("Club : {club}").into(),
+            tone: -1,
+            group: CLUB as i32,
+            // Its place in the bubble's list, or past its end when the field hides it: a click
+            // on the cross takes it away all the same.
+            choice: self.shown_clubs.borrow().iter().position(|c| c == club).unwrap_or(usize::MAX >> 1) as i32,
+        });
         page.set_active_filters(model(
             groups
                 .iter()
@@ -275,6 +481,7 @@ impl ParticipantsState {
                     let (label, tone) = choices.get(c)?;
                     Some(ActiveFilter { label: label.as_str().into(), tone: *tone, group: g as i32, choice: c as i32 })
                 })
+                .chain(club_filter)
                 .collect(),
         ));
         page.set_search_text(self.search.as_str().into());

@@ -2,12 +2,15 @@
 // at random inside each course, on the test data only.
 
 use crate::home::badge;
-use crate::test_data::{Event, Kind, Label, Runner, START_STEP, format_clock};
+use crate::test_data::{Event, GroupKind, Kind, Label, Runner, START_STEP, format_clock};
 use crate::participants::card_label;
-use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, StartGroup, StartPoint, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
+use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, GroupMember, GroupRule, StartGroup, StartPoint, StartCourse, StartPointSetting, StartRow, StartSection, Starts, TabItem, model, StatBlock};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 2] = ["Liste", "Frise"];
+// The État filter of the starts, and the blocks of figures (brief Cowork, 12/11).
+const STATES: [&str; 5] = ["Sans horaire", "Vacants", "Verrouillés", "À partir", "Partis"];
+const VACANTS: usize = 1;
 
 // The Frise has one column per minute, and a time written every 2 minutes (prototype: depFrise).
 const MINUTE: u32 = 60;
@@ -32,6 +35,8 @@ pub struct StartsState {
     sort: SortKey,
     ascending: bool,
     point: usize,       // 0 all, otherwise a start point
+    course: Option<usize>,   // the course chosen in the panel; none: all of them
+    state: Option<usize>,    // Filtres › État, one of STATES
     group: Option<usize>,
     search: String,
     selected: Option<usize>,
@@ -45,6 +50,8 @@ impl Default for StartsState {
             sort: SortKey::Time,
             ascending: true,
             point: 0,
+            course: None,
+            state: None,
             group: None,
             search: String::new(),
             selected: None,
@@ -65,10 +72,6 @@ fn state_label(runner: &Runner) -> Label {
     }
 }
 
-fn initials(runner: &Runner) -> String {
-    format!("{}{}", runner.first.chars().next().unwrap_or(' '), runner.family.chars().next().unwrap_or(' '))
-}
-
 impl StartsState {
     pub fn select_view(&mut self, view: usize) {
         self.view = view;
@@ -86,22 +89,37 @@ impl StartsState {
         self.point = point;
     }
 
-    pub fn select_group(&mut self, group: usize) {
-        self.group = if self.group == Some(group) { None } else { Some(group) };
+    // The panel: all the courses, or one (brief Cowork, 11/11).
+    pub fn select_course(&mut self, course: i32) {
+        self.course = usize::try_from(course).ok();
+        self.group = None;
     }
 
-    // The Filtres bubble (brief zones-onglets § 5): group 0 the start point, group 1 the group.
-    // A second click on the chosen choice takes it away.
+    // A group is never a filter: it opens on the right, to be set and completed (Robin, 11/11).
+    pub fn select_group(&mut self, group: usize) {
+        self.group = Some(group);
+        self.selected = None;
+    }
+
+    // The Filtres bubble: the start point only. The groups are in the panel, and a choice has
+    // one place only (brief Cowork, 11/11). A second click on the chosen choice takes it away.
     pub fn toggle_filter(&mut self, group: usize, choice: usize) {
-        match group {
-            0 => self.point = if self.point == choice + 1 { 0 } else { choice + 1 },
-            _ => self.select_group(choice),
+        if group == 1 {
+            self.state = if self.state == Some(choice) { None } else { Some(choice) };
+            return;
         }
+        self.point = if self.point == choice + 1 { 0 } else { choice + 1 };
+    }
+
+    // A block of figures: its state, alone; again, it goes away.
+    pub fn pick_stat(&mut self, choice: usize) {
+        self.group = None;
+        self.toggle_filter(1, choice);
     }
 
     pub fn clear_filters(&mut self) {
+        self.state = None;
         self.point = 0;
-        self.group = None;
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -149,8 +167,15 @@ impl StartsState {
     fn shown(&self, event: &Event, index: usize) -> bool {
         let runner = &event.runners[index];
         let text = format!("{} {}", runner.name(), runner.club).to_lowercase();
-        let in_group = self.group.is_none_or(|g| event.groups.get(g).is_none_or(|g| g.members.contains(&index)));
-        in_group && self.search.split_whitespace().all(|word| text.contains(word))
+        let in_state = match self.state {
+            None => true,
+            Some(0) => runner.start == 0,
+            Some(VACANTS) => false,
+            Some(2) => runner.locked,
+            Some(3) => !runner.started,
+            Some(_) => runner.started,
+        };
+        in_state && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event, course: usize) -> Vec<usize> {
@@ -248,7 +273,57 @@ impl StartsState {
                 })
                 .collect(),
         ));
-        page.set_active_group(self.group.map_or(-1, |g| g as i32));
+        page.set_active_group(self.group.filter(|g| *g < event.groups.len()).map_or(-1, |g| g as i32));
+        if let Some(group) = self.group.and_then(|g| event.groups.get(g)) {
+            page.set_group_name(group.name.as_str().into());
+            page.set_group_kind(match group.kind {
+                GroupKind::Range => 0,
+                GroupKind::Together => 1,
+                GroupKind::Apart => 2,
+            });
+            page.set_group_setting(group.setting.as_str().into());
+            page.set_group_facts(format!("{} · {}", group.rule, plural(group.members.len(), "coureur")).into());
+            // The tab sums up the settings: the type, then the rules, or « À la main ».
+            let mut summary = vec![group.rule.clone()];
+            summary.extend(group.rules.iter().cloned());
+            if group.rules.is_empty() {
+                summary.push("À la main".into());
+            }
+            page.set_group_summary(summary.join(" · ").into());
+            page.set_group_rules(model(
+                group
+                    .rules
+                    .iter()
+                    .map(|r| GroupRule { text: r.as_str().into(), count: plural(group.members.iter().filter(|m| !group.by_hand.contains(m)).count(), "coureur").into() })
+                    .collect(),
+            ));
+            let mut members = group.members.clone();
+            members.sort_by_key(|i| self.time_of(event, *i));
+            page.set_group_members(model(
+                members
+                    .iter()
+                    .map(|&i| {
+                        let runner = &runners[i];
+                        let course = runner.runs.first().map(|r| r.course);
+                        GroupMember {
+                            index: i as i32,
+                            time: format_clock(self.time_of(event, i)).into(),
+                            family: runner.family.into(),
+                            first: runner.first.into(),
+                            category: runner.category.as_str().into(),
+                            club: runner.club.into(),
+                            course: course.map_or(SharedString::new(), |c| event.courses[c].name.as_str().into()),
+                            tone: course.map_or(-1, |c| c as i32),
+                            origin: if group.by_hand.contains(&i) {
+                                "À la main".into()
+                            } else {
+                                group.rules.first().map_or(SharedString::new(), |r| r.as_str().into())
+                            },
+                        }
+                    })
+                    .collect(),
+            ));
+        }
 
         let points: Vec<u32> = {
             let mut list: Vec<u32> = event.courses.iter().map(|c| c.start_point).collect();
@@ -263,17 +338,19 @@ impl StartsState {
         }
         page.set_points(model(chips));
 
-        // The filters: the start point (when there are several), then the group.
+        // The filters: the start point, when there are several.
         let point_names: Vec<String> = if points.len() > 1 { points.iter().map(|p| format!("Départ S{p}")).collect() } else { Vec::new() };
-        let group_names: Vec<String> = event.groups.iter().map(|g| g.name.clone()).collect();
-        let chosen = [self.point.checked_sub(1), self.group];
-        let lists = [("Point de départ", &point_names), ("Groupe", &group_names)];
+        let state_names: Vec<String> = STATES.iter().map(|s| s.to_string()).collect();
+        let chosen = [self.point.checked_sub(1), self.state];
+        let lists = [("Point de départ", &point_names), ("État", &state_names)];
         page.set_filter_groups(model(
             lists
                 .iter()
                 .enumerate()
                 .filter(|(_, (_, names))| !names.is_empty())
                 .map(|(g, (title, names))| FilterGroup {
+                    search: SharedString::new(),
+                    searchable: false,
                     key: g as i32,
                     title: (*title).into(),
                     choices: model(
@@ -328,14 +405,59 @@ impl StartsState {
         });
         page.set_sort_ascending(self.ascending);
 
-        let filtering = self.group.is_some() || !self.search.is_empty();
+        // The vacants show with no filter, or alone with theirs.
+        let filtering = (self.group.is_some() || !self.search.is_empty() || self.state.is_some()) && self.state != Some(VACANTS);
+
+        // The blocks of figures (brief Cowork, 12/11): before the race, what the draw left;
+        // during, who is to start and who has; after, none.
+        let started = runners.iter().any(|r| r.started);
+        let racing = runners.iter().any(|r| r.is_racing() || !r.started);
+        let count = |s: usize| -> usize {
+            match s {
+                0 => starters.iter().filter(|i| runners[**i].start == 0).count(),
+                VACANTS => event.vacants.len(),
+                2 => starters.iter().filter(|i| runners[**i].locked).count(),
+                3 => starters.iter().filter(|i| !runners[**i].started).count(),
+                _ => starters.iter().filter(|i| runners[**i].started).count(),
+            }
+        };
+        let wanted: &[usize] = if !started { &[0, VACANTS, 2] } else if racing { &[3, 4] } else { &[] };
+        page.set_stats(model(
+            wanted
+                .iter()
+                .map(|s| (*s, count(*s)))
+                .filter(|(_, n)| *n > 0)
+                .map(|(s, n)| StatBlock {
+                    label: STATES[s].into(),
+                    count: n.to_string().into(),
+                    group: 1,
+                    choice: s as i32,
+                    active: self.state == Some(s),
+                })
+                .collect(),
+        ));
         let in_point = |course: usize| self.point == 0 || event.courses[course].start_point == points[self.point - 1];
+        let entrants_of = |course: usize| runners.iter().filter(|r| r.runs.first().is_some_and(|run| run.course == course)).count();
+        page.set_courses(model(
+            event
+                .courses
+                .iter()
+                .enumerate()
+                .map(|(i, course)| StartCourse {
+                    index: i as i32,
+                    name: course.name.as_str().into(),
+                    detail: format!("S{} · {}", course.start_point, plural(entrants_of(i), "coureur")).into(),
+                })
+                .collect(),
+        ));
+        page.set_active_course(self.course.map_or(-1, |c| c as i32));
+        let shown_course = |course: usize| in_point(course) && self.course.is_none_or(|c| c == course);
         page.set_sections(model(
             event
                 .courses
                 .iter()
                 .enumerate()
-                .filter(|(i, _)| in_point(*i))
+                .filter(|(i, _)| shown_course(*i))
                 .map(|(i, course)| {
                     let rows = self.sorted(event, i);
                     let mut lines: Vec<StartRow> = rows.iter().map(|r| self.row(event, *r)).collect();
@@ -355,7 +477,7 @@ impl StartsState {
                             selected: false,
                         }));
                     }
-                    let entrants = runners.iter().filter(|r| r.runs.first().is_some_and(|run| run.course == i)).count();
+                    let entrants = entrants_of(i);
                     StartSection {
                         index: i as i32,
                         name: course.name.as_str().into(),
@@ -376,7 +498,7 @@ impl StartsState {
                 .map(|t| if t % FRISE_LABEL_EVERY == 0 { format_clock(t).into() } else { SharedString::new() })
                 .collect(),
         ));
-        let mut order: Vec<usize> = (0..event.courses.len()).filter(|i| in_point(*i)).collect();
+        let mut order: Vec<usize> = (0..event.courses.len()).filter(|i| shown_course(*i)).collect();
         order.sort_by_key(|i| event.courses[*i].start_point);
         page.set_frise_rows(model(
             order
@@ -386,10 +508,12 @@ impl StartsState {
                     let course = &event.courses[i];
                     let empty = FriseCell {
                         index: -1,
-                        label: SharedString::new(),
+                        family: SharedString::new(),
+                        first: SharedString::new(),
                         vacant: false,
                         locked: false,
                         moved: false,
+                        left: false,
                         dimmed: false,
                     };
                     let mut cells = vec![empty; columns];
@@ -399,12 +523,20 @@ impl StartsState {
                     for index in starters.iter().copied().filter(|r| runners[*r].runs[0].course == i) {
                         let time = self.time_of(event, index);
                         let moved = time != runners[index].start;
+                        if moved {
+                            let old = ((runners[index].start.saturating_sub(first)) / MINUTE) as usize;
+                            if let Some(cell) = cells.get_mut(old).filter(|c| c.index < 0) {
+                                cell.left = true;
+                            }
+                        }
                         cells[((time - first) / MINUTE) as usize] = FriseCell {
                             index: index as i32,
-                            label: initials(&runners[index]).into(),
+                            family: runners[index].family.into(),
+                            first: runners[index].first.into(),
                             vacant: false,
                             locked: runners[index].locked,
                             moved,
+                            left: false,
                             dimmed: !self.shown(event, index),
                         };
                     }

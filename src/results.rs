@@ -2,12 +2,20 @@
 // out again from the test data at every reading.
 
 use crate::home::badge;
-use crate::test_data::{Event, Kind, Label, format_time};
-use crate::{ActiveFilter, App, FilterChoice, FilterGroup, LiveFilter, ResultRow, Results, model};
+use crate::test_data::{Event, Kind, Label, Outcome, format_time};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, LiveFilter, ResultColumn, ResultRow, Results, StatBlock, model};
 use slint::{ComponentHandle, SharedString};
 use std::collections::BTreeMap;
 
 const MODES: [&str; 2] = ["Par catégorie", "Par circuit"];
+
+// The views of the panel (lot6a-analyse.md § 1).
+const VIEWS: [&str; 3] = ["Classements", "Analyse", "Remise des prix"];
+// The state filter of the columns (Robin, 12/11): what a row says.
+const STATES: [&str; 5] = ["Classés", "En forêt", "PM", "Abandons", "Disqualifiés"];
+// The filter groups of the columns.
+const RANKING: usize = 0;
+const STATE: usize = 1;
 
 #[derive(Default)]
 pub struct ResultsState {
@@ -16,6 +24,9 @@ pub struct ResultsState {
     category: usize,    // 0 all, otherwise a category of the course + 1
     search: String,
     ranking_search: String,
+    view: usize,                 // the panel: Classements, Analyse, Remise des prix
+    column: Option<usize>,       // Filtres › the one ranking shown as a column
+    state: Option<usize>,        // Filtres › État
 }
 
 // One ranking: its name, its color, and the runs it holds.
@@ -74,10 +85,33 @@ fn rankings(event: &Event, by_course: bool) -> Vec<Ranking> {
 }
 
 impl ResultsState {
+    pub fn select_view(&mut self, view: usize) {
+        self.view = view;
+    }
+
+    // A block of figures: its state filter alone; again, it goes away (Robin, 12/11).
+    pub fn pick_stat(&mut self, choice: usize) {
+        self.view = 0;
+        self.column = None;
+        self.state = if self.state == Some(choice) { None } else { Some(choice) };
+    }
+
+    // The Filtres bubble of the columns: group 0 the rankings, group 1 the states.
+    pub fn toggle_column_filter(&mut self, group: usize, choice: usize) {
+        let slot = if group == RANKING { &mut self.column } else { &mut self.state };
+        *slot = if *slot == Some(choice) { None } else { Some(choice) };
+    }
+
+    pub fn clear_column_filters(&mut self) {
+        self.column = None;
+        self.state = None;
+    }
+
     pub fn select_mode(&mut self, mode: usize) {
         self.by_course = mode == 1;
         self.ranking = 0;
         self.category = 0;
+        self.column = None;
         self.ranking_search.clear();
     }
 
@@ -113,6 +147,9 @@ impl ResultsState {
         let all = rankings(event, self.by_course);
 
         page.set_modes(model(MODES.iter().map(|m| (*m).into()).collect()));
+        page.set_views(model(VIEWS.iter().map(|v| (*v).into()).collect()));
+        page.set_active_view(self.view as i32);
+        self.show_columns(&page, event, &all, selected_runner);
         page.set_active_mode(self.by_course as i32);
         page.set_ranking_search_text(self.ranking_search.as_str().into());
         page.set_search_text(self.search.as_str().into());
@@ -126,9 +163,9 @@ impl ResultsState {
         page.set_chips(model(chips));
         let arrived = format!("{back} arrivé{}", if back > 1 { "s" } else { "" });
         // The band of the prototype: no count of rankings; on a phone, without the withdrawals.
-        // The generator makes no withdrawal yet: there is none to count.
+        let retired = event.runners.iter().filter(|r| r.outcome == Outcome::Retired).count();
         page.set_summary_short(format!("{arrived} · {racing} en course").into());
-        page.set_summary(format!("{arrived} · {racing} en course · 0 abandon").into());
+        page.set_summary(format!("{arrived} · {racing} en course · {retired} abandon{}", if retired > 1 { "s" } else { "" }).into());
 
         let arrived_count = |ranking: &Ranking| {
             ranking.entries.iter().filter(|(i, n)| event.runners[*i].runs[*n].result.is_some()).count()
@@ -190,6 +227,8 @@ impl ResultsState {
             Vec::new()
         } else {
             vec![FilterGroup {
+                search: SharedString::new(),
+                searchable: false,
                 key: 0,
                 title: "Catégorie".into(),
                 choices: model(
@@ -251,5 +290,150 @@ impl ResultsState {
             },
         );
         page.set_rows(model(rows));
+    }
+
+    // The columns, one per ranking, side by side (brief Cowork, 11/11): place, name, time,
+    // gap, state. Valid results first, then the rest; the runners still out last.
+    fn show_columns(&self, page: &Results, event: &Event, all: &[Ranking], selected_runner: Option<usize>) {
+        // What a run says: classed (with its time), out, or a result that does not count.
+        let state_of = |i: usize, n: usize| -> (usize, Label) {
+            let runner = &event.runners[i];
+            match (runner.outcome, runner.runs[n].result) {
+                (Outcome::Retired, _) => (3, Label::new("Abandon", Kind::Inactive)),
+                (Outcome::Disqualified, _) => (4, Label::new("Disqualifié", Kind::Pm)),
+                (_, Some((_, true))) => (0, Label::new("OK", Kind::Ok)),
+                (_, Some((_, false))) => (2, Label::new("PM", Kind::Pm)),
+                (_, None) if runner.is_racing() => (1, Label::new("En course", Kind::Racing)),
+                _ => (9, Label::default()),
+            }
+        };
+        let words: Vec<&str> = self.search.split_whitespace().collect();
+        let mut focus = -1;
+        let mut columns = Vec::new();
+        for (r, ranking) in all.iter().enumerate() {
+            if self.column.is_some_and(|c| c != r) {
+                continue;
+            }
+            let mut entries: Vec<(usize, usize, usize, u32)> = ranking
+                .entries
+                .iter()
+                .map(|(i, n)| {
+                    let (state, _) = state_of(*i, *n);
+                    (*i, *n, state, event.runners[*i].runs[*n].result.map_or(u32::MAX, |(s, _)| s))
+                })
+                .filter(|(_, _, state, _)| *state != 9)
+                .collect();
+            entries.sort_by_key(|(_, _, state, seconds)| (*state, *seconds));
+            let best = entries.iter().find(|e| e.2 == 0).map_or(0, |e| e.3);
+            let classed = entries.iter().filter(|e| e.2 == 0).count();
+            let racing = entries.iter().filter(|e| e.2 == 1).count();
+            let mut rows = Vec::new();
+            for (place, (i, _, state, seconds)) in entries.iter().copied().enumerate() {
+                if self.state.is_some_and(|s| s != state) {
+                    continue;
+                }
+                let runner = &event.runners[i];
+                let text = format!("{} {} {}", runner.name(), runner.club, runner.card.unwrap_or_default()).to_lowercase();
+                let found = !words.is_empty() && words.iter().all(|w| text.contains(w));
+                if found && focus < 0 {
+                    focus = columns.len() as i32;
+                }
+                if selected_runner == Some(i) && focus < 0 {
+                    focus = columns.len() as i32;
+                }
+                rows.push(ResultRow {
+                    runner: i as i32,
+                    place: if state == 0 { (place + 1).to_string().into() } else { SharedString::new() },
+                    place_note: SharedString::new(),
+                    family: runner.family.into(),
+                    first: runner.first.into(),
+                    club: runner.club.into(),
+                    category: runner.category.as_str().into(),
+                    time: if seconds == u32::MAX { SharedString::new() } else { format_time(seconds).into() },
+                    gap: if state == 0 && seconds > best { format!("+{}", format_time(seconds - best)).into() } else { SharedString::new() },
+                    badge: badge(&state_of(i, entries[place].1).1),
+                    crossed: state >= 2,
+                    selected: selected_runner == Some(i) || found,
+                });
+            }
+            columns.push(ResultColumn {
+                index: r as i32,
+                title: ranking.title.as_str().into(),
+                tone: ranking.tone,
+                state: if racing > 0 {
+                    format!("Provisoire · {classed} classé{} · {racing} en forêt", if classed > 1 { "s" } else { "" }).into()
+                } else {
+                    format!("{classed} classé{}", if classed > 1 { "s" } else { "" }).into()
+                },
+                rows: model(rows),
+            });
+        }
+        page.set_columns(model(columns));
+        page.set_focus_column(focus);
+
+        // The Filtres of the columns: the rankings, then the states.
+        let ranking_names: Vec<String> = all.iter().map(|r| r.label.clone()).collect();
+        let groups: [(&str, Vec<String>, Option<usize>); 2] = [
+            (if self.by_course { "Circuit" } else { "Catégorie" }, ranking_names, self.column),
+            ("État", STATES.iter().map(|s| s.to_string()).collect(), self.state),
+        ];
+        page.set_column_filter_groups(model(
+            groups
+                .iter()
+                .enumerate()
+                .map(|(g, (title, names, chosen))| FilterGroup {
+                    search: SharedString::new(),
+                    searchable: false,
+                    key: g as i32,
+                    title: (*title).into(),
+                    choices: model(
+                        names
+                            .iter()
+                            .enumerate()
+                            .map(|(c, n)| FilterChoice {
+                                label: n.as_str().into(),
+                                tone: if g == RANKING { all[c].tone } else { -1 },
+                                active: *chosen == Some(c),
+                            })
+                            .collect(),
+                    ),
+                })
+                .collect(),
+        ));
+        page.set_column_filters(model(
+            groups
+                .iter()
+                .enumerate()
+                .filter_map(|(g, (_, names, chosen))| {
+                    let c = (*chosen)?;
+                    Some(ActiveFilter {
+                        label: names.get(c)?.as_str().into(),
+                        tone: if g == RANKING { all[c].tone } else { -1 },
+                        group: g as i32,
+                        choice: c as i32,
+                    })
+                })
+                .collect(),
+        ));
+
+        // The blocks of figures: during the race, who is classed, out, mispunched; after it,
+        // what went wrong too (brief Cowork, 12/11). None before.
+        let count = |s: usize| all.iter().flat_map(|r| &r.entries).filter(|(i, n)| state_of(*i, *n).0 == s).count();
+        let racing = event.runners.iter().any(|r| r.is_racing());
+        let started = event.runners.iter().any(|r| r.started);
+        let wanted: &[usize] = if !started { &[] } else if racing { &[0, 1, 2] } else { &[0, 2, 3, 4] };
+        page.set_stats(model(
+            wanted
+                .iter()
+                .filter(|s| count(**s) > 0)
+                .map(|s| StatBlock {
+                    label: STATES[*s].into(),
+                    count: count(*s).to_string().into(),
+                    group: STATE as i32,
+                    choice: *s as i32,
+                    active: self.state == Some(*s),
+                })
+                .collect(),
+        ));
     }
 }

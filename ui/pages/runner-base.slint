@@ -5,12 +5,13 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
-import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold, Sheet } from "../components/zones.slint";
+import { PrimaryButton, RowButton, SecondaryButton } from "../components/buttons.slint";
+import { Tabs } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
-import { Home } from "home.slint";
+import { BadgeKind, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText } from "courses.slint";
-import { Cell, Title } from "participants.slint";
+import { Cell, PanelSet, SetItem, StatBlock, StatsRows, Title } from "participants.slint";
 import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
 import { DetailLine, DetailTitle } from "cards.slint";
 
@@ -26,7 +27,17 @@ export struct BaseRunnerRow {
     kind: string,
     card: string,
     points: string,
+    duplicate: bool,    // looks like another record (Robin, 12/11)
     selected: bool,
+}
+
+// A club, in the Clubs sub-tab.
+export struct ClubLine {
+    name: string,
+    league: string,
+    number: string,
+    runners: string,
+    twin: string,       // « Même club que … ? », or empty
 }
 
 export struct BaseIssue {
@@ -37,6 +48,17 @@ export struct BaseIssue {
 
 export global RunnerBase {
     in property <[BaseRunnerRow]> rows;
+    in property <bool> clubs-tab;             // the panel: Coureurs or Clubs (Robin, 12/11)
+    in property <PanelSet> main-set;
+    in property <string> sets-title;          // Origine, Ligues
+    in property <[PanelSet]> sets;
+    in property <int> active-set: -1;
+    in property <[StatBlock]> stats;
+    in property <[ClubLine]> club-rows;
+    callback select-tab(bool);
+    callback select-set(int);
+    callback pick-stat(int, int);
+    callback show-club(string);
     in property <[LiveFilter]> filters;
     in property <int> active-filter;
     in property <[FilterGroup]> filter-groups;
@@ -96,8 +118,13 @@ component RunnerBaseTable {
     in property <length> available-width;
 
     property <bool> full: root.available-width >= Theme.base-full-width;
-    property <length> fixed: Theme.base-club-width + Theme.base-category-width + Theme.base-kind-width + Theme.base-card-width
-        + (root.full ? Theme.base-first-width + Theme.base-league-width + Theme.base-year-width + Theme.base-licence-width + Theme.base-points-width : 0px);
+    // Ligue and Points CN are in the runner's detail (Robin, 12/11); the last column holds the
+    // « Doublon ? » mark and its button.
+    // A narrow table (iPad portrait) keeps the name, the club, the category and the button:
+    // the type and the card are in the detail.
+    property <length> duplicate-width: root.full ? Theme.base-duplicate-width : Theme.base-duplicate-narrow-width;
+    property <length> fixed: Theme.base-club-width + Theme.base-category-width + root.duplicate-width
+        + (root.full ? Theme.base-first-width + Theme.base-year-width + Theme.base-licence-width + Theme.base-kind-width + Theme.base-card-width : 0px);
     property <length> name-width: root.available-width - root.fixed;
 
     VerticalLayout {
@@ -107,13 +134,12 @@ component RunnerBaseTable {
             Title { width: root.name-width; label: "Nom"; sorted: RunnerBase.sort-column == 0; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(0); } }
             if root.full: Title { width: Theme.base-first-width; label: "Prénom"; sorted: RunnerBase.sort-column == 1; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(1); } }
             Title { width: Theme.base-club-width; label: "Club"; sorted: RunnerBase.sort-column == 2; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(2); } }
-            if root.full: Title { width: Theme.base-league-width; label: "Ligue"; sorted: RunnerBase.sort-column == 3; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(3); } }
             Title { width: Theme.base-category-width; label: "Cat."; sorted: RunnerBase.sort-column == 4; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(4); } }
             if root.full: Title { width: Theme.base-year-width; label: "Année"; sorted: RunnerBase.sort-column == 5; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(5); } }
             if root.full: Title { width: Theme.base-licence-width; label: "Licence"; sorted: RunnerBase.sort-column == 6; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(6); } }
-            Title { width: Theme.base-kind-width; label: "Type"; sorted: RunnerBase.sort-column == 7; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(7); } }
-            Title { width: Theme.base-card-width; label: "Puce"; sorted: RunnerBase.sort-column == 8; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(8); } }
-            if root.full: Title { width: Theme.base-points-width; label: "Points CN"; sorted: RunnerBase.sort-column == 9; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(9); } }
+            if root.full: Title { width: Theme.base-kind-width; label: "Type"; sorted: RunnerBase.sort-column == 7; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(7); } }
+            if root.full: Title { width: Theme.base-card-width; label: "Puce"; sorted: RunnerBase.sort-column == 8; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(8); } }
+            Rectangle { width: root.duplicate-width; }
         }
         RowLine { vertical-stretch: 0; }
         if RunnerBase.empty != "": Text {
@@ -134,7 +160,7 @@ component RunnerBaseTable {
                     if n > 0: RowLine { }
                     Rectangle {
                         min-height: Theme.zone;
-                        background: row.selected ? Theme.row-selected : transparent;
+                        background: row.selected ? Theme.row-selected : row.duplicate ? Theme.row-to-check : transparent;
                         TouchArea {
                             mouse-cursor: pointer;
                             clicked => { RunnerBase.select-row(row.id); }
@@ -154,13 +180,19 @@ component RunnerBaseTable {
                                 padding-left: Theme.space;
                                 Cell { text: row.club; wrap: word-wrap; }
                             }
-                            if root.full: RowCell { width: Theme.base-league-width; Cell { text: row.league; } }
                             RowCell { width: Theme.base-category-width; Cell { text: row.category; } }
                             if root.full: RowCell { width: Theme.base-year-width; Cell { text: row.year; } }
                             if root.full: RowCell { width: Theme.base-licence-width; Cell { text: row.licence; } }
-                            RowCell { width: Theme.base-kind-width; Cell { text: row.kind; } }
-                            RowCell { width: Theme.base-card-width; Cell { text: row.card; } }
-                            if root.full: RowCell { width: Theme.base-points-width; Cell { text: row.points; } }
+                            if root.full: RowCell { width: Theme.base-kind-width; Cell { text: row.kind; } }
+                            if root.full: RowCell { width: Theme.base-card-width; Cell { text: row.card; } }
+                            HorizontalLayout {
+                                width: root.duplicate-width;
+                                padding-right: Theme.space;
+                                spacing: Theme.space;
+                                alignment: end;
+                                if row.duplicate && root.full: VerticalLayout { alignment: center; StatusBadge { status: Home.status-of({ word: "Doublon ?", kind: BadgeKind.to-check }); } }
+                                if row.duplicate: RowButton { label: "Comparer"; }
+                            }
                         }
                     }
                 }
@@ -213,6 +245,96 @@ component RunnerBaseList {
     }
 }
 
+// The clubs: league, FFCO number, runners; a club that looks like another is to merge
+// (Robin, 12/11); the others lead to their runners.
+component ClubsLines {
+    VerticalLayout {
+        HorizontalLayout {
+            height: Theme.table-header-height + Theme.space;
+            Title { horizontal-stretch: 1; label: "Club"; }
+            Title { width: Theme.base-league-width; label: "Ligue"; }
+            Title { width: Theme.base-licence-width; label: "N° FFCO"; }
+            Title { width: Theme.base-licence-width; label: "Coureurs"; }
+            Rectangle { width: Theme.base-club-action-width; }
+        }
+        RowLine { }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: lines.preferred-height;
+            lines := VerticalLayout {
+                alignment: start;
+                for club in RunnerBase.club-rows: VerticalLayout {
+                    Rectangle {
+                        min-height: Theme.zone;
+                        background: club.twin != "" ? Theme.row-to-check : transparent;
+                        HorizontalLayout {
+                            HorizontalLayout { horizontal-stretch: 1; padding-left: Theme.space; Cell { text: club.name; font-weight: Theme.weight-screen-title; } }
+                            RowCell { width: Theme.base-league-width; Cell { text: club.league; } }
+                            RowCell { width: Theme.base-licence-width; Cell { text: club.number; } }
+                            RowCell { width: Theme.base-licence-width; Cell { text: club.runners; } }
+                            HorizontalLayout {
+                                width: Theme.base-club-action-width;
+                                padding-right: Theme.space;
+                                spacing: Theme.space;
+                                alignment: end;
+                                if club.twin != "": VerticalLayout { alignment: center; StatusBadge { status: Home.status-of({ word: club.twin, kind: BadgeKind.to-check }); } }
+                                if club.twin != "": RowButton { label: "Fusionner"; }
+                                if club.twin == "": RowButton {
+                                    go: true;
+                                    label: "Voir ses coureurs ›";
+                                    clicked => { RunnerBase.show-club(club.name); }
+                                }
+                            }
+                        }
+                    }
+                    RowLine { }
+                }
+            }
+        }
+    }
+}
+
+// The panel (Robin, 12/11): Coureurs / Clubs as sub-tabs, the main choice apart, a sub-zone
+// (Origine, Ligues), then the figures.
+component RunnerBasePanel inherits Sheet {
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space-small;
+        Tabs {
+            tabs: [{ label: "Coureurs" }, { label: "Clubs" }];
+            active: RunnerBase.clubs-tab ? 1 : 0;
+            clicked(i) => { RunnerBase.select-tab(i == 1); }
+        }
+        Rectangle { height: Theme.space-small; }
+        SetItem {
+            main: true;
+            set: RunnerBase.main-set;
+            active: RunnerBase.active-set < 0;
+            clicked => { RunnerBase.select-set(-1); }
+        }
+        HorizontalLayout {
+            padding: Theme.space-small;
+            RowLine { }
+        }
+        Text {
+            text: RunnerBase.sets-title;
+            color: Theme.text-secondary;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-block-title;
+        }
+        for set[i] in RunnerBase.sets: SetItem {
+            set: set;
+            active: RunnerBase.active-set == i;
+            clicked => { RunnerBase.select-set(i); }
+        }
+        Rectangle { vertical-stretch: 1; }
+        StatsRows {
+            stats: RunnerBase.stats;
+            picked(g, c) => { RunnerBase.pick-stat(g, c); }
+        }
+    }
+}
+
 component RunnerBaseContent {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -224,15 +346,26 @@ component RunnerBaseContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
+        // A phone: the head and the list in one card. Wider: the head is a band of its own,
+        // over the card of the table (brief Cowork, 11/11).
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
-            background: Theme.card;
+            background: root.narrow ? Theme.card : transparent;
             border-radius: Theme.card-radius;
-            border-width: Theme.card-outline-width;
+            border-width: root.narrow ? Theme.card-outline-width : 0px;
             border-color: Theme.card-outline;
-            // On a phone the whole list is in the card: too tall for the layer a clip draws into.
-            clip: !root.narrow;
+            clip: false;
             VerticalLayout {
+                spacing: root.narrow ? 0px : Theme.space-medium;
+                Rectangle {
+                vertical-stretch: 0;
+                background: root.narrow ? transparent : Theme.card;
+                border-radius: Theme.sheet-radius;
+                border-width: root.narrow ? 0px : Theme.card-outline-width;
+                border-color: Theme.card-outline;
+                drop-shadow-blur: root.narrow ? 0px : Theme.sheet-shadow-blur;
+                drop-shadow-offset-y: root.narrow ? 0px : Theme.sheet-shadow-offset;
+                drop-shadow-color: Theme.sheet-shadow;
                 VerticalLayout {
                     vertical-stretch: 0;
                     padding: Theme.space;
@@ -242,10 +375,13 @@ component RunnerBaseContent {
                     HorizontalLayout {
                         spacing: Theme.space;
                         PrimaryButton {
-                            label: root.narrow ? "Ajouter" : "Ajouter un coureur";
+                            label: root.narrow || root.stacked ? "Ajouter" : RunnerBase.clubs-tab ? "Ajouter un club" : "Ajouter un coureur";
                             icon: Icons.plus;
                             has-icon: true;
                         }
+                        // What we add, next to it, by the sub-tab (Robin, 12/11).
+                        if !root.narrow && !RunnerBase.clubs-tab: SecondaryButton { label: "Importer FFCO…"; }
+                        if !root.narrow && RunnerBase.clubs-tab: SecondaryButton { label: "Fusionner des clubs…"; }
                         if !root.narrow && !root.stacked: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
@@ -337,11 +473,25 @@ component RunnerBaseContent {
                         }
                     }
                 }
-                RowLine { vertical-stretch: 0; }
+                }
+                if root.narrow: RowLine { vertical-stretch: 0; }
                 if root.narrow: RunnerBaseList { }
-                if !root.narrow: RunnerBaseTable {
+                if !root.narrow && RunnerBase.clubs-tab: Sheet {
                     vertical-stretch: 1;
-                    available-width: root.available-width;
+                    clip: true;
+                    ClubsLines {
+                        width: parent.width;
+                        height: parent.height;
+                    }
+                }
+                if !root.narrow && !RunnerBase.clubs-tab: Sheet {
+                    vertical-stretch: 1;
+                    clip: true;
+                    RunnerBaseTable {
+                        width: parent.width;
+                        height: parent.height;
+                        available-width: root.available-width;
+                    }
                 }
             }
         }
@@ -489,11 +639,14 @@ export component RunnerBasePage {
             available-width: root.available-width;
         }
         if root.layout-mode != LayoutMode.narrow: Rectangle {
-            RunnerBaseContent {
-                width: parent.width;
-                height: parent.height;
-                layout-mode: root.layout-mode;
-                available-width: root.available-width;
+            HorizontalLayout {
+                spacing: Theme.button-margin;
+                RunnerBasePanel { width: Theme.course-list-width; }
+                RunnerBaseContent {
+                    horizontal-stretch: 1;
+                    layout-mode: root.layout-mode;
+                    available-width: root.available-width - Theme.course-list-width - Theme.button-margin;
+                }
             }
             SideDetail {
                 width: parent.width;

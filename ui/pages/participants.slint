@@ -6,9 +6,9 @@ import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { ReaderTile, Readers } from "../components/reader-tile.slint";
-import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton, RowButton } from "../components/buttons.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
-import { ActiveFilter, FilterButton, FilterGroup, FiltersContent, SettingRow, Sheet, SheetTitle, Unfold } from "../components/zones.slint";
+import { ActiveFilter, FilterButton, FilterGroup, FiltersContent, SettingRow, Sheet, Unfold } from "../components/zones.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SequenceStop, SmallText, SortMark, StopsFlow, SummaryZone, Switch } from "courses.slint";
@@ -38,6 +38,43 @@ export struct Passage {
     badge: Badge,
 }
 
+// A choice of the panel, with how many it holds.
+export struct PanelSet {
+    name: string,
+    count: string,
+    detail: string,
+}
+
+// A block of figures at the bottom of the panel: a click sets its filter (Robin, 11/11).
+export struct StatBlock {
+    label: string,
+    count: string,
+    group: int,         // the filter group; -1 none, -2 the loan cards
+    choice: int,
+    active: bool,
+}
+
+// A loan card, in the Puces prêtées choice of the panel.
+export struct LoanRow {
+    index: int,         // its runner
+    card: string,
+    family: string,
+    first: string,
+    club: string,
+    badge: Badge,
+    back: string,       // « À rendre » once the runner is back, « Rendue » once given back
+    returned: bool,
+}
+
+// A club, in the Clubs choice of the panel.
+export struct ClubRow {
+    name: string,
+    entrants: string,
+    racing: string,
+    back: string,
+    lent: string,
+}
+
 export global Participants {
     in property <[ParticipantRow]> rows;
     in property <[string]> chips;
@@ -51,9 +88,12 @@ export global Participants {
     in property <string> search-text;
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
-    in property <string> lent-count;
-    in property <string> lent-detail;
-    in property <string> lent-name;
+    in property <[PanelSet]> sets;
+    in property <int> active-set;          // 1: the clubs, 2: the loan cards
+    in property <[ClubRow]> clubs;
+    in property <[LoanRow]> loans;
+    in property <[StatBlock]> stats;
+    in-out property <length> window-height;   // set by the window
 
     in property <bool> detail-open;
     in property <string> detail-name;
@@ -65,6 +105,11 @@ export global Participants {
     in property <[Passage]> passages;
 
     callback select-row(int);
+    callback select-set(int);
+    callback show-club(string);
+    callback pick-stat(int, int);
+    callback give-back(int);              // « Rendre » on a loan card           // all the participants, filtered on this club
+    callback search-filter(string);       // the field above the clubs, in the Filtres bubble
     callback sort-by(int);
     callback toggle-filter(int, int);
     callback clear-filters();
@@ -74,28 +119,6 @@ export global Participants {
 }
 
 // The loan cards of the event, in the side panel under its title.
-component LentCards {
-    VerticalLayout {
-        spacing: Theme.space-small;
-        HorizontalLayout {
-            alignment: start;
-            spacing: Theme.space;
-            Text {
-                text: Participants.lent-count;
-                color: Theme.text;
-                font-size: Theme.text-screen-title;
-                font-weight: Theme.weight-screen-title;
-                vertical-alignment: center;
-            }
-            SmallText {
-                text: Participants.lent-detail;
-                vertical-alignment: center;
-            }
-        }
-        if Participants.lent-name != "": SmallText { text: Participants.lent-name; }
-    }
-}
-
 export component Title inherits Rectangle {
     callback clicked();
     in property <string> label;
@@ -247,7 +270,7 @@ component ParticipantsTable {
                                     if root.with-action || !row.no-card: Cell { text: row.card; wrap: word-wrap; }
                                     if !root.with-action && row.no-card: HorizontalLayout {
                                         alignment: start;
-                                        PrimaryButton { label: root.wide ? "Attribuer une puce" : "Attribuer"; in-row: true; }
+                                        RowButton { label: "Attribuer"; }
                                     }
                                 }
                                 if root.wide: HorizontalLayout {
@@ -262,7 +285,7 @@ component ParticipantsTable {
                                     alignment: start;
                                     if row.no-card: VerticalLayout {
                                         alignment: center;
-                                        PrimaryButton { label: "Attribuer une puce"; in-row: true; }
+                                        RowButton { label: "Attribuer"; }
                                     }
                                 }
                             }
@@ -312,7 +335,7 @@ component ParticipantsList {
                             font-weight: Theme.weight-screen-title;
                             horizontal-alignment: right;
                         }
-                        if row.no-card: PrimaryButton { label: "Attribuer"; in-row: true; }
+                        if row.no-card: RowButton { label: "Attribuer"; }
                     }
                 }
             }
@@ -336,11 +359,13 @@ component ParticipantsHead {
         spacing: Theme.space;
         HorizontalLayout {
             spacing: Theme.space;
+            // What we add: the new participant in orange, Importer next to it (Robin, 11/11).
             PrimaryButton {
                 label: root.roomy ? "Nouveau participant" : "Nouveau";
                 icon: Icons.plus;
                 has-icon: true;
             }
+            if !root.narrow: SecondaryButton { label: "Importer…"; }
             Rectangle { horizontal-stretch: 1; }
             if Participants.alert-title != "": AlertPill {
                 title: Participants.alert-title;
@@ -402,6 +427,309 @@ component ParticipantsHead {
                 edited(text) => { Participants.search(text); }
             }
         }
+    }
+}
+
+// A choice of the panel: its name, how many it holds, and a word more when it helps.
+export component SetItem inherits Rectangle {
+    callback clicked();
+    in property <bool> main;   // « Tous »: a size larger (Robin, 11/11)
+    in property <PanelSet> set;
+    in property <bool> active;
+
+    border-radius: Theme.field-radius;
+    background: root.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding: Theme.space;
+        spacing: Theme.space;
+        min-height: Theme.zone;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: root.set.name;
+                color: root.active ? Theme.active-tab-text : Theme.text;
+                font-size: root.main ? Theme.text-body : Theme.text-help;
+                font-weight: Theme.weight-screen-title;
+                wrap: word-wrap;
+            }
+            if root.set.detail != "": Text {
+                text: root.set.detail;
+                color: root.active ? Theme.active-tab-text : Theme.text-secondary;
+                font-size: Theme.text-help;
+                wrap: word-wrap;
+            }
+        }
+        Text {
+            text: root.set.count;
+            color: root.active ? Theme.active-tab-text : Theme.text-secondary;
+            font-size: Theme.text-help;
+            font-weight: Theme.weight-screen-title;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// The floating panel: what the card shows, with no title (brief Cowork, 11/11).
+// A block of figures: the number in big, its word under it.
+export component StatTile inherits Rectangle {
+    callback clicked();
+    in property <StatBlock> block;
+
+    border-radius: Theme.field-radius;
+    border-width: Theme.thin-outline-width;
+    border-color: root.block.active ? Theme.active-tab-background : Theme.thin-outline;
+    background: root.block.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    VerticalLayout {
+        padding: Theme.space;
+        Text {
+            text: root.block.count;
+            color: root.block.active ? Theme.active-tab-text : Theme.text;
+            font-size: Theme.text-stat;
+            font-weight: Theme.weight-screen-title;
+        }
+        Text {
+            text: root.block.label;
+            color: root.block.active ? Theme.active-tab-text : Theme.text-secondary;
+            font-size: Theme.text-help;
+            overflow: elide;
+        }
+    }
+}
+
+// The blocks of figures, two by row: four if the window is tall enough, two otherwise.
+export component StatsRows inherits VerticalLayout {
+    in property <[StatBlock]> stats;
+    callback picked(int, int);
+    property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;
+
+    spacing: Theme.space;
+    for row in [0, 2]: HorizontalLayout {
+        spacing: Theme.space;
+        visible: row < root.shown && root.stats.length > row;
+        height: self.visible ? self.preferred-height : 0px;
+        for n in [0, 1]: cell := Rectangle {
+            horizontal-stretch: 1;
+            min-height: tile.preferred-height;
+            tile := StatTile {
+                visible: root.stats.length > row + n;
+                width: cell.width;
+                block: root.stats[row + n];
+                clicked => { root.picked(self.block.group, self.block.choice); }
+            }
+        }
+    }
+}
+
+component ParticipantsPanel inherits Sheet {
+    // Four blocks when the window is tall enough, two otherwise: never more (Robin, 11/11).
+    property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;
+
+    VerticalLayout {
+      Flickable {
+        vertical-stretch: 1;
+        content-height: column.preferred-height;
+        column := VerticalLayout {
+            padding: Theme.space;
+            spacing: Theme.space-small;
+            alignment: start;
+            for set[i] in Participants.sets: VerticalLayout {
+                spacing: Theme.space-small;
+                SetItem {
+                    main: i == 0;
+                    set: set;
+                    active: Participants.active-set == i;
+                    clicked => { Participants.select-set(i); }
+                }
+                // The main choice apart from the list.
+                if i == 0: HorizontalLayout {
+                    padding: Theme.space-small;
+                    RowLine { }
+                }
+            }
+        }
+      }
+      // The figures that matter now, two by row; a click filters on them.
+      VerticalLayout {
+        vertical-stretch: 0;
+        padding: Theme.space;
+        spacing: Theme.space;
+        for row in [0, 2]: HorizontalLayout {
+            spacing: Theme.space;
+            visible: row < root.shown && Participants.stats.length > row;
+            height: self.visible ? self.preferred-height : 0px;
+            for n in [0, 1]: cell := Rectangle {
+                horizontal-stretch: 1;
+                min-height: tile.preferred-height;
+                tile := StatTile {
+                    visible: Participants.stats.length > row + n;
+                    width: cell.width;
+                    block: Participants.stats[row + n];
+                    clicked => { Participants.pick-stat(self.block.group, self.block.choice); }
+                }
+            }
+        }
+      }
+    }
+}
+
+// The clubs: one row each, with their runners (brief Cowork, 11/11).
+component ClubsTable {
+    // The counts share what the name and the button leave, up to their own width.
+    property <length> count-width: max(Theme.club-count-min-width,
+        min(Theme.club-count-width, (root.width - Theme.club-name-min-width - Theme.club-link-width) / 4));
+
+    VerticalLayout {
+        HorizontalLayout {
+            height: Theme.table-header-height + Theme.space;
+            Title { horizontal-stretch: 1; min-width: Theme.club-name-min-width; label: "Club"; }
+            Title { width: root.count-width; label: "Inscrits"; }
+            Title { width: root.count-width; label: "En course"; }
+            Title { width: root.count-width; label: "Revenus"; }
+            Title { width: root.count-width; label: "Puces prêtées"; }
+            Rectangle { width: Theme.club-link-width; }
+        }
+        RowLine { }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height;
+            rows := VerticalLayout {
+                alignment: start;
+                for club in Participants.clubs: VerticalLayout {
+                    HorizontalLayout {
+                        min-height: Theme.zone;
+                        HorizontalLayout {
+                            horizontal-stretch: 1;
+                            min-width: Theme.club-name-min-width;
+                            padding-left: Theme.space;
+                            Cell { text: club.name; font-weight: Theme.weight-screen-title; }
+                        }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.entrants; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.racing; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.back; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.lent; } }
+                        HorizontalLayout {
+                            width: Theme.club-link-width;
+                            padding-right: Theme.space;
+                            alignment: end;
+                            VerticalLayout {
+                                alignment: center;
+                                RowButton {
+                                    go: true;
+                                    label: "Voir ses participants ›";
+                                    clicked => { Participants.show-club(club.name); }
+                                }
+                            }
+                        }
+                    }
+                    RowLine { }
+                }
+            }
+        }
+    }
+}
+
+// On a phone: the head and the list in one card. Wider: the head is a band of its own, over
+// the card of the table (brief Cowork, 11/11).
+// The loan cards: one row each, with its runner; a click opens the runner (Robin, 11/11).
+component LoansTable {
+    VerticalLayout {
+        HorizontalLayout {
+            height: Theme.table-header-height + Theme.space;
+            Title { width: Theme.loan-card-width; label: "Puce"; }
+            Title { horizontal-stretch: 1; label: "Coureur"; }
+            Title { width: Theme.loan-club-width; label: "Club"; }
+            Title { width: Theme.loan-state-width; label: "État"; }
+            Title { width: Theme.loan-back-width; label: "Retour"; }
+        }
+        RowLine { }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height;
+            rows := VerticalLayout {
+                alignment: start;
+                for loan in Participants.loans: VerticalLayout {
+                    Rectangle {
+                        min-height: Theme.zone;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { Participants.select-row(loan.index); }
+                        }
+                        HorizontalLayout {
+                            HorizontalLayout { width: Theme.loan-card-width; padding-left: Theme.space; Cell { text: loan.card; font-weight: Theme.weight-screen-title; } }
+                            HorizontalLayout {
+                                horizontal-stretch: 1;
+                                padding-left: Theme.space;
+                                spacing: Theme.space-small;
+                                alignment: start;
+                                Cell { text: loan.family; font-weight: Theme.weight-screen-title; }
+                                Cell { text: loan.first; }
+                            }
+                            HorizontalLayout { width: Theme.loan-club-width; padding-left: Theme.space; Cell { text: loan.club; } }
+                            HorizontalLayout {
+                                width: Theme.loan-state-width;
+                                padding-left: Theme.space;
+                                alignment: start;
+                                VerticalLayout { alignment: center; StatusBadge { status: Home.status-of(loan.badge); } }
+                            }
+                            HorizontalLayout {
+                                width: Theme.loan-back-width;
+                                padding-left: Theme.space;
+                                padding-right: Theme.space;
+                                spacing: Theme.space;
+                                Cell {
+                                    text: loan.back;
+                                    color: loan.returned ? Theme.text-secondary : Theme.text;
+                                    font-weight: loan.returned ? Theme.weight-regular : Theme.weight-screen-title;
+                                }
+                                if loan.back == "À rendre": VerticalLayout {
+                                    alignment: center;
+                                    RowButton {
+                                        label: "Rendre";
+                                        clicked => { Participants.give-back(loan.index); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    RowLine { }
+                }
+            }
+        }
+    }
+}
+
+component ParticipantsCard inherits Rectangle {
+    in property <length> available-width;
+
+    background: Theme.card;
+    border-radius: Theme.card-radius;
+    border-width: Theme.card-outline-width;
+    border-color: Theme.card-outline;
+    drop-shadow-blur: Theme.sheet-shadow-blur;
+    drop-shadow-offset-y: Theme.sheet-shadow-offset;
+    drop-shadow-color: Theme.sheet-shadow;
+    clip: true;
+    if Participants.active-set == 1: ClubsTable {
+        width: parent.width;
+        height: parent.height;
+    }
+    if Participants.active-set == 2: LoansTable {
+        width: parent.width;
+        height: parent.height;
+    }
+    if Participants.active-set == 0: ParticipantsTable {
+        width: parent.width;
+        height: parent.height;
+        available-width: root.available-width;
     }
 }
 
@@ -480,6 +808,14 @@ export component ParticipantDetail inherits Rectangle {
             SmallText { horizontal-stretch: 1; text: "Club"; }
             BubbleLabel { text: Participants.detail-club; wrap: no-wrap; }
         }
+        // The same filter as in the bubble, taken where the club is seen (Robin, 11/11).
+        HorizontalLayout {
+            alignment: end;
+            QuietButton {
+                label: "Filtrer sur ce club";
+                clicked => { Participants.show-club(Participants.detail-club); }
+            }
+        }
         HorizontalLayout {
             spacing: Theme.space;
             SmallText { horizontal-stretch: 1; text: "Puce"; }
@@ -553,27 +889,35 @@ export component ParticipantsPage {
         if !root.narrow: Rectangle {
             HorizontalLayout {
                 spacing: Theme.button-margin;
-                // The floating panel on the left: the reader, then the loan cards.
-                Sheet {
+                // The panel, then the reader apart, at the bottom left (brief Cowork, 11/11).
+                VerticalLayout {
                     width: Theme.course-list-width;
-                    VerticalLayout {
-                        padding: Theme.button-margin;   // the reader close to the edges (Robin, 11/11)
-                        spacing: Theme.space;
-                        alignment: start;
-                        ReaderTile {
-                            reader: Readers.entry;
-                            with-result: true;
-                            message: "Posez une puce sur la station";
-                        }
-                        Rectangle { height: Theme.space; }
-                        SheetTitle { text: "Puces prêtées"; }
-                        LentCards { }
+                    spacing: Theme.button-margin;
+                    ParticipantsPanel { vertical-stretch: 1; }
+                    ReaderTile {
+                        vertical-stretch: 0;
+                        reader: Readers.entry;
+                        with-result: true;
+                        message: "Posez une puce sur la station";
                     }
                 }
-                ParticipantsContent {
+                VerticalLayout {
                     horizontal-stretch: 1;
-                    layout-mode: root.layout-mode;
-                    available-width: root.content-width;
+                    spacing: Theme.space-medium;
+                    Sheet {
+                        vertical-stretch: 0;
+                        VerticalLayout {
+                            padding: Theme.space;
+                            ParticipantsHead {
+                                layout-mode: root.layout-mode;
+                                available-width: root.content-width - 2 * Theme.space;
+                            }
+                        }
+                    }
+                    ParticipantsCard {
+                        vertical-stretch: 1;
+                        available-width: root.content-width;
+                    }
                 }
             }
             // The detail: the same panel, sliding in from the right, over the table (which keeps
@@ -742,6 +1086,7 @@ export component ParticipantsBubble {
         if Courses.open-bubble == 7: FiltersContent {
             groups: Participants.filter-groups;
             toggle(g, c) => { Participants.toggle-filter(g, c); }
+            search(g, text) => { Participants.search-filter(text); }
             clear => { Participants.clear-filters(); }
             close => { Courses.close-bubble(); }
         }

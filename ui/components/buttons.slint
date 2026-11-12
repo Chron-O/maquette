@@ -174,3 +174,44 @@ export component MoreButton {
         clicked => { root.clicked(); }
     }
 }
+
+// The button of a row, the same in every table and list (Robin, 11/11): a pill outlined in
+// orange for something to do (Attribuer, Rendre, Réserver), in dark green to go and see
+// elsewhere (Voir ses participants ›). Never filled: the orange fill is the screen's button.
+export component RowButton {
+    callback clicked();
+    in property <string> label;
+    in property <bool> go;   // goes elsewhere: dark green
+
+    property <color> ink: root.go ? Theme.row-button-go : Theme.row-button-do;
+
+    min-height: Theme.zone;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    Rectangle {
+        height: Theme.row-button-height;
+        y: (root.height - self.height) / 2;
+        border-radius: self.height / 2;
+        border-width: Theme.row-button-outline;
+        border-color: root.ink;
+        background: zone.has-hover ? (root.go ? Theme.row-button-go-hover : Theme.row-button-do-hover) : transparent;
+        animate background { duration: Theme.tint-duration; }
+    }
+    HorizontalLayout {
+        padding-left: Theme.row-button-padding;
+        padding-right: Theme.row-button-padding;
+        Text {
+            text: root.label;
+            color: root.ink;
+            font-size: Theme.text-body;
+            font-weight: Theme.weight-screen-title;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

@@ -5,13 +5,13 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton, RowButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, CourseChip, HighlightChip, RowLine, SearchToggle, SmallText, SummaryZone, Switch } from "courses.slint";
-import { Cell, Title } from "participants.slint";
+import { Cell, Participants, StatBlock, StatTile, Title } from "participants.slint";
 import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
 
 export struct CourseMark {
@@ -64,11 +64,6 @@ export global Stations {
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
 
-    in property <string> gauge-title;
-    in property <string> gauge-count;
-    in property <string> gauge-total;
-    in property <float> gauge-share;
-    in property <string> gauge-detail;
 
     in property <[UsefulStation]> useful;
     in property <string> settings-spares;
@@ -101,6 +96,8 @@ export global Stations {
 
     callback select-mode(int);
     callback select-filter(int);
+    in property <[StatBlock]> stats;
+    callback pick-stat(int, int);
     callback toggle-filter(int, int);
     callback clear-filters();
     callback select-row(int);
@@ -159,9 +156,8 @@ component RowAction {
     HorizontalLayout {
         padding-left: Theme.space;
         alignment: start;
-        if root.label != "": PrimaryButton {
+        if root.label != "": RowButton {
             label: root.label;
-            in-row: true;
             clicked => {
                 if root.can-add {
                     Stations.add-row(root.index);
@@ -414,16 +410,27 @@ component StationsContent {
             narrow: root.narrow;
             stacked: root.available-width < Theme.reading-card-row-width;
         }
+        // A phone: the head and the list in one card. Wider: the head is a band of its own,
+        // over the card of the table (brief Cowork, 11/11).
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
-            background: Theme.card;
+            background: root.narrow ? Theme.card : transparent;
             border-radius: Theme.card-radius;
-            border-width: Theme.card-outline-width;
+            border-width: root.narrow ? Theme.card-outline-width : 0px;
             border-color: Theme.card-outline;
-            clip: true;
+            clip: root.narrow;
             VerticalLayout {
+                spacing: root.narrow ? 0px : Theme.space-medium;
+                Rectangle {
+                vertical-stretch: 0;
+                background: root.narrow ? transparent : Theme.card;
+                border-radius: Theme.sheet-radius;
+                border-width: root.narrow ? 0px : Theme.card-outline-width;
+                border-color: Theme.card-outline;
+                drop-shadow-blur: root.narrow ? 0px : Theme.sheet-shadow-blur;
+                drop-shadow-offset-y: root.narrow ? 0px : Theme.sheet-shadow-offset;
+                drop-shadow-color: Theme.sheet-shadow;
                 VerticalLayout {
-                    vertical-stretch: 0;
                     padding: Theme.space;
                     spacing: Theme.space;
                     // The add action, then on the right the alert, the filters and the search
@@ -494,59 +501,20 @@ component StationsContent {
                         }
                     }
                 }
-                RowLine { vertical-stretch: 0; }
+                }
+                if root.narrow: RowLine { vertical-stretch: 0; }
                 if root.narrow: StationsList { }
-                if !root.narrow: StationsTable {
+                if !root.narrow: Sheet {
                     vertical-stretch: 1;
-                    available-width: root.available-width;
+                    clip: true;
+                    StationsTable {
+                        width: parent.width;
+                        height: parent.height;
+                        available-width: root.available-width;
+                    }
                 }
             }
         }
-    }
-}
-
-component GaugeCard inherits Rectangle {
-    background: Theme.card;
-    border-radius: Theme.card-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
-    VerticalLayout {
-        padding: Theme.space-medium;
-        spacing: Theme.space;
-        Text {
-            text: Stations.gauge-title;
-            color: Theme.text;
-            font-size: Theme.text-help;
-            font-weight: Theme.weight-block-title;
-        }
-        HorizontalLayout {
-            alignment: start;
-            spacing: Theme.space;
-            Text {
-                text: Stations.gauge-count;
-                color: Theme.text;
-                font-size: Theme.text-screen-title;
-                font-weight: Theme.weight-screen-title;
-                vertical-alignment: center;
-            }
-            SmallText {
-                text: Stations.gauge-total;
-                wrap: no-wrap;
-                vertical-alignment: center;
-            }
-        }
-        Rectangle {
-            height: Theme.gauge-height;
-            border-radius: self.height / 2;
-            background: Theme.surface;
-            clip: true;
-            Rectangle {
-                x: 0;
-                width: parent.width * Stations.gauge-share;
-                background: Theme.live;
-            }
-        }
-        if Stations.gauge-detail != "": SmallText { text: Stations.gauge-detail; }
     }
 }
 
@@ -696,6 +664,28 @@ export component StationDetail inherits Rectangle {
     }
 }
 
+// The blocks of figures, two by row, at the bottom of the panel (brief Cowork, 12/11).
+component StatsGrid inherits VerticalLayout {
+    property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;
+
+    spacing: Theme.space;
+    for row in [0, 2]: HorizontalLayout {
+        spacing: Theme.space;
+        visible: row < root.shown && Stations.stats.length > row;
+        height: self.visible ? self.preferred-height : 0px;
+        for n in [0, 1]: cell := Rectangle {
+            horizontal-stretch: 1;
+            min-height: tile.preferred-height;
+            tile := StatTile {
+                visible: Stations.stats.length > row + n;
+                width: cell.width;
+                block: Stations.stats[row + n];
+                clicked => { Stations.pick-stat(self.block.group, self.block.choice); }
+            }
+        }
+    }
+}
+
 export component StationsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -720,23 +710,27 @@ export component StationsPage {
         if root.layout-mode != LayoutMode.narrow: Rectangle {
             HorizontalLayout {
                 spacing: Theme.button-margin;
-                // The floating panel on the left (brief zones-onglets § 3).
-                Sheet {
+                // The panel: the two tasks, what is worth reading, the figures; then the reader
+                // apart, at the bottom left (brief Cowork, 11/11).
+                VerticalLayout {
                     width: Theme.course-list-width;
-                    VerticalLayout {
-                        padding: Theme.button-margin;   // the reader close to the edges, as on Participants (Robin, 11/11)
-                        alignment: start;
-                        spacing: Theme.space;
-                        StationsReader { }
-                        Rectangle { height: Theme.space; }
-                        Tabs {
-                            tabs: Stations.modes;
-                            active: Stations.active-mode;
-                            clicked(i) => { Stations.select-mode(i); }
+                    spacing: Theme.button-margin;
+                    Sheet {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            padding: Theme.space;
+                            spacing: Theme.space;
+                            Tabs {
+                                tabs: Stations.modes;
+                                active: Stations.active-mode;
+                                clicked(i) => { Stations.select-mode(i); }
+                            }
+                            if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
+                            Rectangle { vertical-stretch: 1; }
+                            StatsGrid { }
                         }
-                        GaugeCard { }
-                        if Stations.active-mode == 1 && Stations.useful.length > 0: UsefulCard { }
                     }
+                    StationsReader { vertical-stretch: 0; }
                 }
                 StationsContent {
                     horizontal-stretch: 1;

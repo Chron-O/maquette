@@ -257,6 +257,12 @@ fn connect_participants(window: &App, state: &Rc<RefCell<AppState>>) {
     }
     let page = window.global::<Participants>();
     page.on_select_row(on_click(window, state, |p, i: i32| p.select_row(i as usize)));
+    page.on_select_set(on_click(window, state, |p, i: i32| p.select_set(i as usize)));
+    let pick = on_click(window, state, |p, (g, c): (i32, i32)| p.pick_stat(g, c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
+    page.on_give_back(on_click(window, state, |p, i: i32| p.give_back(i as usize)));
+    page.on_show_club(on_click(window, state, |p, name: slint::SharedString| p.show_club(&name)));
+    page.on_search_filter(on_click(window, state, |p, text: slint::SharedString| p.search_filter(&text)));
     page.on_sort_by(on_click(window, state, |p, i: i32| p.sort_by(i)));
     let toggle = on_click(window, state, |p, (g, c): (i32, i32)| p.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
@@ -304,6 +310,9 @@ fn connect_starts(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Starts>();
     page.on_select_row(on_click(window, state, |s, i: i32| s.select_row(i as usize)));
     page.on_sort_by(on_click(window, state, |s, i: i32| s.sort_by(i)));
+    let pick = on_click(window, state, |s, (_g, c): (i32, i32)| s.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
+    page.on_select_course(on_click(window, state, |s, i: i32| s.select_course(i)));
     page.on_select_group(on_click(window, state, |s, i: i32| s.select_group(i as usize)));
     page.on_select_point(on_click(window, state, |s, i: i32| s.select_point(i as usize)));
     let toggle = on_click(window, state, |s, (g, c): (i32, i32)| s.toggle_filter(g as usize, c as usize));
@@ -358,6 +367,8 @@ fn connect_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Stations>();
     page.on_select_mode(on_click(window, state, |s, i: i32| s.select_mode(i as usize)));
     page.on_select_filter(on_click(window, state, |s, i: i32| s.select_filter(i as usize)));
+    let pick = on_click(window, state, |s, (_g, c): (i32, i32)| s.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     let toggle = on_click(window, state, |s, (g, c): (i32, i32)| s.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |s, _: ()| s.clear_filters());
@@ -477,6 +488,13 @@ fn connect_results(window: &App, state: &Rc<RefCell<AppState>>) {
         }
     });
     page.on_select_ranking(on_click(window, state, |r, i: i32| r.select_ranking(i as usize)));
+    page.on_select_view(on_click(window, state, |r, i: i32| r.select_view(i as usize)));
+    let pick = on_click(window, state, |r, (_g, c): (i32, i32)| r.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
+    let toggle_column = on_click(window, state, |r, (g, c): (i32, i32)| r.toggle_column_filter(g as usize, c as usize));
+    page.on_toggle_column_filter(move |g, c| toggle_column((g, c)));
+    let clear_columns = on_click(window, state, |r, _: ()| r.clear_column_filters());
+    page.on_clear_column_filters(move || clear_columns(()));
     page.on_select_category(on_click(window, state, |r, i: i32| r.select_category(i as usize)));
     let toggle = on_click(window, state, |r, (g, c): (i32, i32)| r.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
@@ -522,6 +540,8 @@ fn connect_cards(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Cards>();
     page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
     page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    let pick = on_click(window, state, |x, (_g, c): (i32, i32)| x.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     let toggle = on_click(window, state, |page_state, (g, c): (i32, i32)| page_state.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |c, _: ()| c.clear_filters());
@@ -577,6 +597,8 @@ fn connect_club_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<ClubStations>();
     page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
     page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    let pick = on_click(window, state, |x, (_g, c): (i32, i32)| x.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     let toggle = on_click(window, state, |page_state, (g, c): (i32, i32)| page_state.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |c, _: ()| c.clear_filters());
@@ -615,6 +637,20 @@ fn connect_runner_base(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |r, _: ()| r.clear_filters());
     page.on_clear_filters(move || clear(()));
+    page.on_select_tab(on_click(window, state, |r, clubs: bool| r.select_tab(clubs)));
+    let pick = on_click(window, state, |r, (g, c): (i32, i32)| r.pick_stat(g as usize, c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
+    page.on_show_club(on_click(window, state, |r, name: slint::SharedString| r.show_club(&name)));
+    let (weak, state_for_set) = (window.as_weak(), state.clone());
+    page.on_select_set(move |set| {
+        {
+            let app = &mut *state_for_set.borrow_mut();
+            app.runner_base.select_set(set, app.data.as_ref());
+        }
+        if let Some(window) = weak.upgrade() {
+            state_for_set.borrow().show(&window);
+        }
+    });
     page.on_select_row(on_click(window, state, |r, id: i32| r.select_row(id as u32)));
     page.on_open_runner(on_click(window, state, |r, id: i32| r.open_runner(id as u32)));
     page.on_sort_by(on_click(window, state, |r, column: i32| r.sort_by(column as usize)));

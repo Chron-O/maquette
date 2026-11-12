@@ -9,26 +9,26 @@ import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
 import { Readers, ReaderInfo, ReaderMode } from "components/reader-tile.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
-import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue } from "pages/runner-base.slint";
+import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue, ClubLine } from "pages/runner-base.slint";
 import { ClubStations, ClubStationsPage, ClubStationsSettings, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
 import { Cards, CardsPage, CardsSettings, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
-import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, ResultRow } from "pages/results.slint";
+import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, ResultRow, ResultColumn } from "pages/results.slint";
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
-import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
-import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
+import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartCourse, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
+import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage, PanelSet, ClubRow, LoanRow, StatBlock } from "pages/participants.slint";
 import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Unfold, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
 import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
 import { Home, HomePage, HomeIndicators, IndicatorDots, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
-export { RunnerBase, BaseRunnerRow, BaseIssue }
+export { RunnerBase, ClubLine, BaseRunnerRow, BaseIssue }
 export { ClubStations, ClubStationRow, BatteryDueItem }
 export { Cards, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard }
-export { Results, ResultRanking, ResultRow }
+export { Results, ResultColumn, ResultRanking, ResultRow }
 export { Live, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
 export { Stations, StationRow, CourseMark, StationProblem, UsefulStation }
-export { Starts, StartRow, StartSection, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
-export { Participants, ParticipantRow, Passage, FilterChoice, FilterGroup, ActiveFilter }
+export { Starts, StartRow, StartSection, StartCourse, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
+export { Participants, ParticipantRow, Passage, PanelSet, ClubRow, LoanRow, StatBlock, FilterChoice, FilterGroup, ActiveFilter }
 export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
 export { Readers, ReaderInfo, ReaderMode }
@@ -80,7 +80,16 @@ component Header inherits Rectangle {
                 HeaderButton {
                     label: root.layout-mode == LayoutMode.narrow ? "‹" : "‹ " + Navigation.back-label;
                     arrow-only: root.layout-mode == LayoutMode.narrow;
-                    clicked => { Navigation.go-back(); }
+                    // The Direct open: ‹ Accueil only closes it (26/10). The indicators keep
+                    // their bubble and leave the Direct open (Robin, 11/11); the rest of the
+                    // header falls through to the click that closes it.
+                    clicked => {
+                        if Navigation.in-event && Navigation.live-open {
+                            Navigation.toggle-live();
+                        } else {
+                            Navigation.go-back();
+                        }
+                    }
                 }
             }
             if Navigation.home: VerticalLayout {
@@ -461,11 +470,20 @@ export component App inherits Window {
         + (Navigation.in-event ? Theme.tab-bubble-height + Theme.settings-tab-height - Theme.settings-tab-tuck
             : Navigation.cards-page || Navigation.stations-page ? Theme.settings-tab-height : 0px);
     property <length> left-margin: root.margin + root.safe-area-insets.left;
+    // The bottom band sits under the main content, never under the left panel (Robin, 11/11).
+    property <length> band-left: root.left-margin
+        + (root.layout-mode == LayoutMode.narrow ? 0px : Theme.course-list-width + Theme.button-margin);
     property <length> right-margin: root.margin + root.safe-area-insets.right;
     // On a phone, a bubble stops above the band and the Direct bar, never over them.
     property <length> bubble-floor: root.layout-mode == LayoutMode.narrow && !Navigation.live-open ? band-zone.y : 0px;
-    init => { Courses.bubble-floor = root.bubble-floor; }
+    // The window's height: a panel shows its blocks of figures by it, never by its own height,
+    // which they would change.
+    init => {
+        Courses.bubble-floor = root.bubble-floor;
+        Participants.window-height = root.height;
+    }
     changed bubble-floor => { Courses.bubble-floor = root.bubble-floor; }
+    changed height => { Participants.window-height = root.height; }
 
     // The Direct open: a click outside it only closes it (prototype, 26/10). Under the tabs and
     // the Direct button, which keep their own clicks (30/10: a tab closes it and opens).
@@ -522,31 +540,34 @@ export component App inherits Window {
             vertical-stretch: 0;
             if Navigation.runners-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? RunnerBase.summary-short : RunnerBase.summary;
-                first-action: "Fusionner des clubs";
+                // Wider, the merge and the import are in the card head (Robin, 12/11).
+                first-action: root.layout-mode == LayoutMode.narrow ? "Fusionner des clubs" : "";
                 first-alone: true;   // the long warning takes the whole width on a phone
-                can-import: true;
+                can-import: root.layout-mode == LayoutMode.narrow;
                 import-label: "Importer FFCO";
                 can-print: false;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
             if Navigation.stations-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? ClubStations.summary-short : ClubStations.summary;
-                first-action: "Inventaire";
-                can-import: true;
+                // Wider, Inventaire is in the panel and Importer in the card head (brief Cowork, 12/11).
+                first-action: root.layout-mode == LayoutMode.narrow ? "Inventaire" : "";
+                can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
             if Navigation.cards-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Cards.summary-short : Cards.summary;
-                first-action: "Inventaire";
-                can-import: true;
+                // Wider, Inventaire is in the panel and Importer in the card head (brief Cowork, 12/11).
+                first-action: root.layout-mode == LayoutMode.narrow ? "Inventaire" : "";
+                can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
@@ -555,14 +576,14 @@ export component App inherits Window {
                 can-publish: true;
                 phone-publish-only: true;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
             if Navigation.in-event && Navigation.active-tab == 3: PageBand {
                 summary: Stations.summary;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
@@ -573,15 +594,16 @@ export component App inherits Window {
                 publish-enabled: Starts.publish-enabled;
                 publish => { Starts.publish(); }
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
             if Navigation.in-event && Navigation.active-tab == 1: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Participants.summary-short : Participants.summary;
-                can-import: true;
+                // Wider, Importer is in the card head, next to Nouveau participant (Robin, 11/11).
+                can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
@@ -589,7 +611,7 @@ export component App inherits Window {
                 && (root.layout-mode != LayoutMode.narrow || Courses.list-only): PageBand {
                 summary: Courses.summary;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
@@ -624,15 +646,6 @@ export component App inherits Window {
                 root.header-rest = self.height;
             }
         }
-    }
-
-    // Over the header: ‹ Accueil and the indicators only close the open Direct (26/10).
-    if Navigation.in-event && Navigation.live-open: TouchArea {
-        x: 0;
-        y: 0;
-        width: root.width;
-        height: header.height;
-        clicked => { Navigation.toggle-live(); }
     }
 
     // The Direct drawer (prototype: #dr): its bar at the bottom, over the band's last place;
