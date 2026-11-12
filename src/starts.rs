@@ -324,6 +324,8 @@ impl StartsState {
                 .enumerate()
                 .filter(|(_, (_, names))| !names.is_empty())
                 .map(|(g, (title, names))| FilterGroup {
+                    search: SharedString::new(),
+                    searchable: false,
                     key: g as i32,
                     title: (*title).into(),
                     choices: model(

@@ -190,6 +190,8 @@ impl ResultsState {
             Vec::new()
         } else {
             vec![FilterGroup {
+                search: SharedString::new(),
+                searchable: false,
                 key: 0,
                 title: "Catégorie".into(),
                 choices: model(

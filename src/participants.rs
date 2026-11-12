@@ -26,6 +26,7 @@ const STATE: usize = 0;
 const COURSE: usize = 1;
 const CARD: usize = 2;
 const CHECK: usize = 3;
+const CLUB: usize = 4;   // last (Robin, 11/11)
 // En course, Non partant and the loan cards are in the panel: a choice has one place only
 // (brief Cowork, 11/11).
 const STATES: [&str; 2] = ["Arrivés", "PM"];
@@ -42,6 +43,9 @@ pub struct ParticipantsState {
     sort: SortKey,
     ascending: bool,
     filters: [Option<usize>; 4],   // the choice of each group, if any
+    club: Option<String>,          // the club filter, last group of the bubble
+    club_search: String,           // the field above the clubs, in the Filtres bubble
+    shown_clubs: RefCell<Vec<String>>,   // the clubs the bubble shows, set by show
     set: usize,                    // the choice of the panel
     search: String,
     selected: Option<usize>,
@@ -54,6 +58,9 @@ impl Default for ParticipantsState {
             sort: SortKey::Name,
             ascending: true,
             filters: [None; 4],
+            club: None,
+            club_search: String::new(),
+            shown_clubs: RefCell::new(Vec::new()),
             set: ALL,
             search: String::new(),
             selected: None,
@@ -100,6 +107,18 @@ impl ParticipantsState {
         self.selected = if self.selected == Some(index) { None } else { Some(index) };
     }
 
+    // « Voir ses participants » on a club, or « Filtrer sur ce club » in a detail: all the
+    // participants, with that club as a filter (Robin, 11/11).
+    pub fn show_club(&mut self, name: &str) {
+        self.club = Some(name.to_string());
+        self.set = ALL;
+        self.selected = None;
+    }
+
+    pub fn search_filter(&mut self, text: &str) {
+        self.club_search = text.trim().to_lowercase();
+    }
+
     pub fn select_set(&mut self, set: usize) {
         self.set = set;
         self.selected = None;
@@ -111,6 +130,11 @@ impl ParticipantsState {
 
     // A second click on the chosen choice takes it away.
     pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        if group == CLUB {
+            let name = self.shown_clubs.borrow().get(choice).cloned();
+            self.club = if name.is_none() || self.club == name { None } else { name };
+            return;
+        }
         if let Some(slot) = self.filters.get_mut(group) {
             *slot = if *slot == Some(choice) { None } else { Some(choice) };
         }
@@ -118,6 +142,7 @@ impl ParticipantsState {
 
     pub fn clear_filters(&mut self) {
         self.filters = [None; 4];
+        self.club = None;
     }
 
     // « Voir » on a line of the alert: its filter, alone.
@@ -151,6 +176,7 @@ impl ParticipantsState {
     }
 
     fn matches(&self, runner: &Runner, duplicate: bool) -> bool {
+        let in_club = self.club.as_deref().is_none_or(|c| runner.club == c);
         let in_set = match self.set {
             RACING => runner.is_racing(),
             NOT_STARTED => !runner.started,
@@ -169,7 +195,7 @@ impl ParticipantsState {
             Some(_) => runner.unknown_category,
         };
         let text = format!("{} {} {}", runner.name(), runner.club, card_text(runner)).to_lowercase();
-        in_set && state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
+        in_club && in_set && state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event) -> Vec<usize> {
@@ -288,11 +314,32 @@ impl ParticipantsState {
             ("Puce", CARDS.iter().map(|s| (s.to_string(), -1)).collect()),
             ("À vérifier", CHECKS.iter().map(|s| (s.to_string(), -1)).collect()),
         ];
+        // The clubs last, with a field above them: a long list (Robin, 11/11).
+        let shown_clubs: Vec<String> = clubs
+            .iter()
+            .filter(|c| c.to_lowercase().contains(&self.club_search))
+            .map(|c| c.to_string())
+            .collect();
+        let club_group = FilterGroup {
+            search: self.club_search.as_str().into(),
+            searchable: true,
+            key: CLUB as i32,
+            title: "Club".into(),
+            choices: model(
+                shown_clubs
+                    .iter()
+                    .map(|c| FilterChoice { label: c.as_str().into(), tone: -1, active: self.club.as_deref() == Some(c.as_str()) })
+                    .collect(),
+            ),
+        };
+        *self.shown_clubs.borrow_mut() = shown_clubs;
         page.set_filter_groups(model(
             groups
                 .iter()
                 .enumerate()
                 .map(|(g, (title, choices))| FilterGroup {
+                    search: SharedString::new(),
+                    searchable: false,
                     key: g as i32,
                     title: (*title).into(),
                     choices: model(
@@ -307,8 +354,17 @@ impl ParticipantsState {
                             .collect(),
                     ),
                 })
+                .chain(std::iter::once(club_group))
                 .collect(),
         ));
+        let club_filter = self.club.as_ref().map(|club| ActiveFilter {
+            label: format!("Club : {club}").into(),
+            tone: -1,
+            group: CLUB as i32,
+            // Its place in the bubble's list, or past its end when the field hides it: a click
+            // on the cross takes it away all the same.
+            choice: self.shown_clubs.borrow().iter().position(|c| c == club).unwrap_or(usize::MAX >> 1) as i32,
+        });
         page.set_active_filters(model(
             groups
                 .iter()
@@ -318,6 +374,7 @@ impl ParticipantsState {
                     let (label, tone) = choices.get(c)?;
                     Some(ActiveFilter { label: label.as_str().into(), tone: *tone, group: g as i32, choice: c as i32 })
                 })
+                .chain(club_filter)
                 .collect(),
         ));
         page.set_search_text(self.search.as_str().into());

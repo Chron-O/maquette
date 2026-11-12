@@ -470,6 +470,9 @@ export component App inherits Window {
         + (Navigation.in-event ? Theme.tab-bubble-height + Theme.settings-tab-height - Theme.settings-tab-tuck
             : Navigation.cards-page || Navigation.stations-page ? Theme.settings-tab-height : 0px);
     property <length> left-margin: root.margin + root.safe-area-insets.left;
+    // The bottom band sits under the main content, never under the left panel (Robin, 11/11).
+    property <length> band-left: root.left-margin
+        + (root.layout-mode == LayoutMode.narrow || Navigation.runners-page ? 0px : Theme.course-list-width + Theme.button-margin);
     property <length> right-margin: root.margin + root.safe-area-insets.right;
     // On a phone, a bubble stops above the band and the Direct bar, never over them.
     property <length> bubble-floor: root.layout-mode == LayoutMode.narrow && !Navigation.live-open ? band-zone.y : 0px;
@@ -537,7 +540,7 @@ export component App inherits Window {
                 import-label: "Importer FFCO";
                 can-print: false;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
@@ -546,7 +549,7 @@ export component App inherits Window {
                 first-action: "Inventaire";
                 can-import: true;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
@@ -555,7 +558,7 @@ export component App inherits Window {
                 first-action: "Inventaire";
                 can-import: true;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: root.safe-area-insets.bottom;
             }
@@ -564,14 +567,14 @@ export component App inherits Window {
                 can-publish: true;
                 phone-publish-only: true;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
             if Navigation.in-event && Navigation.active-tab == 3: PageBand {
                 summary: Stations.summary;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
@@ -582,7 +585,7 @@ export component App inherits Window {
                 publish-enabled: Starts.publish-enabled;
                 publish => { Starts.publish(); }
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
@@ -591,7 +594,7 @@ export component App inherits Window {
                 // Wider, Importer is in the card head, next to Nouveau participant (Robin, 11/11).
                 can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }
@@ -599,7 +602,7 @@ export component App inherits Window {
                 && (root.layout-mode != LayoutMode.narrow || Courses.list-only): PageBand {
                 summary: Courses.summary;
                 layout-mode: root.layout-mode;
-                left-margin: root.left-margin;
+                left-margin: root.band-left;
                 right-margin: root.right-margin;
                 bottom-margin: 0px;   // the Direct bar is below
             }

@@ -952,6 +952,7 @@ component GroupItem inherits Rectangle {
 // A course in the panel: its chip, its name, its start point and runners.
 component CourseItem inherits Rectangle {
     callback clicked();
+    in property <bool> main;   // « Tous les circuits »: a size larger (Robin, 11/11)
     in property <string> name;
     in property <string> detail;
     in property <int> tone: -1;
@@ -977,7 +978,7 @@ component CourseItem inherits Rectangle {
             Text {
                 text: root.name;
                 color: root.active ? Theme.active-tab-text : Theme.text;
-                font-size: Theme.text-help;
+                font-size: root.main ? Theme.text-body : Theme.text-help;
                 font-weight: Theme.weight-screen-title;
                 wrap: word-wrap;
             }
@@ -1001,9 +1002,15 @@ component StartsPanel inherits Sheet {
             spacing: Theme.space-small;
             alignment: start;
             CourseItem {
+                main: true;
                 name: "Tous les circuits";
                 active: Starts.active-group < 0 && Starts.active-course < 0;
                 clicked => { Starts.select-course(-1); }
+            }
+            // The main choice apart from the list.
+            HorizontalLayout {
+                padding: Theme.space-small;
+                RowLine { }
             }
             for course in Starts.courses: CourseItem {
                 name: course.name;

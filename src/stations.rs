@@ -436,6 +436,8 @@ impl StationsState {
         // The same filter in the Filtres button (brief zones-onglets § 5).
         let word = if self.collecting { "Dehors" } else { "À régler" };
         page.set_filter_groups(model(vec![FilterGroup {
+            search: SharedString::new(),
+            searchable: false,
             key: 0,
             title: "État".into(),
             choices: model(vec![FilterChoice { label: word.into(), tone: -1, active: self.only_to_handle }]),

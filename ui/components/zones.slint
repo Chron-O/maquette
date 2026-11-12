@@ -5,6 +5,7 @@
 import { Theme } from "../theme.slint";
 import { Icons } from "icons.slint";
 import { QuietButton } from "buttons.slint";
+import { InputField } from "field.slint";
 
 // A choice of a filter group, as Rust gives it.
 export struct FilterChoice {
@@ -17,6 +18,8 @@ export struct FilterGroup {
     key: int,        // which group, for Rust: a page may leave a group out
     title: string,
     choices: [FilterChoice],
+    search: string,  // a long list (clubs): a field above its choices; « » none
+    searchable: bool,
 }
 
 // A filter in use, shown in the button with its cross.
@@ -405,6 +408,7 @@ export component FiltersContent {
     callback toggle(int, int);
     callback clear();
     callback close();
+    callback search(int, string);   // the field of a long list
     in property <[FilterGroup]> groups;
 
     VerticalLayout {
@@ -423,6 +427,11 @@ export component FiltersContent {
                 color: Theme.text-secondary;
                 font-size: Theme.text-help;
                 font-weight: Theme.weight-block-title;
+            }
+            if group.searchable: InputField {
+                placeholder: "Chercher…";
+                text: group.search;
+                edited(text) => { root.search(group.key, text); }
             }
             // Each pill is as wide as its word; they go to the next line when they do not fit.
             // Its height is counted for the width it is given, not for its narrowest one.

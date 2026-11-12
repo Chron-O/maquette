@@ -190,6 +190,8 @@ impl RunnerBaseState {
         ));
         page.set_active_filter(self.filter as i32);
         page.set_filter_groups(model(vec![FilterGroup {
+            search: SharedString::new(),
+            searchable: false,
             key: 0,
             title: "Coureurs".into(),
             choices: model(

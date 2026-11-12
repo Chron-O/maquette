@@ -82,6 +82,8 @@ export global Participants {
 
     callback select-row(int);
     callback select-set(int);
+    callback show-club(string);           // all the participants, filtered on this club
+    callback search-filter(string);       // the field above the clubs, in the Filtres bubble
     callback sort-by(int);
     callback toggle-filter(int, int);
     callback clear-filters();
@@ -405,6 +407,7 @@ component ParticipantsHead {
 // A choice of the panel: its name, how many it holds, and a word more when it helps.
 component SetItem inherits Rectangle {
     callback clicked();
+    in property <bool> main;   // « Tous »: a size larger (Robin, 11/11)
     in property <PanelSet> set;
     in property <bool> active;
 
@@ -424,7 +427,7 @@ component SetItem inherits Rectangle {
             Text {
                 text: root.set.name;
                 color: root.active ? Theme.active-tab-text : Theme.text;
-                font-size: Theme.text-help;
+                font-size: root.main ? Theme.text-body : Theme.text-help;
                 font-weight: Theme.weight-screen-title;
                 wrap: word-wrap;
             }
@@ -453,10 +456,19 @@ component ParticipantsPanel inherits Sheet {
             padding: Theme.space;
             spacing: Theme.space-small;
             alignment: start;
-            for set[i] in Participants.sets: SetItem {
-                set: set;
-                active: Participants.active-set == i;
-                clicked => { Participants.select-set(i); }
+            for set[i] in Participants.sets: VerticalLayout {
+                spacing: Theme.space-small;
+                SetItem {
+                    main: i == 0;
+                    set: set;
+                    active: Participants.active-set == i;
+                    clicked => { Participants.select-set(i); }
+                }
+                // The main choice apart from the list.
+                if i == 0: HorizontalLayout {
+                    padding: Theme.space-small;
+                    RowLine { }
+                }
             }
         }
     }
@@ -472,6 +484,7 @@ component ClubsTable {
             Title { width: Theme.club-count-width; label: "En course"; }
             Title { width: Theme.club-count-width; label: "Revenus"; }
             Title { width: Theme.club-count-width; label: "Puces prêtées"; }
+            Rectangle { width: Theme.club-link-width; }
         }
         RowLine { }
         Flickable {
@@ -491,6 +504,18 @@ component ClubsTable {
                         HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.racing; } }
                         HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.back; } }
                         HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.lent; } }
+                        HorizontalLayout {
+                            width: Theme.club-link-width;
+                            padding-right: Theme.space;
+                            alignment: end;
+                            VerticalLayout {
+                                alignment: center;
+                                SecondaryButton {
+                                    label: "Voir ses participants ›";
+                                    clicked => { Participants.show-club(club.name); }
+                                }
+                            }
+                        }
                     }
                     RowLine { }
                 }
@@ -597,6 +622,14 @@ export component ParticipantDetail inherits Rectangle {
             spacing: Theme.space;
             SmallText { horizontal-stretch: 1; text: "Club"; }
             BubbleLabel { text: Participants.detail-club; wrap: no-wrap; }
+        }
+        // The same filter as in the bubble, taken where the club is seen (Robin, 11/11).
+        HorizontalLayout {
+            alignment: end;
+            QuietButton {
+                label: "Filtrer sur ce club";
+                clicked => { Participants.show-club(Participants.detail-club); }
+            }
         }
         HorizontalLayout {
             spacing: Theme.space;
@@ -868,6 +901,7 @@ export component ParticipantsBubble {
         if Courses.open-bubble == 7: FiltersContent {
             groups: Participants.filter-groups;
             toggle(g, c) => { Participants.toggle-filter(g, c); }
+            search(g, text) => { Participants.search-filter(text); }
             clear => { Participants.clear-filters(); }
             close => { Courses.close-bubble(); }
         }

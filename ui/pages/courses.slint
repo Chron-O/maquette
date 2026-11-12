@@ -401,6 +401,7 @@ component CourseListItem inherits Rectangle {
     in property <bool> active;
     in property <int> tone: -1;
     in property <bool> all-controls;
+    in property <bool> main;   // the first choice, « Tous les postes »: a size larger (Robin, 11/11)
 
     border-radius: Theme.field-radius;
     background: root.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
@@ -431,7 +432,7 @@ component CourseListItem inherits Rectangle {
                     horizontal-stretch: 1;
                     text: root.name;
                     color: root.active ? Theme.active-tab-text : Theme.text;
-                    font-size: Theme.text-help;
+                    font-size: root.main ? Theme.text-body : Theme.text-help;
                     font-weight: Theme.weight-screen-title;
                     wrap: word-wrap;
                 }
@@ -488,8 +489,17 @@ component CourseRows {
             name: "Tous les postes";
             summary: Courses.all-summary;
             all-controls: true;
+            main: true;
             active: Courses.active-course < 0 && !(root.narrow && Courses.list-only);
             clicked => { Courses.select-course(-1); }
+        }
+        // The main choice apart from the list.
+        HorizontalLayout {
+            padding: Theme.space-small;
+            Rectangle {
+                height: Theme.thin-outline-width;
+                background: Theme.separator;
+            }
         }
         for item in Courses.items: CourseListItem {
             name: item.name;

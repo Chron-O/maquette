@@ -258,6 +258,8 @@ fn connect_participants(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Participants>();
     page.on_select_row(on_click(window, state, |p, i: i32| p.select_row(i as usize)));
     page.on_select_set(on_click(window, state, |p, i: i32| p.select_set(i as usize)));
+    page.on_show_club(on_click(window, state, |p, name: slint::SharedString| p.show_club(&name)));
+    page.on_search_filter(on_click(window, state, |p, text: slint::SharedString| p.search_filter(&text)));
     page.on_sort_by(on_click(window, state, |p, i: i32| p.sort_by(i)));
     let toggle = on_click(window, state, |p, (g, c): (i32, i32)| p.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
