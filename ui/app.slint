@@ -16,7 +16,7 @@ import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, Re
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
 import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartCourse, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
-import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage } from "pages/participants.slint";
+import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage, PanelSet, ClubRow } from "pages/participants.slint";
 import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Unfold, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
 import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
@@ -28,7 +28,7 @@ export { Results, ResultRanking, ResultRow }
 export { Live, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
 export { Stations, StationRow, CourseMark, StationProblem, UsefulStation }
 export { Starts, StartRow, StartSection, StartCourse, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
-export { Participants, ParticipantRow, Passage, FilterChoice, FilterGroup, ActiveFilter }
+export { Participants, ParticipantRow, Passage, PanelSet, ClubRow, FilterChoice, FilterGroup, ActiveFilter }
 export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
 export { Readers, ReaderInfo, ReaderMode }
@@ -588,7 +588,8 @@ export component App inherits Window {
             }
             if Navigation.in-event && Navigation.active-tab == 1: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Participants.summary-short : Participants.summary;
-                can-import: true;
+                // Wider, Importer is in the card head, next to Nouveau participant (Robin, 11/11).
+                can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
                 left-margin: root.left-margin;
                 right-margin: root.right-margin;

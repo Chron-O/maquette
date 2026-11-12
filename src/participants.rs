@@ -2,7 +2,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Format, Kind, Label, Run, Runner, format_clock, format_time};
-use crate::{ActiveFilter, App, FilterChoice, FilterGroup, Passage, ParticipantRow, Participants, SequenceStop, model};
+use crate::{ActiveFilter, App, ClubRow, FilterChoice, FilterGroup, Passage, ParticipantRow, Participants, PanelSet, SequenceStop, model};
 use slint::{ComponentHandle, SharedString};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -26,14 +26,23 @@ const STATE: usize = 0;
 const COURSE: usize = 1;
 const CARD: usize = 2;
 const CHECK: usize = 3;
-const STATES: [&str; 4] = ["Inscrits", "En course", "Arrivés", "PM"];
-const CARDS: [&str; 2] = ["Sans puce", "Prêtée"];
+// En course, Non partant and the loan cards are in the panel: a choice has one place only
+// (brief Cowork, 11/11).
+const STATES: [&str; 2] = ["Arrivés", "PM"];
+const CARDS: [&str; 1] = ["Sans puce"];
+
+// The panel (brief Cowork, 11/11; order from Robin): what the card shows.
+const ALL: usize = 0;   // 1: the clubs, a table of their own
+const RACING: usize = 2;
+const NOT_STARTED: usize = 3;
+const LENT: usize = 4;
 const CHECKS: [&str; 2] = ["Doublons possibles", "Catégorie inconnue"];
 
 pub struct ParticipantsState {
     sort: SortKey,
     ascending: bool,
     filters: [Option<usize>; 4],   // the choice of each group, if any
+    set: usize,                    // the choice of the panel
     search: String,
     selected: Option<usize>,
     problems: RefCell<Vec<(usize, usize)>>, // the filter of each line of the alert, set by show
@@ -45,6 +54,7 @@ impl Default for ParticipantsState {
             sort: SortKey::Name,
             ascending: true,
             filters: [None; 4],
+            set: ALL,
             search: String::new(),
             selected: None,
             problems: RefCell::new(Vec::new()),
@@ -88,6 +98,11 @@ fn passage_label(run: &Run) -> Label {
 impl ParticipantsState {
     pub fn select_row(&mut self, index: usize) {
         self.selected = if self.selected == Some(index) { None } else { Some(index) };
+    }
+
+    pub fn select_set(&mut self, set: usize) {
+        self.set = set;
+        self.selected = None;
     }
 
     pub fn close_detail(&mut self) {
@@ -136,23 +151,25 @@ impl ParticipantsState {
     }
 
     fn matches(&self, runner: &Runner, duplicate: bool) -> bool {
+        let in_set = match self.set {
+            RACING => runner.is_racing(),
+            NOT_STARTED => !runner.started,
+            LENT => runner.lent,
+            _ => true,
+        };
         let state = match self.filters[STATE] {
             None => true,
-            Some(choice) => runner.label().word == ["Inscrit", "En course", "Arrivé", "PM"][choice],
+            Some(choice) => runner.label().word == ["Arrivé", "PM"][choice],
         };
         let course = self.filters[COURSE].is_none_or(|c| runner.runs.iter().any(|r| r.course == c));
-        let card = match self.filters[CARD] {
-            None => true,
-            Some(0) => runner.card.is_none(),
-            Some(_) => runner.lent,
-        };
+        let card = self.filters[CARD].is_none() || runner.card.is_none();
         let check = match self.filters[CHECK] {
             None => true,
             Some(0) => duplicate,
             Some(_) => runner.unknown_category,
         };
         let text = format!("{} {} {}", runner.name(), runner.club, card_text(runner)).to_lowercase();
-        state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
+        in_set && state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event) -> Vec<usize> {
@@ -186,9 +203,6 @@ impl ParticipantsState {
         page.set_chips(model(vec!["Inscription par catégorie".into(), "Sans dossards".into(), "Champs libres : repas".into()]));
 
         let lent: Vec<&Runner> = runners.iter().filter(|r| r.lent).collect();
-        page.set_lent_count(lent.len().to_string().into());
-        page.set_lent_detail(format!("en circulation · {cards_free} au parc").into());
-        page.set_lent_name(lent.first().map_or(SharedString::new(), |r| format!("{} · {}", r.name(), card_text(r)).into()));
 
         let without_card = runners.iter().filter(|r| r.card.is_none()).count();
         // « · N passages » only when someone runs more than once (participants-resultats.md § 1).
@@ -199,6 +213,35 @@ impl ParticipantsState {
             plural(runners.len(), "participant")
         };
         let clubs: BTreeSet<&str> = runners.iter().map(|r| r.club).collect();
+        let racing = runners.iter().filter(|r| r.is_racing()).count();
+        let not_started = runners.iter().filter(|r| !r.started).count();
+        page.set_sets(model(vec![
+            PanelSet { name: "Tous".into(), count: runners.len().to_string().into(), detail: SharedString::new() },
+            PanelSet { name: "Clubs".into(), count: clubs.len().to_string().into(), detail: SharedString::new() },
+            PanelSet { name: "En course".into(), count: racing.to_string().into(), detail: SharedString::new() },
+            PanelSet { name: "Non partant".into(), count: not_started.to_string().into(), detail: SharedString::new() },
+            PanelSet {
+                name: "Puces de prêt".into(),
+                count: lent.len().to_string().into(),
+                detail: format!("{cards_free} au parc").into(),
+            },
+        ]));
+        page.set_active_set(self.set as i32);
+        page.set_clubs(model(
+            clubs
+                .iter()
+                .map(|club| {
+                    let members: Vec<&Runner> = runners.iter().filter(|r| r.club == *club).collect();
+                    ClubRow {
+                        name: (*club).into(),
+                        entrants: members.len().to_string().into(),
+                        racing: members.iter().filter(|r| r.is_racing()).count().to_string().into(),
+                        back: members.iter().filter(|r| r.started && !r.is_racing()).count().to_string().into(),
+                        lent: members.iter().filter(|r| r.lent).count().to_string().into(),
+                    }
+                })
+                .collect(),
+        ));
         page.set_summary(
             format!(
                 "{} · {} · {} sans puce · {} prêtée{}",
