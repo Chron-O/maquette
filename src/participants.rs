@@ -2,7 +2,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Format, Kind, Label, Run, Runner, format_clock, format_time};
-use crate::{ActiveFilter, App, ClubRow, FilterChoice, FilterGroup, Passage, ParticipantRow, Participants, PanelSet, SequenceStop, model};
+use crate::{ActiveFilter, App, ClubRow, FilterChoice, LoanRow, FilterGroup, Passage, ParticipantRow, Participants, PanelSet, SequenceStop, model};
 use slint::{ComponentHandle, SharedString};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -27,16 +27,20 @@ const COURSE: usize = 1;
 const CARD: usize = 2;
 const CHECK: usize = 3;
 const CLUB: usize = 4;   // last (Robin, 11/11)
-// En course, Non partant and the loan cards are in the panel: a choice has one place only
-// (brief Cowork, 11/11).
-const STATES: [&str; 2] = ["Arrivés", "PM"];
+// Every state of a runner (Robin, 11/11): the word in the bubble, then the word of its label.
+const STATES: [(&str, &str); 7] = [
+    ("Pas encore parti", "Pas encore parti"),
+    ("En course", "En course"),
+    ("Arrivé", "Arrivé"),
+    ("PM", "PM"),
+    ("Abandon", "Abandon"),
+    ("Disqualifié", "Disqualifié"),
+    ("Absent", "Absent"),
+];
 const CARDS: [&str; 1] = ["Sans puce"];
 
-// The panel (brief Cowork, 11/11; order from Robin): what the card shows.
-const ALL: usize = 0;   // 1: the clubs, a table of their own
-const RACING: usize = 2;
-const NOT_STARTED: usize = 3;
-const LENT: usize = 4;
+// The panel (Robin, 11/11): the participants, or one of two tables of their own.
+const ALL: usize = 0;   // 1: the clubs; 2: the loan cards
 const CHECKS: [&str; 2] = ["Doublons possibles", "Catégorie inconnue"];
 
 pub struct ParticipantsState {
@@ -177,16 +181,7 @@ impl ParticipantsState {
 
     fn matches(&self, runner: &Runner, duplicate: bool) -> bool {
         let in_club = self.club.as_deref().is_none_or(|c| runner.club == c);
-        let in_set = match self.set {
-            RACING => runner.is_racing(),
-            NOT_STARTED => !runner.started,
-            LENT => runner.lent,
-            _ => true,
-        };
-        let state = match self.filters[STATE] {
-            None => true,
-            Some(choice) => runner.label().word == ["Arrivé", "PM"][choice],
-        };
+        let state = self.filters[STATE].is_none_or(|choice| runner.label().word == STATES[choice].1);
         let course = self.filters[COURSE].is_none_or(|c| runner.runs.iter().any(|r| r.course == c));
         let card = self.filters[CARD].is_none() || runner.card.is_none();
         let check = match self.filters[CHECK] {
@@ -195,7 +190,7 @@ impl ParticipantsState {
             Some(_) => runner.unknown_category,
         };
         let text = format!("{} {} {}", runner.name(), runner.club, card_text(runner)).to_lowercase();
-        in_club && in_set && state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
+        in_club && state && course && card && check && self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event) -> Vec<usize> {
@@ -239,20 +234,33 @@ impl ParticipantsState {
             plural(runners.len(), "participant")
         };
         let clubs: BTreeSet<&str> = runners.iter().map(|r| r.club).collect();
-        let racing = runners.iter().filter(|r| r.is_racing()).count();
-        let not_started = runners.iter().filter(|r| !r.started).count();
         page.set_sets(model(vec![
             PanelSet { name: "Tous".into(), count: runners.len().to_string().into(), detail: SharedString::new() },
             PanelSet { name: "Clubs".into(), count: clubs.len().to_string().into(), detail: SharedString::new() },
-            PanelSet { name: "En course".into(), count: racing.to_string().into(), detail: SharedString::new() },
-            PanelSet { name: "Non partant".into(), count: not_started.to_string().into(), detail: SharedString::new() },
             PanelSet {
-                name: "Puces de prêt".into(),
+                name: "Puces prêtées".into(),
                 count: lent.len().to_string().into(),
                 detail: format!("{cards_free} au parc").into(),
             },
         ]));
         page.set_active_set(self.set as i32);
+        // The loan cards: who has one, and whether it must come back now.
+        page.set_loans(model(
+            runners
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| r.lent)
+                .map(|(i, r)| LoanRow {
+                    index: i as i32,
+                    card: card_text(r).into(),
+                    family: r.family.into(),
+                    first: r.first.into(),
+                    club: r.club.into(),
+                    badge: badge(&r.label()),
+                    back: if r.is_back() { "À rendre".into() } else { SharedString::new() },
+                })
+                .collect(),
+        ));
         page.set_clubs(model(
             clubs
                 .iter()
@@ -309,7 +317,7 @@ impl ParticipantsState {
 
         let courses: Vec<(String, i32)> = event.courses.iter().enumerate().map(|(i, c)| (c.name.clone(), i as i32)).collect();
         let groups: [(&str, Vec<(String, i32)>); 4] = [
-            ("État", STATES.iter().map(|s| (s.to_string(), -1)).collect()),
+            ("État", STATES.iter().map(|s| (s.0.to_string(), -1)).collect()),
             ("Circuit", courses),
             ("Puce", CARDS.iter().map(|s| (s.to_string(), -1)).collect()),
             ("À vérifier", CHECKS.iter().map(|s| (s.to_string(), -1)).collect()),

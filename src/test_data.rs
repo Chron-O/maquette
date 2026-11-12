@@ -73,7 +73,18 @@ pub struct Runner {
     pub started: bool,
     pub locked: bool,
     pub changed: bool,      // its start time moved since the publication
+    pub outcome: Outcome,   // a race that ended otherwise than by a reading
     pub runs: Vec<Run>,
+}
+
+// How a race ended when the reading does not say it.
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum Outcome {
+    #[default]
+    Normal,
+    Retired,        // Abandon
+    Disqualified,   // Disqualifié
+    Absent,         // never came
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -162,8 +173,14 @@ impl Runner {
     }
 
     pub fn label(&self) -> Label {
+        match self.outcome {
+            Outcome::Retired => return Label::new("Abandon", Kind::Pm),
+            Outcome::Disqualified => return Label::new("Disqualifié", Kind::Pm),
+            Outcome::Absent => return Label::new("Absent", Kind::Inactive),
+            Outcome::Normal => {}
+        }
         if !self.started {
-            Label::new("Inscrit", Kind::Inactive)
+            Label::new("Pas encore parti", Kind::Inactive)
         } else if self.is_racing() {
             Label::new("En course", Kind::Racing)
         } else if self.runs.iter().all(|r| matches!(r.result, Some((_, true)))) {
@@ -680,6 +697,13 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
             started,
             locked: false,
             changed: false,
+            // A few races end otherwise: given up, disqualified, or the runner never came.
+            outcome: match random.below(25) {
+                0 if started && done => Outcome::Retired,
+                1 if started && done => Outcome::Disqualified,
+                2 | 3 if !started && moment != Moment::Upcoming => Outcome::Absent,
+                _ => Outcome::Normal,
+            },
             runs,
         });
     }
@@ -702,6 +726,7 @@ fn new_runners(random: &mut Random, courses: &[Course], moment: Moment) -> Vec<R
                 started: false,
                 locked: false,
                 changed: false,
+                outcome: Outcome::Normal,
                 runs: course.map(|course| Run { course, result: None }).into_iter().collect(),
             });
         }

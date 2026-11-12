@@ -45,6 +45,17 @@ export struct PanelSet {
     detail: string,
 }
 
+// A loan card, in the Puces prêtées choice of the panel.
+export struct LoanRow {
+    index: int,         // its runner
+    card: string,
+    family: string,
+    first: string,
+    club: string,
+    badge: Badge,
+    back: string,       // « À rendre » once the runner is back
+}
+
 // A club, in the Clubs choice of the panel.
 export struct ClubRow {
     name: string,
@@ -68,8 +79,9 @@ export global Participants {
     in property <int> sort-column;
     in property <bool> sort-ascending: true;
     in property <[PanelSet]> sets;
-    in property <int> active-set;          // 1: the clubs
+    in property <int> active-set;          // 1: the clubs, 2: the loan cards
     in property <[ClubRow]> clubs;
+    in property <[LoanRow]> loans;
 
     in property <bool> detail-open;
     in property <string> detail-name;
@@ -476,14 +488,18 @@ component ParticipantsPanel inherits Sheet {
 
 // The clubs: one row each, with their runners (brief Cowork, 11/11).
 component ClubsTable {
+    // The counts share what the name and the button leave, up to their own width.
+    property <length> count-width: max(Theme.club-count-min-width,
+        min(Theme.club-count-width, (root.width - Theme.club-name-min-width - Theme.club-link-width) / 4));
+
     VerticalLayout {
         HorizontalLayout {
             height: Theme.table-header-height + Theme.space;
-            Title { horizontal-stretch: 1; label: "Club"; }
-            Title { width: Theme.club-count-width; label: "Inscrits"; }
-            Title { width: Theme.club-count-width; label: "En course"; }
-            Title { width: Theme.club-count-width; label: "Revenus"; }
-            Title { width: Theme.club-count-width; label: "Puces prêtées"; }
+            Title { horizontal-stretch: 1; min-width: Theme.club-name-min-width; label: "Club"; }
+            Title { width: root.count-width; label: "Inscrits"; }
+            Title { width: root.count-width; label: "En course"; }
+            Title { width: root.count-width; label: "Revenus"; }
+            Title { width: root.count-width; label: "Puces prêtées"; }
             Rectangle { width: Theme.club-link-width; }
         }
         RowLine { }
@@ -497,13 +513,14 @@ component ClubsTable {
                         min-height: Theme.zone;
                         HorizontalLayout {
                             horizontal-stretch: 1;
+                            min-width: Theme.club-name-min-width;
                             padding-left: Theme.space;
                             Cell { text: club.name; font-weight: Theme.weight-screen-title; }
                         }
-                        HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.entrants; } }
-                        HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.racing; } }
-                        HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.back; } }
-                        HorizontalLayout { width: Theme.club-count-width; padding-left: Theme.space; Cell { text: club.lent; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.entrants; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.racing; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.back; } }
+                        HorizontalLayout { width: root.count-width; padding-left: Theme.space; Cell { text: club.lent; } }
                         HorizontalLayout {
                             width: Theme.club-link-width;
                             padding-right: Theme.space;
@@ -526,6 +543,61 @@ component ClubsTable {
 
 // On a phone: the head and the list in one card. Wider: the head is a band of its own, over
 // the card of the table (brief Cowork, 11/11).
+// The loan cards: one row each, with its runner; a click opens the runner (Robin, 11/11).
+component LoansTable {
+    VerticalLayout {
+        HorizontalLayout {
+            height: Theme.table-header-height + Theme.space;
+            Title { width: Theme.loan-card-width; label: "Puce"; }
+            Title { horizontal-stretch: 1; label: "Coureur"; }
+            Title { width: Theme.loan-club-width; label: "Club"; }
+            Title { width: Theme.loan-state-width; label: "État"; }
+            Title { width: Theme.loan-back-width; label: "Retour"; }
+        }
+        RowLine { }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height;
+            rows := VerticalLayout {
+                alignment: start;
+                for loan in Participants.loans: VerticalLayout {
+                    Rectangle {
+                        min-height: Theme.zone;
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { Participants.select-row(loan.index); }
+                        }
+                        HorizontalLayout {
+                            HorizontalLayout { width: Theme.loan-card-width; padding-left: Theme.space; Cell { text: loan.card; font-weight: Theme.weight-screen-title; } }
+                            HorizontalLayout {
+                                horizontal-stretch: 1;
+                                padding-left: Theme.space;
+                                spacing: Theme.space-small;
+                                alignment: start;
+                                Cell { text: loan.family; font-weight: Theme.weight-screen-title; }
+                                Cell { text: loan.first; }
+                            }
+                            HorizontalLayout { width: Theme.loan-club-width; padding-left: Theme.space; Cell { text: loan.club; } }
+                            HorizontalLayout {
+                                width: Theme.loan-state-width;
+                                padding-left: Theme.space;
+                                alignment: start;
+                                VerticalLayout { alignment: center; StatusBadge { status: Home.status-of(loan.badge); } }
+                            }
+                            HorizontalLayout {
+                                width: Theme.loan-back-width;
+                                padding-left: Theme.space;
+                                Cell { text: loan.back; font-weight: Theme.weight-screen-title; }
+                            }
+                        }
+                    }
+                    RowLine { }
+                }
+            }
+        }
+    }
+}
+
 component ParticipantsCard inherits Rectangle {
     in property <length> available-width;
 
@@ -541,7 +613,11 @@ component ParticipantsCard inherits Rectangle {
         width: parent.width;
         height: parent.height;
     }
-    if Participants.active-set != 1: ParticipantsTable {
+    if Participants.active-set == 2: LoansTable {
+        width: parent.width;
+        height: parent.height;
+    }
+    if Participants.active-set == 0: ParticipantsTable {
         width: parent.width;
         height: parent.height;
         available-width: root.available-width;
