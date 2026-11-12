@@ -174,7 +174,7 @@ impl Runner {
 
     pub fn label(&self) -> Label {
         match self.outcome {
-            Outcome::Retired => return Label::new("Abandon", Kind::Pm),
+            Outcome::Retired => return Label::new("Abandon", Kind::Inactive),   // charte: Inactif
             Outcome::Disqualified => return Label::new("Disqualifié", Kind::Pm),
             Outcome::Absent => return Label::new("Absent", Kind::Inactive),
             Outcome::Normal => {}

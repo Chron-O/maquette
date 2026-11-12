@@ -53,6 +53,10 @@ Une place par fonction, à tous les écrans (inspirée de `mise-en-page-universe
 - Une place vide reste vide : rien d'autre n'y glisse. Largeur insuffisante (téléphone, iPad portrait) : les affichages passent sur une 2ᵉ ligne, centrée.
 - Un bouton d'ajout se met en tête de la liste qu'il remplit : « + Groupe » dans le volet de Départs, « Nouveau circuit » dans celui de Circuits, « + Poste » en tête de carte.
 - Un choix n'a qu'une place : ce qui est dans le volet sort de l'entonnoir, et inversement. Le volet choisit l'ensemble, les Filtres le réduisent.
+- **Le volet n'est jamais un simple filtre** (Robin, 12/11) : choisir un élément du volet ouvre son contenu à droite (sa liste, ou son réglage, comme un groupe de départ).
+- **Blocs de chiffres** (exception écrite, Robin 12/11) : un bloc est un raccourci, pas un choix. Il allume un filtre, qui vit dans le bouton Filtres avec sa croix. 4 au plus, 2 si la fenêtre est basse, en bas du volet au-dessus du lecteur ; les plus utiles selon le moment de la course (avant, pendant, après).
+- **Bande du bas** : commence au bord du contenu principal, jamais sous le volet ; ses chiffres comptent ce qui est affiché.
+- **Choix principal du volet** (« Tous », « Tous les circuits »…) : un cran plus grand, séparé du reste par un trait fin.
 - Même construction partout : la tête de carte est une bande à part ; chaque objet (un circuit, un bloc de départs) est une carte avec sa bulle de titre (plus large que sa languette) et sa languette Réglages, posées sur le fond de la page ; titre, languette et titres de colonnes restent en haut pendant que ses lignes défilent.
 - **Languette Paramètres** sous la bulle des onglets : le résumé des paramètres de la page ; elle se déplie par-dessus, rien ne se décale. Ouverte, un clic ailleurs la referme sans rien sélectionner.
 - **Lecteur** au format moyen partout : nom et n° sur une ligne, l'état et l'épingle dessous, puis une zone fixe de 2 lignes (consigne, ou numéro lu et verdict, ou boutons d'une question ; alors le numéro remonte à la place de l'état). Écrans de boîtiers : un liseré orange épais ; l'état (lecture, inconnu, débranché) garde sa couleur.
