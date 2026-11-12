@@ -1221,8 +1221,30 @@ fn new_runner_base(seed: u64, events: &[Event], today: u32) -> Vec<BaseRunner> {
         person.entered_on = short_date(today.saturating_sub(random.below(30)));
         base.push(person);
     }
+    // A club typed twice (Robin, 12/11): two records typed by hand under « A.S.O. Lyon »,
+    // one of them the same person as a licensed runner of « ASO Lyon ».
+    for i in 0..2 {
+        let id = base.len() as u32;
+        let (family, first) = if i == 0 {
+            let aso: Vec<usize> = (0..base.len()).filter(|n| base[*n].club == "ASO Lyon" && base[*n].licence.is_some()).collect();
+            if aso.is_empty() { (random.pick(&BASE_FAMILY_NAMES), random.pick(&FIRST_NAMES)) } else { let n = random.pick(&aso); (base[n].family, base[n].first) }
+        } else {
+            (random.pick(&BASE_FAMILY_NAMES), random.pick(&FIRST_NAMES))
+        };
+        let mut person = new_base_runner(&mut random, id, family, first, LOOK_ALIKE_CLUB, today);
+        person.club_code = "";
+        person.licence = None;
+        person.licence_kind = None;
+        person.points = None;
+        person.card = None;
+        person.entered_on = short_date(today.saturating_sub(random.below(30)));
+        base.push(person);
+    }
     base
 }
+
+// The club typed twice: the same as « ASO Lyon », spelled otherwise.
+pub const LOOK_ALIKE_CLUB: &str = "A.S.O. Lyon";
 
 const STATION_KINDS: [&str; 3] = ["BSF7", "BSF8", "BSM8"];
 const STATION_NOTES: [&str; 3] = ["Étiquette à refaire", "Bip faible", "Support fendu"];

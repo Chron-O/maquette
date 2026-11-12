@@ -3,13 +3,16 @@
 
 use crate::cards::plural;
 use crate::test_data::{BaseRunner, CardPlace, Generated, LicenceKind};
-use crate::{ActiveFilter, App, FilterChoice, FilterGroup, BaseIssue, BaseRunnerRow, LiveFilter, RunnerBase, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, BaseIssue, BaseRunnerRow, LiveFilter, RunnerBase, model, ClubLine, PanelSet, StatBlock};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-const FILTERS: [&str; 7] = ["Tous", "Licenciés", "Non licenciés", "Compétition", "Découverte", "Loisir", "Handisport"];
+const FILTERS: [&str; 8] = ["Tous", "Licenciés", "Non licenciés", "Compétition", "Découverte", "Loisir", "Handisport", "Doublons à vérifier"];
+const DUPLICATES: usize = 7;
+// The filters of the clubs (Robin, 12/11).
+const CLUB_FILTERS: [&str; 2] = ["Clubs à fusionner", "Sans licencié"];
 
 // One wording for a record typed by hand, in the table and in the detail.
 const NO_LICENCE: &str = "Pas de licence";
@@ -24,6 +27,11 @@ const LEAGUES: [(&str, &str); 5] = [
 
 #[derive(Default)]
 pub struct RunnerBaseState {
+    clubs_tab: bool,              // the panel: Coureurs or Clubs (Robin, 12/11)
+    origin: Option<usize>,        // Coureurs › Origine: 0 the FFCO archive, 1 typed by hand
+    league: Option<String>,       // Clubs › Ligues
+    club: Option<String>,         // Filtres › Club, from « Voir ses coureurs ›»
+    club_filter: Option<usize>,   // Filtres of the clubs, one of CLUB_FILTERS
     filter: usize,
     search: String,
     sort_column: usize,
@@ -33,6 +41,19 @@ pub struct RunnerBaseState {
     // Kept from one refresh to the next: only the rows that changed are rebuilt, so that
     // a reading elsewhere neither costs hundreds of rows nor moves the list.
     rows: Rc<VecModel<BaseRunnerRow>>,
+}
+
+// The leagues of the clubs in the base, with how many clubs each.
+fn leagues_of(base: &[BaseRunner]) -> Vec<(&'static str, usize)> {
+    let clubs: BTreeMap<&str, &str> = base.iter().filter(|r| !r.club_code.is_empty()).map(|r| (r.club, league(r))).collect();
+    let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    for code in clubs.values() {
+        let code: &'static str = LEAGUES.iter().find(|(short, _)| short == code).map_or("", |(short, _)| short);
+        if !code.is_empty() {
+            *counts.entry(code).or_default() += 1;
+        }
+    }
+    counts.into_iter().collect()
 }
 
 fn league(runner: &BaseRunner) -> &'static str {
@@ -59,6 +80,20 @@ fn kind_full(kind: Option<LicenceKind>) -> &'static str {
         Some(LicenceKind::Leisure) => "Loisir Santé",
         other => kind_word(other),
     }
+}
+
+// For now, two records look alike when one typed by hand has the name of a licensed one; two
+// clubs when their names are the same letters. The real rule is a spec to write (ECRANS.md).
+fn letters(text: &str) -> String {
+    text.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase()
+}
+
+fn is_duplicate(runner: &BaseRunner, base: &[BaseRunner]) -> bool {
+    base.iter().any(|o| o.id != runner.id && o.family == runner.family && o.first == runner.first && (o.licence.is_some() != runner.licence.is_some()))
+}
+
+fn twin_club<'a>(club: &str, clubs: &[&'a str]) -> Option<&'a str> {
+    clubs.iter().copied().find(|o| *o != club && letters(o) == letters(club))
 }
 
 fn matches_filter(runner: &BaseRunner, filter: usize) -> bool {
@@ -126,13 +161,50 @@ impl RunnerBaseState {
         self.filter = filter;
     }
 
-    // The Filtres bubble (brief zones-onglets § 5): one group, the choices after « Tous ».
-    pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
-        self.filter = if self.filter == choice + 1 { 0 } else { choice + 1 };
+    // The panel (Robin, 12/11): Coureurs or Clubs, then a choice in its list (-1: all).
+    pub fn select_tab(&mut self, clubs: bool) {
+        self.clubs_tab = clubs;
+        self.selected = None;
+    }
+
+    pub fn select_set(&mut self, set: i32, data: Option<&Generated>) {
+        if self.clubs_tab {
+            self.league = usize::try_from(set).ok().and_then(|i| data.and_then(|d| leagues_of(&d.runner_base).get(i).map(|l| l.0.to_string())));
+        } else {
+            self.origin = usize::try_from(set).ok();
+        }
+    }
+
+    // « Voir ses coureurs ›» on a club: all the runners, with that club as a filter.
+    pub fn show_club(&mut self, name: &str) {
+        self.clubs_tab = false;
+        self.origin = None;
+        self.club = Some(name.to_string());
+    }
+
+    // The Filtres bubble: group 0 the runners (choices after « Tous »), 1 the club, 2 the clubs.
+    pub fn toggle_filter(&mut self, group: usize, choice: usize) {
+        match group {
+            1 => self.club = None,
+            2 => self.club_filter = if self.club_filter == Some(choice) { None } else { Some(choice) },
+            _ => self.filter = if self.filter == choice + 1 { 0 } else { choice + 1 },
+        }
+    }
+
+    // A block of figures: its filter alone; again, it goes away.
+    pub fn pick_stat(&mut self, group: usize, choice: usize) {
+        if group == 2 {
+            self.club_filter = if self.club_filter == Some(choice) { None } else { Some(choice) };
+        } else {
+            self.club = None;
+            self.filter = if self.filter == choice + 1 { 0 } else { choice + 1 };
+        }
     }
 
     pub fn clear_filters(&mut self) {
         self.filter = 0;
+        self.club = None;
+        self.club_filter = None;
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -189,28 +261,46 @@ impl RunnerBaseState {
             FILTERS.iter().map(|f| LiveFilter { label: (*f).into(), tone: -1, detail: SharedString::new() }).collect(),
         ));
         page.set_active_filter(self.filter as i32);
-        page.set_filter_groups(model(vec![FilterGroup {
-            search: SharedString::new(),
-            searchable: false,
-            key: 0,
-            title: "Coureurs".into(),
-            choices: model(
+        page.set_clubs_tab(self.clubs_tab);
+        let club_names: Vec<&str> = base.iter().map(|r| r.club).collect::<BTreeSet<_>>().into_iter().collect();
+        if self.clubs_tab {
+            page.set_filter_groups(model(vec![FilterGroup {
+                search: SharedString::new(),
+                searchable: false,
+                key: 2,
+                title: "Clubs".into(),
+                choices: model(CLUB_FILTERS.iter().enumerate().map(|(i, l)| FilterChoice { label: (*l).into(), tone: -1, active: self.club_filter == Some(i) }).collect()),
+            }]));
+            page.set_active_filters(model(
+                self.club_filter.map(|c| ActiveFilter { label: CLUB_FILTERS[c].into(), tone: -1, group: 2, choice: c as i32 }).into_iter().collect(),
+            ));
+        } else {
+            page.set_filter_groups(model(vec![FilterGroup {
+                search: SharedString::new(),
+                searchable: false,
+                key: 0,
+                title: "Coureurs".into(),
+                choices: model(
+                    FILTERS
+                        .iter()
+                        .enumerate()
+                        .skip(1)
+                        .map(|(i, label)| FilterChoice { label: (*label).into(), tone: -1, active: self.filter == i })
+                        .collect(),
+                ),
+            }]));
+            page.set_active_filters(model(
                 FILTERS
-                    .iter()
-                    .enumerate()
-                    .skip(1)
-                    .map(|(i, label)| FilterChoice { label: (*label).into(), tone: -1, active: self.filter == i })
+                    .get(self.filter)
+                    .filter(|_| self.filter > 0)
+                    .map(|label| ActiveFilter { label: (*label).into(), tone: -1, group: 0, choice: self.filter as i32 - 1 })
+                    .into_iter()
+                    .chain(self.club.as_ref().map(|c| ActiveFilter { label: format!("Club : {c}").into(), tone: -1, group: 1, choice: 0 }))
                     .collect(),
-            ),
-        }]));
-        page.set_active_filters(model(
-            FILTERS
-                .get(self.filter)
-                .filter(|_| self.filter > 0)
-                .map(|label| ActiveFilter { label: (*label).into(), tone: -1, group: 0, choice: self.filter as i32 - 1 })
-                .into_iter()
-                .collect(),
-        ));
+            ));
+        }
+        self.show_panel(&page, base, &club_names);
+        self.show_clubs(&page, base, &club_names);
         page.set_search_text(self.search.as_str().into());
         page.set_sort_column(self.sort_column as i32);
         page.set_sort_ascending(!self.descending);
@@ -224,18 +314,26 @@ impl RunnerBaseState {
             Some(d) => format!("Base locale, pas forcément à jour · archive FFCO importée le {} ({licensed_text})", d.archive_date_numeric),
             None => "Base locale, pas forcément à jour · archive FFCO jamais importée".to_string(),
         };
-        page.set_title("Base du club".into());
-        page.set_state(plural(base.len(), "fiche").into());
+        if self.clubs_tab {
+            page.set_title("Clubs".into());
+            page.set_state(plural(clubs, "club").into());
+        } else {
+            page.set_title("Base du club".into());
+            page.set_state(plural(base.len(), "fiche").into());
+        }
         page.set_summary(
             format!("{warning} · {} · {} saisie{} à la main", plural(clubs, "club"), plural(hand, "fiche"), if hand > 1 { "s" } else { "" })
                 .into(),
         );
         page.set_summary_short(format!("{warning} · {}", plural(clubs, "club")).into());
+        let warning_short = "base locale, pas forcément à jour";
 
         let words: Vec<&str> = self.search.split_whitespace().collect();
         let mut shown: Vec<&BaseRunner> = base
             .iter()
-            .filter(|r| matches_filter(r, self.filter))
+            .filter(|r| if self.filter == DUPLICATES { is_duplicate(r, base) } else { matches_filter(r, self.filter) })
+            .filter(|r| self.origin.is_none_or(|o| (o == 0) == r.licence.is_some()))
+            .filter(|r| self.club.as_deref().is_none_or(|c| r.club == c))
             .filter(|r| {
                 let text = format!(
                     "{} {} {} {} {} {} {}",
@@ -262,6 +360,16 @@ impl RunnerBaseState {
             };
             order.then_with(|| (a.family, a.first, a.id).cmp(&(b.family, b.first, b.id)))
         });
+        // The band counts what is shown (Robin, 11/11).
+        if shown.len() < base.len() || self.clubs_tab {
+            let text = if self.clubs_tab {
+                format!("{} · {}", plural(clubs, "club"), plural(base.len(), "fiche"))
+            } else {
+                format!("{} sur {} · {warning_short}", plural(shown.len(), "fiche"), base.len())
+            };
+            page.set_summary(text.as_str().into());
+            page.set_summary_short(text.into());
+        }
         page.set_empty(
             if !shown.is_empty() {
                 SharedString::new()
@@ -286,6 +394,7 @@ impl RunnerBaseState {
                 kind: if r.licence.is_some() { kind_word(r.licence_kind).into() } else { NO_LICENCE.into() },
                 card: r.card.map_or("—".into(), |c| c.to_string().into()),
                 points: r.points.as_ref().map_or("—".into(), |(points, _)| points.to_string().into()),
+                duplicate: is_duplicate(r, base),
                 selected: self.selected == Some(r.id),
             })
             .collect();
@@ -314,6 +423,68 @@ impl RunnerBaseState {
         page.set_shared_cards(model(shared));
 
         self.show_detail(&page, data);
+    }
+
+    // The panel (Robin, 12/11): the main choice and its sub-zone, then the blocks of figures.
+    fn show_panel(&self, page: &RunnerBase, base: &[BaseRunner], clubs: &[&str]) {
+        let set = |name: String, count: usize| PanelSet { name: name.into(), count: count.to_string().into(), detail: SharedString::new() };
+        if self.clubs_tab {
+            let leagues = leagues_of(base);
+            page.set_main_set(set("Tous les clubs".into(), clubs.len()));
+            page.set_sets_title("Ligues".into());
+            page.set_sets(model(leagues.iter().map(|(code, n)| set(format!("{code} · {}", league_name(code)), *n)).collect()));
+            page.set_active_set(self.league.as_deref().and_then(|l| leagues.iter().position(|(c, _)| *c == l)).map_or(-1, |i| i as i32));
+            let without = clubs.iter().filter(|c| !base.iter().any(|r| r.club == **c && r.licence.is_some())).count();
+            let twins = clubs.iter().filter(|c| twin_club(c, clubs).is_some()).count();
+            page.set_stats(model(
+                [(0usize, twins), (1, without)]
+                    .iter()
+                    .filter(|(_, n)| *n > 0)
+                    .map(|(c, n)| StatBlock { label: CLUB_FILTERS[*c].into(), count: n.to_string().into(), group: 2, choice: *c as i32, active: self.club_filter == Some(*c) })
+                    .collect(),
+            ));
+        } else {
+            let licensed = base.iter().filter(|r| r.licence.is_some()).count();
+            page.set_main_set(set("Tous les coureurs".into(), base.len()));
+            page.set_sets_title("Origine".into());
+            page.set_sets(model(vec![set("Archive FFCO".into(), licensed), set("Saisis à la main".into(), base.len() - licensed)]));
+            page.set_active_set(self.origin.map_or(-1, |o| o as i32));
+            let duplicates = base.iter().filter(|r| is_duplicate(r, base)).count();
+            page.set_stats(model(
+                [(1usize, licensed), (2, base.len() - licensed), (DUPLICATES, duplicates)]
+                    .iter()
+                    .filter(|(_, n)| *n > 0)
+                    .map(|(f, n)| StatBlock { label: FILTERS[*f].into(), count: n.to_string().into(), group: 0, choice: *f as i32 - 1, active: self.filter == *f })
+                    .collect(),
+            ));
+        }
+    }
+
+    // The clubs: league, FFCO number, runners; a club that looks like another is to merge.
+    fn show_clubs(&self, page: &RunnerBase, base: &[BaseRunner], clubs: &[&str]) {
+        let rows: Vec<ClubLine> = clubs
+            .iter()
+            .filter_map(|club| {
+                let members: Vec<&BaseRunner> = base.iter().filter(|r| r.club == *club).collect();
+                let code = members.iter().map(|r| r.club_code).find(|c| !c.is_empty()).unwrap_or("");
+                let league_code = code.get(code.len().saturating_sub(2)..).unwrap_or("");
+                let twin = twin_club(club, clubs);
+                let licensed = members.iter().any(|r| r.licence.is_some());
+                let keep = match self.club_filter {
+                    Some(0) => twin.is_some(),
+                    Some(_) => !licensed,
+                    None => true,
+                } && self.league.as_deref().is_none_or(|l| l == league_code);
+                keep.then(|| ClubLine {
+                    name: (*club).into(),
+                    league: if league_code.is_empty() { "—".into() } else { league_code.into() },
+                    number: code.get(..code.len().saturating_sub(2)).filter(|n| !n.is_empty() && *n != "0000").unwrap_or("—").into(),
+                    runners: members.len().to_string().into(),
+                    twin: twin.map_or(SharedString::new(), |t| format!("Même club que {t} ?").into()),
+                })
+            })
+            .collect();
+        page.set_club_rows(model(rows));
     }
 
     fn show_detail(&self, page: &RunnerBase, data: Option<&Generated>) {

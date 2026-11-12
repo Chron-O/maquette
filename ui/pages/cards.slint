@@ -127,12 +127,7 @@ export component ParkColumn inherits Rectangle {
     VerticalLayout {
         padding: Theme.space;
         spacing: Theme.space-small;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            min-height: Theme.zone;
-            padding-left: Theme.space;
-            Head { text: "Parcs"; }
-        }
+        // No « Parcs » title: the sub-tab above says it (Robin, 12/11).
         Flickable {
             vertical-stretch: 1;
             content-height: lines.preferred-height;

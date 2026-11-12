@@ -9,7 +9,7 @@ import { Tabs, IconTabs, TabItem } from "components/tabs.slint";
 import { Icons } from "components/icons.slint";
 import { Readers, ReaderInfo, ReaderMode } from "components/reader-tile.slint";
 import { Navigation, Demo, LayoutMode } from "navigation.slint";
-import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue } from "pages/runner-base.slint";
+import { RunnerBase, RunnerBasePage, BaseRunnerOverlay, RunnerBaseBubble, BaseRunnerRow, BaseIssue, ClubLine } from "pages/runner-base.slint";
 import { ClubStations, ClubStationsPage, ClubStationsSettings, ClubStationOverlay, ClubStationsBubble, ClubStationRow, BatteryDueItem } from "pages/club-stations.slint";
 import { Cards, CardsPage, CardsSettings, CardOverlay, CardsBubble, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard } from "pages/cards.slint";
 import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, ResultRow, ResultColumn } from "pages/results.slint";
@@ -21,7 +21,7 @@ import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Unfold, Zones } f
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
 import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
 import { Home, HomePage, HomeIndicators, IndicatorDots, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast } from "pages/home.slint";
-export { RunnerBase, BaseRunnerRow, BaseIssue }
+export { RunnerBase, ClubLine, BaseRunnerRow, BaseIssue }
 export { ClubStations, ClubStationRow, BatteryDueItem }
 export { Cards, CardRow, CardParkItem, CardEntry, CardAction, OverdueCard }
 export { Results, ResultColumn, ResultRanking, ResultRow }
@@ -472,7 +472,7 @@ export component App inherits Window {
     property <length> left-margin: root.margin + root.safe-area-insets.left;
     // The bottom band sits under the main content, never under the left panel (Robin, 11/11).
     property <length> band-left: root.left-margin
-        + (root.layout-mode == LayoutMode.narrow || Navigation.runners-page ? 0px : Theme.course-list-width + Theme.button-margin);
+        + (root.layout-mode == LayoutMode.narrow ? 0px : Theme.course-list-width + Theme.button-margin);
     property <length> right-margin: root.margin + root.safe-area-insets.right;
     // On a phone, a bubble stops above the band and the Direct bar, never over them.
     property <length> bubble-floor: root.layout-mode == LayoutMode.narrow && !Navigation.live-open ? band-zone.y : 0px;

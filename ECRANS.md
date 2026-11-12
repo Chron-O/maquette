@@ -28,14 +28,13 @@ Règle « une place par fonction » dans `CLAUDE.md` § Placement ; charte mise 
 - **Direct** : lecteurs d'arrivée sous le volet « La course en direct » ; la lecture prend toute la rangée. Pas de blocs.
 - **Résultats** : volet Classements · Analyse · Remise des prix ; Classements en colonnes parallèles (une par catégorie ou par circuit), défilement de côté avec barre ; un clic ou la recherche amène la colonne à gauche ; Analyse et Remise des prix : titre seul.
 - **Puces de prêt, Boîtiers du club** : sous-onglets Parcs / Inventaire dans le volet (Inventaire : titre seul) ; Importer en tête de carte ; filtre « Au parc » ajouté aux puces.
-- **Coureurs et clubs** : Importer FFCO et Fusionner des clubs en tête de carte.
+- **Coureurs et clubs** (Robin, 12/11) : volet à deux sous-onglets. **Coureurs** : « Tous les coureurs », sous-zone Origine (Archive FFCO, Saisis à la main), blocs Licenciés · Non licenciés · Doublons à vérifier ; tête de carte « Ajouter un coureur » + « Importer FFCO… » ; Ligue et Points CN seulement dans la fiche. **Clubs** : « Tous les clubs », sous-zone Ligues, blocs Clubs à fusionner · Sans licencié ; tête de carte « Ajouter un club » + « Fusionner des clubs… » ; tableau Club, Ligue, N° FFCO, Coureurs, avec « Voir ses coureurs › » (filtre Club côté coureurs). Doublons : lignes teintées « À vérifier », pastille « Doublon ? » ou « Même club que … ? », bouton « Comparer » / « Fusionner » sans effet.
 
 ### Écarts et points ouverts
-- **Coureurs et clubs : pas de blocs de chiffres**, l'écran n'a pas de volet ; et le filtre « Doublons à vérifier » n'existe pas encore (le brief le demandait).
+- **Spec à écrire : la règle de détection des doublons.** Pour l'instant, la maquette marque deux fiches de même nom et prénom dont l'une est licenciée et l'autre saisie à la main, et deux clubs dont les noms ont les mêmes lettres (« ASO Lyon » / « A.S.O. Lyon »). Le générateur fabrique ces cas exprès.
 - **Boutons dessinés sans effet** : groupes (Ajouter un coureur, + Règle, croix, Renommer, Supprimer), Importer, Fusionner ; la puce rendue n'est pas gardée dans les données de test.
 - **Moment de la course** (blocs) : tiré de l'événement en cours ; « avant » et « après » non vus en image faute d'événement de test à ces moments-là.
 - **Résultats sur téléphone** : l'ancienne liste.
-- **Le volet des parcs** garde son petit titre « Parcs » sous le sous-onglet « Parcs ».
 
 ### Téléphone : étape à part, à faire après validation du reste
 Reprendre sur téléphone le volet (Clubs / Puces prêtées, groupes de départ, circuits de Départs, Classements / Analyse / Remise des prix, Parcs / Inventaire), les blocs de chiffres, les colonnes de Résultats (une par écran, on glisse), et la tête de carte.

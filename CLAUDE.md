@@ -70,7 +70,7 @@ Une place par fonction, à tous les écrans (inspirée de `mise-en-page-universe
 - Avant de concevoir un écran : lire le prototype et les specs de chrono-swift (`docs/specs/`), en lecture seule.
 
 ## Design
-- Système visuel : `references/charte.md` (copie de `../essais-slint/references/charte.md`). **Ne jamais la modifier** : signaler l'écart à Robin.
+- Système visuel : `references/charte.md`, la seule charte du projet (Robin, 12/11). La modifier seulement avec l'accord de Robin ; signaler tout écart.
 - Captures du prototype HTML : `references/captures/` — point de départ, pas un modèle à recopier.
 - Règles absolues : pas de bordure sur un seul côté (sauf trait entre deux lignes) ; seulement les icônes de la charte ; aucun texte coupé ; clair et sombre ; jamais la couleur seule (icône + mot) ; aucune consigne inventée dans les textes ; toutes les valeurs viennent de `Theme`.
 - Chaque information affichée doit servir : une information principale par ligne, une ou deux secondaires.

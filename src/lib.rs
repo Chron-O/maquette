@@ -637,6 +637,20 @@ fn connect_runner_base(window: &App, state: &Rc<RefCell<AppState>>) {
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |r, _: ()| r.clear_filters());
     page.on_clear_filters(move || clear(()));
+    page.on_select_tab(on_click(window, state, |r, clubs: bool| r.select_tab(clubs)));
+    let pick = on_click(window, state, |r, (g, c): (i32, i32)| r.pick_stat(g as usize, c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
+    page.on_show_club(on_click(window, state, |r, name: slint::SharedString| r.show_club(&name)));
+    let (weak, state_for_set) = (window.as_weak(), state.clone());
+    page.on_select_set(move |set| {
+        {
+            let app = &mut *state_for_set.borrow_mut();
+            app.runner_base.select_set(set, app.data.as_ref());
+        }
+        if let Some(window) = weak.upgrade() {
+            state_for_set.borrow().show(&window);
+        }
+    });
     page.on_select_row(on_click(window, state, |r, id: i32| r.select_row(id as u32)));
     page.on_open_runner(on_click(window, state, |r, id: i32| r.open_runner(id as u32)));
     page.on_sort_by(on_click(window, state, |r, column: i32| r.sort_by(column as usize)));
