@@ -16,7 +16,7 @@ import { Results, ResultsPage, ResultsSettings, ResultsBubble, ResultRanking, Re
 import { Live, LivePage, LiveOverlay, LiveBubble, LiveBar, LiveTabButton, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit } from "pages/live.slint";
 import { Stations, StationsPage, StationsSettings, StationOverlay, StationsBubble, StationRow, CourseMark, StationProblem, UsefulStation } from "pages/stations.slint";
 import { Starts, StartsPage, StartsSettings, StartOverlay, StartsBubble, StartRow, StartSection, StartCourse, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart } from "pages/starts.slint";
-import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage, PanelSet, ClubRow, LoanRow } from "pages/participants.slint";
+import { Participants, ParticipantsPage, ParticipantSheet, ParticipantsBubble, ParticipantRow, ParticipantSettings, Passage, PanelSet, ClubRow, LoanRow, StatBlock } from "pages/participants.slint";
 import { SettingsTab, FilterChoice, FilterGroup, ActiveFilter, Unfold, Zones } from "components/zones.slint";
 import { Courses, BubbleOverlay, PageBand, CoursesPage, CoursesSettings, DetailOverlay, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse } from "pages/courses.slint";
 import { Equipment, EquipmentBubble, EquipmentReader } from "pages/equipment.slint";
@@ -28,7 +28,7 @@ export { Results, ResultRanking, ResultRow }
 export { Live, LiveRow, LiveStop, LiveLast, LiveSummary, LiveFilter, LiveCount, LiveListRow, LiveProblem, LiveCandidate, LiveSplit }
 export { Stations, StationRow, CourseMark, StationProblem, UsefulStation }
 export { Starts, StartRow, StartSection, StartCourse, StartGroup, StartPoint, StartPointSetting, FriseCell, FriseRow, ChangedStart }
-export { Participants, ParticipantRow, Passage, PanelSet, ClubRow, LoanRow, FilterChoice, FilterGroup, ActiveFilter }
+export { Participants, ParticipantRow, Passage, PanelSet, ClubRow, LoanRow, StatBlock, FilterChoice, FilterGroup, ActiveFilter }
 export { Courses, CourseItem, ColumnTitle, ControlRow, SequenceStop, CourseLine, MapMarker, DetailCourse, CourseStop, ReserveItem, CourseMarker, LegendItem, TracedCourse }
 export { Theme, ThemeMode, Icons, TabItem, Navigation, Demo, Home, BadgeKind, Badge, Stat, CurrentEvent, Reading, EventRow, ClubCard, IndicatorItem, HomeLast }
 export { Readers, ReaderInfo, ReaderMode }
@@ -476,8 +476,14 @@ export component App inherits Window {
     property <length> right-margin: root.margin + root.safe-area-insets.right;
     // On a phone, a bubble stops above the band and the Direct bar, never over them.
     property <length> bubble-floor: root.layout-mode == LayoutMode.narrow && !Navigation.live-open ? band-zone.y : 0px;
-    init => { Courses.bubble-floor = root.bubble-floor; }
+    // The window's height: a panel shows its blocks of figures by it, never by its own height,
+    // which they would change.
+    init => {
+        Courses.bubble-floor = root.bubble-floor;
+        Participants.window-height = root.height;
+    }
     changed bubble-floor => { Courses.bubble-floor = root.bubble-floor; }
+    changed height => { Participants.window-height = root.height; }
 
     // The Direct open: a click outside it only closes it (prototype, 26/10). Under the tabs and
     // the Direct button, which keep their own clicks (30/10: a tab closes it and opens).

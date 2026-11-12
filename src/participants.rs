@@ -2,7 +2,7 @@
 
 use crate::home::badge;
 use crate::test_data::{Event, Format, Kind, Label, Run, Runner, format_clock, format_time};
-use crate::{ActiveFilter, App, ClubRow, FilterChoice, LoanRow, FilterGroup, Passage, ParticipantRow, Participants, PanelSet, SequenceStop, model};
+use crate::{ActiveFilter, App, ClubRow, FilterChoice, LoanRow, StatBlock, FilterGroup, Passage, ParticipantRow, Participants, PanelSet, SequenceStop, model};
 use slint::{ComponentHandle, SharedString};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -50,6 +50,7 @@ pub struct ParticipantsState {
     club: Option<String>,          // the club filter, last group of the bubble
     club_search: String,           // the field above the clubs, in the Filtres bubble
     shown_clubs: RefCell<Vec<String>>,   // the clubs the bubble shows, set by show
+    returned: Vec<usize>,          // the loan cards given back, by runner
     set: usize,                    // the choice of the panel
     search: String,
     selected: Option<usize>,
@@ -65,6 +66,7 @@ impl Default for ParticipantsState {
             club: None,
             club_search: String::new(),
             shown_clubs: RefCell::new(Vec::new()),
+            returned: Vec::new(),
             set: ALL,
             search: String::new(),
             selected: None,
@@ -121,6 +123,35 @@ impl ParticipantsState {
 
     pub fn search_filter(&mut self, text: &str) {
         self.club_search = text.trim().to_lowercase();
+    }
+
+    // « Rendre » on a loan card (Robin, 11/11): it is back at the park.
+    pub fn give_back(&mut self, runner: usize) {
+        if !self.returned.contains(&runner) {
+            self.returned.push(runner);
+        }
+    }
+
+    // A block of figures at the bottom of the panel: its filter, alone, on all the participants;
+    // a second click takes it away. Group -1: no filter; -2: the loan cards (Robin, 11/11).
+    pub fn pick_stat(&mut self, group: i32, choice: usize) {
+        match group {
+            -2 => self.set = 2,
+            -1 => {
+                self.set = ALL;
+                self.clear_filters();
+            }
+            g => {
+                let g = g as usize;
+                let again = self.filters.get(g).copied().flatten() == Some(choice);
+                self.clear_filters();
+                self.set = ALL;
+                if !again && g < self.filters.len() {
+                    self.filters[g] = Some(choice);
+                }
+            }
+        }
+        self.selected = None;
     }
 
     pub fn select_set(&mut self, set: usize) {
@@ -240,7 +271,7 @@ impl ParticipantsState {
             PanelSet {
                 name: "Puces prêtées".into(),
                 count: lent.len().to_string().into(),
-                detail: format!("{cards_free} au parc").into(),
+                detail: format!("{} au parc", cards_free + self.returned.len() as u32).into(),
             },
         ]));
         page.set_active_set(self.set as i32);
@@ -257,7 +288,14 @@ impl ParticipantsState {
                     first: r.first.into(),
                     club: r.club.into(),
                     badge: badge(&r.label()),
-                    back: if r.is_back() { "À rendre".into() } else { SharedString::new() },
+                    back: if self.returned.contains(&i) {
+                        "Rendue".into()
+                    } else if r.is_back() {
+                        "À rendre".into()
+                    } else {
+                        SharedString::new()
+                    },
+                    returned: self.returned.contains(&i),
                 })
                 .collect(),
         ));
@@ -276,19 +314,80 @@ impl ParticipantsState {
                 })
                 .collect(),
         ));
+        // The band counts what is shown, not what the panel says (Robin, 11/11).
+        let shown = self.sorted(event);
+        let filtered = shown.len() < runners.len();
+        let shown_clubs: BTreeSet<&str> = shown.iter().map(|i| runners[*i].club).collect();
+        let shown_without = shown.iter().filter(|i| runners[**i].card.is_none()).count();
+        let shown_lent = shown.iter().filter(|i| runners[**i].lent).count();
         page.set_summary(
-            format!(
-                "{} · {} · {} sans puce · {} prêtée{}",
-                people,
-                plural(clubs.len(), "club"),
-                without_card,
-                lent.len(),
-                if lent.len() > 1 { "s" } else { "" }
-            )
+            if filtered {
+                format!(
+                    "{} sur {} · {} · {} sans puce",
+                    plural(shown.len(), "participant"),
+                    runners.len(),
+                    plural(shown_clubs.len(), "club"),
+                    shown_without
+                )
+            } else {
+                format!(
+                    "{} · {} · {} sans puce · {} prêtée{}",
+                    people,
+                    plural(clubs.len(), "club"),
+                    without_card,
+                    shown_lent,
+                    if shown_lent > 1 { "s" } else { "" }
+                )
+            }
             .into(),
         );
+        page.set_summary_short(
+            if filtered { format!("{} sur {}", plural(shown.len(), "participant"), runners.len()) } else { format!("{people} · {without_card} sans puce") }
+                .into(),
+        );
 
-        page.set_summary_short(format!("{people} · {without_card} sans puce").into());
+        // The blocks of figures, the most useful first for the moment of the race (Robin, 11/11):
+        // before, who is entered; during, who is to start, out, back; after, what went wrong.
+        let count = |word: &str| runners.iter().filter(|r| r.label().word == word).count();
+        let moment = if runners.iter().all(|r| !r.started) {
+            0
+        } else if runners.iter().any(|r| r.is_racing() || (!r.started && r.label().word == "Pas encore parti")) {
+            1
+        } else {
+            2
+        };
+        let loans_out = lent.len().saturating_sub(self.returned.len());
+        // (label, count, group, choice, rank before / during / after; 9: not then)
+        let all: [(&str, usize, i32, usize, [u8; 3]); 9] = [
+            ("Inscrits", runners.len(), -1, 0, [1, 9, 9]),
+            ("Sans puce", without_card, CARD as i32, 0, [2, 4, 9]),
+            ("Puces prêtées", loans_out, -2, 0, [3, 5, 4]),
+            ("À partir", count("Pas encore parti"), STATE as i32, 0, [9, 1, 9]),
+            ("En forêt", count("En course"), STATE as i32, 1, [9, 2, 9]),
+            ("Rentrés", count("Arrivé"), STATE as i32, 2, [9, 3, 9]),
+            ("PM", count("PM"), STATE as i32, 3, [9, 6, 1]),
+            ("Absents", count("Absent"), STATE as i32, 6, [9, 7, 2]),
+            ("Abandons", count("Abandon"), STATE as i32, 4, [9, 9, 3]),
+        ];
+        let mut blocks: Vec<_> = all.iter().filter(|b| b.4[moment] < 9 && b.1 > 0).collect();
+        blocks.sort_by_key(|b| b.4[moment]);
+        page.set_stats(model(
+            blocks
+                .iter()
+                .take(4)
+                .map(|(label, count, group, choice, _)| StatBlock {
+                    label: (*label).into(),
+                    count: count.to_string().into(),
+                    group: *group,
+                    choice: *choice as i32,
+                    active: match *group {
+                        -2 => self.set == 2,
+                        -1 => false,
+                        g => self.set == ALL && self.filters[g as usize] == Some(*choice),
+                    },
+                })
+                .collect(),
+        ));
 
         let names: Vec<String> = runners.iter().map(|r| r.name()).collect();
         let duplicates = names.iter().enumerate().filter(|(i, n)| names[..*i].contains(n)).count();

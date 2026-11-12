@@ -45,6 +45,15 @@ export struct PanelSet {
     detail: string,
 }
 
+// A block of figures at the bottom of the panel: a click sets its filter (Robin, 11/11).
+export struct StatBlock {
+    label: string,
+    count: string,
+    group: int,         // the filter group; -1 none, -2 the loan cards
+    choice: int,
+    active: bool,
+}
+
 // A loan card, in the Puces prêtées choice of the panel.
 export struct LoanRow {
     index: int,         // its runner
@@ -53,7 +62,8 @@ export struct LoanRow {
     first: string,
     club: string,
     badge: Badge,
-    back: string,       // « À rendre » once the runner is back
+    back: string,       // « À rendre » once the runner is back, « Rendue » once given back
+    returned: bool,
 }
 
 // A club, in the Clubs choice of the panel.
@@ -82,6 +92,8 @@ export global Participants {
     in property <int> active-set;          // 1: the clubs, 2: the loan cards
     in property <[ClubRow]> clubs;
     in property <[LoanRow]> loans;
+    in property <[StatBlock]> stats;
+    in-out property <length> window-height;   // set by the window
 
     in property <bool> detail-open;
     in property <string> detail-name;
@@ -94,7 +106,9 @@ export global Participants {
 
     callback select-row(int);
     callback select-set(int);
-    callback show-club(string);           // all the participants, filtered on this club
+    callback show-club(string);
+    callback pick-stat(int, int);
+    callback give-back(int);              // « Rendre » on a loan card           // all the participants, filtered on this club
     callback search-filter(string);       // the field above the clubs, in the Filtres bubble
     callback sort-by(int);
     callback toggle-filter(int, int);
@@ -461,8 +475,43 @@ component SetItem inherits Rectangle {
 }
 
 // The floating panel: what the card shows, with no title (brief Cowork, 11/11).
+// A block of figures: the number in big, its word under it.
+component StatTile inherits Rectangle {
+    callback clicked();
+    in property <StatBlock> block;
+
+    border-radius: Theme.field-radius;
+    border-width: Theme.thin-outline-width;
+    border-color: root.block.active ? Theme.active-tab-background : Theme.thin-outline;
+    background: root.block.active ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    VerticalLayout {
+        padding: Theme.space;
+        Text {
+            text: root.block.count;
+            color: root.block.active ? Theme.active-tab-text : Theme.text;
+            font-size: Theme.text-stat;
+            font-weight: Theme.weight-screen-title;
+        }
+        Text {
+            text: root.block.label;
+            color: root.block.active ? Theme.active-tab-text : Theme.text-secondary;
+            font-size: Theme.text-help;
+            overflow: elide;
+        }
+    }
+}
+
 component ParticipantsPanel inherits Sheet {
-    Flickable {
+    // Four blocks when the window is tall enough, two otherwise: never more (Robin, 11/11).
+    property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;
+
+    VerticalLayout {
+      Flickable {
+        vertical-stretch: 1;
         content-height: column.preferred-height;
         column := VerticalLayout {
             padding: Theme.space;
@@ -483,6 +532,28 @@ component ParticipantsPanel inherits Sheet {
                 }
             }
         }
+      }
+      // The figures that matter now, two by row; a click filters on them.
+      VerticalLayout {
+        vertical-stretch: 0;
+        padding: Theme.space;
+        spacing: Theme.space;
+        for row in [0, 2]: HorizontalLayout {
+            spacing: Theme.space;
+            visible: row < root.shown && Participants.stats.length > row;
+            height: self.visible ? self.preferred-height : 0px;
+            for n in [0, 1]: cell := Rectangle {
+                horizontal-stretch: 1;
+                min-height: tile.preferred-height;
+                tile := StatTile {
+                    visible: Participants.stats.length > row + n;
+                    width: cell.width;
+                    block: Participants.stats[row + n];
+                    clicked => { Participants.pick-stat(self.block.group, self.block.choice); }
+                }
+            }
+        }
+      }
     }
 }
 
@@ -587,7 +658,20 @@ component LoansTable {
                             HorizontalLayout {
                                 width: Theme.loan-back-width;
                                 padding-left: Theme.space;
-                                Cell { text: loan.back; font-weight: Theme.weight-screen-title; }
+                                padding-right: Theme.space;
+                                spacing: Theme.space;
+                                Cell {
+                                    text: loan.back;
+                                    color: loan.returned ? Theme.text-secondary : Theme.text;
+                                    font-weight: loan.returned ? Theme.weight-regular : Theme.weight-screen-title;
+                                }
+                                if loan.back == "À rendre": VerticalLayout {
+                                    alignment: center;
+                                    SecondaryButton {
+                                        label: "Rendre";
+                                        clicked => { Participants.give-back(loan.index); }
+                                    }
+                                }
                             }
                         }
                     }
