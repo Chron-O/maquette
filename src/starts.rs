@@ -2,9 +2,9 @@
 // at random inside each course, on the test data only.
 
 use crate::home::badge;
-use crate::test_data::{Event, Kind, Label, Runner, START_STEP, format_clock};
+use crate::test_data::{Event, GroupKind, Kind, Label, Runner, START_STEP, format_clock};
 use crate::participants::card_label;
-use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, StartGroup, StartPoint, StartCourse, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
+use crate::{ActiveFilter, App, ChangedStart, FilterChoice, FilterGroup, FriseCell, FriseRow, GroupMember, GroupRule, StartGroup, StartPoint, StartCourse, StartPointSetting, StartRow, StartSection, Starts, TabItem, model};
 use slint::{ComponentHandle, SharedString};
 
 const VIEWS: [&str; 2] = ["Liste", "Frise"];
@@ -87,10 +87,13 @@ impl StartsState {
     // The panel: all the courses, or one (brief Cowork, 11/11).
     pub fn select_course(&mut self, course: i32) {
         self.course = usize::try_from(course).ok();
+        self.group = None;
     }
 
+    // A group is never a filter: it opens on the right, to be set and completed (Robin, 11/11).
     pub fn select_group(&mut self, group: usize) {
-        self.group = if self.group == Some(group) { None } else { Some(group) };
+        self.group = Some(group);
+        self.selected = None;
     }
 
     // The Filtres bubble: the start point only. The groups are in the panel, and a choice has
@@ -148,8 +151,7 @@ impl StartsState {
     fn shown(&self, event: &Event, index: usize) -> bool {
         let runner = &event.runners[index];
         let text = format!("{} {}", runner.name(), runner.club).to_lowercase();
-        let in_group = self.group.is_none_or(|g| event.groups.get(g).is_none_or(|g| g.members.contains(&index)));
-        in_group && self.search.split_whitespace().all(|word| text.contains(word))
+        self.search.split_whitespace().all(|word| text.contains(word))
     }
 
     fn sorted(&self, event: &Event, course: usize) -> Vec<usize> {
@@ -247,7 +249,57 @@ impl StartsState {
                 })
                 .collect(),
         ));
-        page.set_active_group(self.group.map_or(-1, |g| g as i32));
+        page.set_active_group(self.group.filter(|g| *g < event.groups.len()).map_or(-1, |g| g as i32));
+        if let Some(group) = self.group.and_then(|g| event.groups.get(g)) {
+            page.set_group_name(group.name.as_str().into());
+            page.set_group_kind(match group.kind {
+                GroupKind::Range => 0,
+                GroupKind::Together => 1,
+                GroupKind::Apart => 2,
+            });
+            page.set_group_setting(group.setting.as_str().into());
+            page.set_group_facts(format!("{} · {}", group.rule, plural(group.members.len(), "coureur")).into());
+            // The tab sums up the settings: the type, then the rules, or « À la main ».
+            let mut summary = vec![group.rule.clone()];
+            summary.extend(group.rules.iter().cloned());
+            if group.rules.is_empty() {
+                summary.push("À la main".into());
+            }
+            page.set_group_summary(summary.join(" · ").into());
+            page.set_group_rules(model(
+                group
+                    .rules
+                    .iter()
+                    .map(|r| GroupRule { text: r.as_str().into(), count: plural(group.members.iter().filter(|m| !group.by_hand.contains(m)).count(), "coureur").into() })
+                    .collect(),
+            ));
+            let mut members = group.members.clone();
+            members.sort_by_key(|i| self.time_of(event, *i));
+            page.set_group_members(model(
+                members
+                    .iter()
+                    .map(|&i| {
+                        let runner = &runners[i];
+                        let course = runner.runs.first().map(|r| r.course);
+                        GroupMember {
+                            index: i as i32,
+                            time: format_clock(self.time_of(event, i)).into(),
+                            family: runner.family.into(),
+                            first: runner.first.into(),
+                            category: runner.category.as_str().into(),
+                            club: runner.club.into(),
+                            course: course.map_or(SharedString::new(), |c| event.courses[c].name.as_str().into()),
+                            tone: course.map_or(-1, |c| c as i32),
+                            origin: if group.by_hand.contains(&i) {
+                                "À la main".into()
+                            } else {
+                                group.rules.first().map_or(SharedString::new(), |r| r.as_str().into())
+                            },
+                        }
+                    })
+                    .collect(),
+            ));
+        }
 
         let points: Vec<u32> = {
             let mut list: Vec<u32> = event.courses.iter().map(|c| c.start_point).collect();

@@ -129,10 +129,23 @@ pub struct Vacant {
     pub time: u32,
 }
 
+// A start group (lot4-departs.md § 1): a name, a type with its setting, and members that come
+// from rules or were added by hand.
 pub struct StartGroup {
     pub name: String,
-    pub rule: String,
+    pub rule: String,              // the type and its setting, in one line
+    pub kind: GroupKind,
+    pub setting: String,           // a range « Avant 9:06 », a gap « 10 min », or nothing
+    pub rules: Vec<String>,        // « Club est OTB »
+    pub by_hand: Vec<usize>,       // the members added by hand
     pub members: Vec<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum GroupKind {
+    Range,      // they start between two times
+    Together,   // one after the other
+    Apart,      // never at the same time
 }
 
 impl Runner {
@@ -774,14 +787,30 @@ fn new_groups(random: &mut Random, runners: &[Runner], first_start: u32) -> Vec<
         StartGroup {
             name: club.to_string(),
             rule: "Ensemble".into(),
+            kind: GroupKind::Together,
+            setting: String::new(),
+            rules: vec![format!("Club est {club}")],
+            by_hand: Vec::new(),
             members: in_course.iter().copied().filter(|i| runners[*i].club == club).collect(),
         },
         StartGroup {
             name: format!("Famille {family}"),
             rule: "Séparés de 10 min".into(),
+            kind: GroupKind::Apart,
+            setting: "10 min".into(),
+            rules: Vec::new(),
+            by_hand: in_course.iter().copied().filter(|i| runners[*i].family == family).collect(),
             members: in_course.iter().copied().filter(|i| runners[*i].family == family).collect(),
         },
-        StartGroup { name: "Bénévoles".into(), rule: format!("Avant {}", format_clock(first_start + 3 * START_STEP)), members: helpers },
+        StartGroup {
+            name: "Bénévoles".into(),
+            rule: format!("Avant {}", format_clock(first_start + 3 * START_STEP)),
+            kind: GroupKind::Range,
+            setting: format!("Avant {}", format_clock(first_start + 3 * START_STEP)),
+            rules: vec!["Bénévole est coché".into()],
+            by_hand: Vec::new(),
+            members: helpers,
+        },
     ]
 }
 

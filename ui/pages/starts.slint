@@ -45,6 +45,24 @@ export struct StartCourse {
     detail: string,     // its start point and how many runners
 }
 
+// An open start group: one of its rules, and one of its members.
+export struct GroupRule {
+    text: string,
+    count: string,
+}
+
+export struct GroupMember {
+    index: int,
+    time: string,
+    family: string,
+    first: string,
+    category: string,
+    club: string,
+    course: string,
+    tone: int,          // its course, -1 without one
+    origin: string,     // the rule it comes from, or « À la main »
+}
+
 export struct StartGroup {
     name: string,
     detail: string,
@@ -96,7 +114,14 @@ export global Starts {
     in property <[StartCourse]> courses;
     in property <int> active-course: -1;
     in property <[StartGroup]> groups;
-    in property <int> active-group: -1;
+    in property <int> active-group: -1;   // the group open on the right, -1 for the courses
+    in property <string> group-name;
+    in property <string> group-facts;
+    in property <string> group-summary;   // its Réglages tab
+    in property <int> group-kind;         // 0 range, 1 together, 2 apart
+    in property <string> group-setting;
+    in property <[GroupRule]> group-rules;
+    in property <[GroupMember]> group-members;
     in property <[StartPoint]> points;
     in property <int> active-point;
     in property <[FilterGroup]> filter-groups;
@@ -977,14 +1002,14 @@ component StartsPanel inherits Sheet {
             alignment: start;
             CourseItem {
                 name: "Tous les circuits";
-                active: Starts.active-course < 0;
+                active: Starts.active-group < 0 && Starts.active-course < 0;
                 clicked => { Starts.select-course(-1); }
             }
             for course in Starts.courses: CourseItem {
                 name: course.name;
                 detail: course.detail;
                 tone: course.index;
-                active: Starts.active-course == course.index;
+                active: Starts.active-group < 0 && Starts.active-course == course.index;
                 clicked => { Starts.select-course(course.index); }
             }
             Rectangle { height: Theme.space; }
@@ -1088,6 +1113,232 @@ component StartsHead inherits Sheet {
         tabs: Starts.views;
         active: Starts.active-view;
         clicked(i) => { Starts.select-view(i); }
+    }
+}
+
+// The menu of an open group, in its title bubble.
+component GroupMenuButton {
+    property <bool> open: Courses.open-bubble == 23 && Starts.bubble-section == -2;
+
+    min-width: Theme.small-button-width;
+    horizontal-stretch: 0;
+    accessible-role: button;
+    accessible-label: "Plus d'actions";
+    MoreButton {
+        width: 100%;
+        height: 100%;
+        open: root.open;
+        down: Courses.bubble-down;
+        clicked => {
+            Starts.bubble-section = -2;
+            Courses.open-at(23, self.absolute-position.x + (self.width - Theme.small-button-width) / 2,
+                self.absolute-position.y + (self.height - Theme.small-button-height) / 2,
+                Theme.small-button-width, Theme.small-button-height);
+        }
+    }
+}
+
+// The settings of an open group, in its Réglages tab (lot4-departs.md § 1): its type, the
+// setting of that type, then the rules that bring its members.
+component GroupSettings inherits VerticalLayout {
+    padding-top: Theme.space-small;
+    SettingRow {
+        label: "Type";
+        ChoiceSegments {
+            choices: ["Plage horaire", "Ensemble", "Séparés"];
+            active: Starts.group-kind;
+        }
+    }
+    if Starts.group-kind != 1: SettingRow {
+        label: Starts.group-kind == 0 ? "Plage" : "Écart minimal";
+        SmallText { text: Starts.group-setting; vertical-alignment: center; }
+    }
+    for rule in Starts.group-rules: SettingRow {
+        label: rule.text;
+        SmallText { text: rule.count; vertical-alignment: center; }
+    }
+    HorizontalLayout {
+        padding: Theme.space-medium;
+        padding-top: Theme.space;
+        padding-bottom: Theme.space-small;
+        alignment: start;
+        SecondaryButton {
+            label: "Règle";
+            icon: Icons.plus;
+            has-icon: true;
+        }
+    }
+}
+
+// The column titles of a group's members.
+component GroupTitles inherits Rectangle {
+    in property <length> name-width;
+
+    height: Theme.table-header-height + Theme.space;
+    HorizontalLayout {
+        height: parent.height - Theme.thin-outline-width;
+        Title { width: Theme.start-time-width; label: "Heure"; }
+        Title { width: root.name-width; label: "Nom"; }
+        Title { width: Theme.start-category-width; label: "Cat."; }
+        Title { width: Theme.start-club-width; label: "Club"; }
+        Title { width: Theme.group-course-width; label: "Circuit"; }
+        Title { width: Theme.group-origin-width; label: "Origine"; }
+        Rectangle { width: Theme.zone; }
+    }
+    RowLine {
+        y: parent.height - self.height;
+        width: parent.width;
+    }
+}
+
+// One member of the open group, with the cross that takes them out.
+component GroupLine inherits VerticalLayout {
+    in property <GroupMember> member;
+    in property <length> name-width;
+
+    RowLine { }
+    HorizontalLayout {
+        min-height: Theme.zone;
+        HorizontalLayout {
+            width: Theme.start-time-width;
+            padding-left: Theme.space;
+            Cell { text: root.member.time; font-weight: Theme.weight-screen-title; }
+        }
+        HorizontalLayout {
+            width: root.name-width;
+            padding-left: Theme.space;
+            alignment: start;
+            spacing: Theme.space-small;
+            Cell { text: root.member.family; font-weight: Theme.weight-screen-title; }
+            Cell { text: root.member.first; }
+        }
+        HorizontalLayout {
+            width: Theme.start-category-width;
+            padding-left: Theme.space;
+            Cell { text: root.member.category; }
+        }
+        HorizontalLayout {
+            width: Theme.start-club-width;
+            padding-left: Theme.space;
+            Cell { text: root.member.club; }
+        }
+        HorizontalLayout {
+            width: Theme.group-course-width;
+            padding-left: Theme.space;
+            spacing: Theme.space-small;
+            alignment: start;
+            if root.member.tone >= 0: VerticalLayout {
+                alignment: center;
+                CourseChip { tone: root.member.tone; }
+            }
+            Cell { text: root.member.course; }
+        }
+        HorizontalLayout {
+            width: Theme.group-origin-width;
+            padding-left: Theme.space;
+            Cell { text: root.member.origin; color: Theme.text-secondary; }
+        }
+        Rectangle {
+            width: Theme.zone;
+            accessible-role: button;
+            accessible-label: "Retirer du groupe";
+            Image {
+                source: Icons.x;
+                colorize: Theme.text-secondary;
+                width: Theme.button-icon;
+                height: Theme.button-icon;
+            }
+            TouchArea { mouse-cursor: pointer; }
+        }
+    }
+}
+
+// The title bubble of the open group and its Réglages tab, on the page.
+component GroupHead inherits Rectangle {
+    out property <length> card-top: tab.y + (Theme.settings-tab-height - Theme.settings-tab-tuck) / 2;
+
+    VerticalLayout {
+        padding: Theme.space-small;
+        padding-bottom: Theme.settings-tab-height - Theme.settings-tab-tuck + Theme.space-small;
+        Rectangle { height: title.preferred-height; }
+    }
+    tab := SettingsTab {
+        x: Theme.space-small + Theme.space-medium;
+        y: title.y + title.height - Theme.settings-tab-tuck;
+        width: min(root.width - 2 * Theme.space-small - 2 * Theme.space-medium, max(Theme.bubble-width, self.wanted-width));
+        label: "Réglages";
+        summary: Starts.group-summary;
+        GroupSettings { }
+    }
+    title := TitleBubble {
+        x: Theme.space-small;
+        y: Theme.space-small;
+        width: min(root.width - 2 * Theme.space-small, max(self.preferred-width, tab.width + 2 * Theme.space-medium));
+        height: self.preferred-height;
+        tone: -1;
+        name: Starts.group-name;
+        facts: Starts.group-facts;
+        GroupMenuButton { }
+    }
+}
+
+// An open group, on the right (lot4-departs.md § 1; Robin, 11/11): what we add on top, then
+// its title bubble and Réglages tab on the page, over the card of its members.
+component GroupView {
+    in property <length> available-width;
+
+    property <length> fixed: Theme.start-time-width + Theme.start-category-width + Theme.start-club-width
+        + Theme.group-course-width + Theme.group-origin-width + Theme.zone;
+    // From the width given, not its own, which its rows would set.
+    property <length> name-width: max(Theme.participant-name-width, root.available-width - root.fixed);
+
+    VerticalLayout {
+        spacing: Theme.space-medium;
+        Sheet {
+            vertical-stretch: 0;
+            HorizontalLayout {
+                padding: Theme.space;
+                alignment: start;
+                PrimaryButton {
+                    label: "Ajouter un coureur";
+                    icon: Icons.plus;
+                    has-icon: true;
+                }
+            }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            // The card, from halfway down the tab to the bottom.
+            Rectangle {
+                y: head.card-top;
+                height: parent.height - head.card-top;
+                background: Theme.card;
+                border-radius: Theme.card-radius;
+                border-width: Theme.card-outline-width;
+                border-color: Theme.card-outline;
+                drop-shadow-blur: Theme.sheet-shadow-blur;
+                drop-shadow-offset-y: Theme.sheet-shadow-offset;
+                drop-shadow-color: Theme.sheet-shadow;
+                clip: true;
+                Flickable {
+                    y: head.height - head.card-top + titles.height;
+                    height: parent.height - self.y;
+                    content-height: members.preferred-height;
+                    members := VerticalLayout {
+                        alignment: start;
+                        for member in Starts.group-members: GroupLine {
+                            member: member;
+                            name-width: root.name-width;
+                        }
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                head := GroupHead { z: 1; }
+                titles := GroupTitles { name-width: root.name-width; }
+            }
+        }
     }
 }
 
@@ -1214,7 +1465,11 @@ export component StartsPage {
                 VerticalLayout {
                     horizontal-stretch: 1;
                     spacing: Theme.space-medium;
-                    StartsHead {
+                    if Starts.active-group >= 0: GroupView {
+                        vertical-stretch: 1;
+                        available-width: root.content-width;
+                    }
+                    if Starts.active-group < 0: StartsHead {
                         vertical-stretch: 0;
                         available-width: root.content-width;
                     }
@@ -1223,11 +1478,11 @@ export component StartsPage {
                         vertical-stretch: 0;
                         narrow: false;
                     }
-                    if Starts.active-view == 0: StartsBlocks {
+                    if Starts.active-group < 0 && Starts.active-view == 0: StartsBlocks {
                         vertical-stretch: 1;
                         available-width: root.content-width;
                     }
-                    if Starts.active-view == 1: Sheet {
+                    if Starts.active-group < 0 && Starts.active-view == 1: Sheet {
                         vertical-stretch: 1;
                         clip: true;
                         StartsFrise {
@@ -1380,7 +1635,13 @@ export component StartsBubble {
             close => { Courses.close-bubble(); }
         }
         if Courses.open-bubble == 8: ChangesContent { }
-        if Courses.open-bubble == 23: VerticalLayout {
+        if Courses.open-bubble == 23 && Starts.bubble-section == -2: VerticalLayout {
+            padding-top: Theme.space-small;
+            padding-bottom: Theme.space-small;
+            MenuItem { text: "Renommer…"; }
+            MenuItem { text: "Supprimer le groupe"; danger: true; }
+        }
+        if Courses.open-bubble == 23 && Starts.bubble-section != -2: VerticalLayout {
             padding-top: Theme.space-small;
             padding-bottom: Theme.space-small;
             MenuItem { text: "Refaire le tirage de ce circuit"; }

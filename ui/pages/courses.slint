@@ -2110,7 +2110,8 @@ export component TitleBubble inherits Rectangle {
         padding-left: Theme.space-medium;
         padding-right: Theme.tab-bubble-padding;
         spacing: Theme.space;
-        VerticalLayout {
+        // A start group has no course, and no chip.
+        if root.tone >= 0: VerticalLayout {
             alignment: center;
             CourseChip { tone: root.tone; }
         }
