@@ -7,11 +7,12 @@ import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
 import { MoreButton } from "../components/buttons.slint";
+import { Sheet } from "../components/zones.slint";
 import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { BubbleFrame, BubbleLabel, CourseChip, Courses, MenuItem, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
-import { Cell, NameCell } from "participants.slint";
+import { Cell, NameCell, Participants, SetItem, PanelSet, StatBlock, StatTile } from "participants.slint";
 import { ChipFlow, Head, Live, LiveDetail, LiveFilter, MenuHead, RowCell, TimeText } from "live.slint";
 
 export struct ResultRanking {
@@ -34,6 +35,15 @@ export struct ResultRow {
     badge: Badge,
     crossed: bool,
     selected: bool,
+}
+
+// One ranking, as a column (brief Cowork, 11/11).
+export struct ResultColumn {
+    index: int,
+    title: string,
+    tone: int,
+    state: string,
+    rows: [ResultRow],
 }
 
 export global Results {
@@ -61,99 +71,23 @@ export global Results {
     in property <string> ranking-search-text;
     in-out property <int> menu-row: -1;   // the row whose « ⋯ » menu is open
 
+    in property <[string]> views;              // the panel: Classements, Analyse, Remise des prix
+    in property <int> active-view;
+    in property <[ResultColumn]> columns;
+    in property <int> focus-column: -1;        // the column to bring to the left
+    in property <[FilterGroup]> column-filter-groups;
+    in property <[ActiveFilter]> column-filters;
+    in property <[StatBlock]> stats;
+    callback select-view(int);
+    callback pick-stat(int, int);
+    callback toggle-column-filter(int, int);
+    callback clear-column-filters();
+
     callback select-mode(int);
     callback select-ranking(int);
     callback select-category(int);
     callback search(string);
     callback search-ranking(string);
-}
-
-// The rankings: the column's navigation, with its magnifier.
-// The floating panel on the left (brief zones-onglets § 3).
-component RankingColumn inherits Rectangle {
-    property <bool> search-open: Results.ranking-search-text != "";
-
-    background: Theme.card;
-    border-radius: Theme.sheet-radius;
-    border-width: Theme.card-outline-width;
-    border-color: Theme.card-outline;
-    drop-shadow-blur: Theme.sheet-shadow-blur;
-    drop-shadow-offset-y: Theme.sheet-shadow-offset;
-    drop-shadow-color: Theme.sheet-shadow;
-    clip: true;
-    VerticalLayout {
-        padding: Theme.space;
-        spacing: Theme.space-small;
-        HorizontalLayout {
-            vertical-stretch: 0;
-            padding-left: Theme.space;
-            Head {
-                horizontal-stretch: 1;
-                text: "Classements";
-            }
-            SearchToggle {
-                open: root.search-open;
-                clicked => {
-                    if root.search-open {
-                        Results.search-ranking("");
-                    }
-                    root.search-open = !root.search-open;
-                }
-            }
-        }
-        if root.search-open: InputField {
-            vertical-stretch: 0;
-            placeholder: "Classement…";
-            text: Results.ranking-search-text;
-            init => { self.take-focus(); }
-            edited(text) => { Results.search-ranking(text); }
-        }
-        Flickable {
-            vertical-stretch: 1;
-            content-height: lines.preferred-height;
-            // The end of the list stays clear of the Démo button.
-            lines := VerticalLayout {
-                width: parent.width;
-                alignment: start;
-                spacing: Theme.space-small;
-                padding-bottom: Theme.zone + Theme.space-medium;
-                for ranking in Results.rankings: Rectangle {
-                    height: Theme.zone;
-                    border-radius: Theme.block-radius;
-                    background: Results.active-ranking == ranking.index ? Theme.active-tab-background : zone.has-hover ? Theme.tab-hover : transparent;
-                    accessible-role: button;
-                    accessible-label: ranking.label;
-                    HorizontalLayout {
-                        padding-left: Theme.space;
-                        padding-right: Theme.space;
-                        spacing: Theme.space;
-                        VerticalLayout {
-                            alignment: center;
-                            CourseChip { tone: ranking.tone; }
-                        }
-                        Text {
-                            horizontal-stretch: 1;
-                            text: ranking.label;
-                            color: Results.active-ranking == ranking.index ? Theme.active-tab-text : Theme.text;
-                            font-size: Theme.text-help;
-                            font-weight: Theme.weight-block-title;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            text: ranking.count;
-                            color: Results.active-ranking == ranking.index ? Theme.active-tab-text : Theme.text-secondary;
-                            font-size: Theme.text-help;
-                            vertical-alignment: center;
-                        }
-                    }
-                    zone := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { Results.select-ranking(ranking.index); }
-                    }
-                }
-            }
-        }
-    }
 }
 
 // The « ⋯ » of a row: a small menu, joined to it (prototype: rDots). No effect yet.
@@ -441,6 +375,262 @@ component ResultsContent {
     }
 }
 
+// The panel: the three views, the main one apart, then the figures that matter now.
+component ResultsPanel inherits Sheet {
+    property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;
+
+    VerticalLayout {
+        padding: Theme.space;
+        spacing: Theme.space-small;
+        VerticalLayout {
+          vertical-stretch: 0;
+          spacing: Theme.space-small;
+          for view[i] in Results.views: VerticalLayout {
+            spacing: Theme.space-small;
+            SetItem {
+                main: i == 0;
+                set: { name: view, count: "", detail: "" };
+                active: Results.active-view == i;
+                clicked => { Results.select-view(i); }
+            }
+            if i == 0: HorizontalLayout {
+                padding: Theme.space-small;
+                RowLine { }
+            }
+          }
+        }
+        Rectangle { vertical-stretch: 1; }
+        for row in [0, 2]: HorizontalLayout {
+            spacing: Theme.space;
+            visible: row < root.shown && Results.stats.length > row;
+            height: self.visible ? self.preferred-height : 0px;
+            for n in [0, 1]: cell := Rectangle {
+                horizontal-stretch: 1;
+                min-height: tile.preferred-height;
+                tile := StatTile {
+                    visible: Results.stats.length > row + n;
+                    width: cell.width;
+                    block: Results.stats[row + n];
+                    clicked => { Results.pick-stat(self.block.group, self.block.choice); }
+                }
+            }
+        }
+    }
+}
+
+// One row of a column: place, name, time, gap, state.
+component ColumnRow inherits Rectangle {
+    in property <ResultRow> entry;
+
+    min-height: Theme.zone;
+    background: root.entry.selected ? Theme.row-selected : zone.has-hover ? Theme.tab-hover : transparent;
+    zone := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { Live.select-runner(root.entry.runner); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.space;
+        padding-right: Theme.space;
+        spacing: Theme.space;
+        Text {
+            width: Theme.column-place-width;
+            text: root.entry.place;
+            color: Theme.text;
+            font-size: Theme.text-label;
+            font-weight: Theme.weight-screen-title;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: root.entry.family + " " + root.entry.first;
+                color: root.entry.crossed ? Theme.text-secondary : Theme.text;
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-block-title;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            width: Theme.column-time-width;
+            alignment: center;
+            Text {
+                text: root.entry.time;
+                color: root.entry.crossed ? Theme.text-secondary : Theme.text;
+                font-size: Theme.text-label;
+                font-weight: Theme.weight-block-title;
+                horizontal-alignment: right;
+            }
+            if root.entry.gap != "": Text {
+                text: root.entry.gap;
+                color: Theme.text-secondary;
+                font-size: Theme.text-help;
+                horizontal-alignment: right;
+            }
+        }
+        if root.entry.place == "": VerticalLayout {
+            alignment: center;
+            StatusBadge { status: Home.status-of(root.entry.badge); }
+        }
+    }
+}
+
+// One ranking: its head stays at the top, its rows scroll under it.
+component RankingCard inherits Sheet {
+    in property <ResultColumn> column;
+
+    clip: true;
+    VerticalLayout {
+        HorizontalLayout {
+            padding: Theme.space;
+            spacing: Theme.space;
+            VerticalLayout {
+                alignment: center;
+                CourseChip { tone: root.column.tone; }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                Text {
+                    text: root.column.title;
+                    color: Theme.text;
+                    font-size: Theme.text-body;
+                    font-weight: Theme.weight-screen-title;
+                    wrap: word-wrap;
+                }
+                SmallText { text: root.column.state; }
+            }
+        }
+        RowLine { }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: rows.preferred-height;
+            rows := VerticalLayout {
+                alignment: start;
+                for row in root.column.rows: VerticalLayout {
+                    ColumnRow { entry: row; }
+                    RowLine { }
+                }
+            }
+        }
+    }
+}
+
+// The rankings side by side; they scroll sideways, with a bar at the bottom for the mouse
+// (brief Cowork, 11/11: the only sideways scroll of the app). A row chosen, or found by the
+// search, brings its column to the left, smoothly.
+component ColumnsView {
+    // The width given, not its own: its own would depend on the bar it shows.
+    in property <length> available-width;
+    property <length> step: Theme.result-column-width + Theme.space-medium;
+    property <length> full: Results.columns.length * root.step - Theme.space-medium;
+    property <length> room: max(0px, root.full - root.available-width);
+    in-out property <length> shift: 0px;
+    animate shift { duration: Theme.sheet-duration; easing: cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+    property <int> wanted: Results.focus-column;
+    changed wanted => {
+        if self.wanted >= 0 {
+            root.shift = min(root.room, self.wanted * root.step);
+        }
+    }
+    changed room => { root.shift = min(root.shift, root.room); }
+
+    VerticalLayout {
+        spacing: Theme.space;
+        Rectangle {
+            vertical-stretch: 1;
+            clip: true;
+            // Behind the columns, so that their rows keep their clicks. The trackpad and the wheel with Shift: sideways.
+            TouchArea {
+                scroll-event(event) => {
+                    if event.delta-x != 0 {
+                        root.shift = max(0px, min(root.room, root.shift - event.delta-x));
+                        return accept;
+                    }
+                    reject
+                }
+            }
+            HorizontalLayout {
+                x: -root.shift;
+                width: root.full;
+                spacing: Theme.space-medium;
+                for column in Results.columns: RankingCard {
+                    width: Theme.result-column-width;
+                    column: column;
+                }
+            }
+            if Results.columns.length == 0: Text {
+                text: "Aucun classement";
+                color: Theme.text-secondary;
+                font-size: Theme.text-label;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        // The bar: its thumb shows what is seen, and can be dragged.
+        if root.room > 0: track := Rectangle {
+            height: Theme.scroll-bar-height;
+            border-radius: self.height / 2;
+            background: Theme.surface;
+            thumb := Rectangle {
+                x: root.shift / root.full * track.width;
+                width: max(Theme.zone, root.available-width / root.full * track.width);
+                height: parent.height;
+                border-radius: self.height / 2;
+                background: drag.has-hover || drag.pressed ? Theme.text-secondary : Theme.thin-outline;
+            }
+            drag := TouchArea {
+                mouse-cursor: pointer;
+                property <length> start-shift;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down {
+                        self.start-shift = root.shift;
+                    }
+                }
+                moved => {
+                    root.shift = max(0px, min(root.room,
+                        self.start-shift + (self.mouse-x - self.pressed-x) * root.full / track.width));
+                }
+                clicked => {
+                    if self.mouse-x < thumb.x || self.mouse-x > thumb.x + thumb.width {
+                        root.shift = max(0px, min(root.room, self.mouse-x / track.width * root.full - root.available-width / 2));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The head of the card: no addition here; on the right, the filters and the search.
+component ResultsHead inherits Sheet {
+    height: self.preferred-height;
+    HorizontalLayout {
+        padding: Theme.space;
+        spacing: Theme.space;
+        Rectangle { horizontal-stretch: 1; }
+        FilterButton {
+            filters: Results.column-filters;
+            open: Courses.open-bubble == 19;
+            open-down: Courses.bubble-down;
+            clicked => {
+                Courses.open-at(19, self.absolute-position.x, self.absolute-position.y, self.width, self.height);
+            }
+            remove(g, c) => { Results.toggle-column-filter(g, c); }
+            clear => { Results.clear-column-filters(); }
+        }
+        VerticalLayout {
+            alignment: center;
+            InputField {
+                width: Theme.code-search-width;
+                placeholder: "Nom, club ou puce…";
+                text: Results.search-text;
+                edited(text) => { Results.search(text); }
+            }
+        }
+    }
+}
+
 export component ResultsPage {
     in property <LayoutMode> layout-mode;
     in property <length> available-width;
@@ -464,11 +654,26 @@ export component ResultsPage {
         if root.layout-mode != LayoutMode.narrow: Rectangle {
             HorizontalLayout {
                 spacing: Theme.button-margin;
-                RankingColumn { width: Theme.course-list-width; }
-                ResultsContent {
+                // The panel; then the columns of the rankings, or the view chosen (brief Cowork, 11/11).
+                ResultsPanel { width: Theme.course-list-width; }
+                VerticalLayout {
                     horizontal-stretch: 1;
-                    layout-mode: root.layout-mode;
-                    available-width: root.content-width;
+                    spacing: Theme.space-medium;
+                    if Results.active-view == 0: ResultsHead { vertical-stretch: 0; }
+                    if Results.active-view == 0: ColumnsView {
+                        vertical-stretch: 1;
+                        available-width: root.content-width;
+                    }
+                    // Analyse and Remise des prix: to be designed later; their title only.
+                    if Results.active-view != 0: Sheet {
+                        vertical-stretch: 1;
+                        Text {
+                            text: Results.views[Results.active-view];
+                            color: Theme.text-secondary;
+                            font-size: Theme.text-body;
+                            font-weight: Theme.weight-screen-title;
+                        }
+                    }
                 }
             }
             SideDetail {
@@ -513,7 +718,7 @@ export component ResultsBubble {
         height: 100%;
         margin: root.margin;
         wanted-width: Courses.open-bubble == 24 ? Theme.menu-bubble-width
-            : Courses.open-bubble == 27 ? Theme.filter-bubble-width : Theme.bubble-width;
+            : Courses.open-bubble == 27 || Courses.open-bubble == 19 ? Theme.filter-bubble-width : Theme.bubble-width;
         // The « ⋯ » of a row (prototype: rDots): no effect yet.
         if Courses.open-bubble == 24: VerticalLayout {
             padding-top: Theme.space-small;
@@ -522,6 +727,12 @@ export component ResultsBubble {
             MenuItem { text: "Arrivée manuelle…"; }
             MenuItem { text: "Changer le statut…"; }
             MenuItem { text: "Historique"; }
+        }
+        if Courses.open-bubble == 19: FiltersContent {
+            groups: Results.column-filter-groups;
+            toggle(g, c) => { Results.toggle-column-filter(g, c); }
+            clear => { Results.clear-column-filters(); }
+            close => { Courses.close-bubble(); }
         }
         if Courses.open-bubble == 27: FiltersContent {
             groups: Results.filter-groups;

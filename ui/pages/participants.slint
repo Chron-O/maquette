@@ -431,7 +431,7 @@ component ParticipantsHead {
 }
 
 // A choice of the panel: its name, how many it holds, and a word more when it helps.
-component SetItem inherits Rectangle {
+export component SetItem inherits Rectangle {
     callback clicked();
     in property <bool> main;   // « Tous »: a size larger (Robin, 11/11)
     in property <PanelSet> set;
@@ -476,7 +476,7 @@ component SetItem inherits Rectangle {
 
 // The floating panel: what the card shows, with no title (brief Cowork, 11/11).
 // A block of figures: the number in big, its word under it.
-component StatTile inherits Rectangle {
+export component StatTile inherits Rectangle {
     callback clicked();
     in property <StatBlock> block;
 

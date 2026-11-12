@@ -484,6 +484,13 @@ fn connect_results(window: &App, state: &Rc<RefCell<AppState>>) {
         }
     });
     page.on_select_ranking(on_click(window, state, |r, i: i32| r.select_ranking(i as usize)));
+    page.on_select_view(on_click(window, state, |r, i: i32| r.select_view(i as usize)));
+    let pick = on_click(window, state, |r, (_g, c): (i32, i32)| r.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
+    let toggle_column = on_click(window, state, |r, (g, c): (i32, i32)| r.toggle_column_filter(g as usize, c as usize));
+    page.on_toggle_column_filter(move |g, c| toggle_column((g, c)));
+    let clear_columns = on_click(window, state, |r, _: ()| r.clear_column_filters());
+    page.on_clear_column_filters(move || clear_columns(()));
     page.on_select_category(on_click(window, state, |r, i: i32| r.select_category(i as usize)));
     let toggle = on_click(window, state, |r, (g, c): (i32, i32)| r.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
