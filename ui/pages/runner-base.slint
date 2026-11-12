@@ -120,9 +120,11 @@ component RunnerBaseTable {
     property <bool> full: root.available-width >= Theme.base-full-width;
     // Ligue and Points CN are in the runner's detail (Robin, 12/11); the last column holds the
     // « Doublon ? » mark and its button.
-    property <length> fixed: Theme.base-club-width + Theme.base-category-width + Theme.base-kind-width + Theme.base-card-width
-        + Theme.base-duplicate-width
-        + (root.full ? Theme.base-first-width + Theme.base-year-width + Theme.base-licence-width : 0px);
+    // A narrow table (iPad portrait) keeps the name, the club, the category and the button:
+    // the type and the card are in the detail.
+    property <length> duplicate-width: root.full ? Theme.base-duplicate-width : Theme.base-duplicate-narrow-width;
+    property <length> fixed: Theme.base-club-width + Theme.base-category-width + root.duplicate-width
+        + (root.full ? Theme.base-first-width + Theme.base-year-width + Theme.base-licence-width + Theme.base-kind-width + Theme.base-card-width : 0px);
     property <length> name-width: root.available-width - root.fixed;
 
     VerticalLayout {
@@ -135,9 +137,9 @@ component RunnerBaseTable {
             Title { width: Theme.base-category-width; label: "Cat."; sorted: RunnerBase.sort-column == 4; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(4); } }
             if root.full: Title { width: Theme.base-year-width; label: "Année"; sorted: RunnerBase.sort-column == 5; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(5); } }
             if root.full: Title { width: Theme.base-licence-width; label: "Licence"; sorted: RunnerBase.sort-column == 6; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(6); } }
-            Title { width: Theme.base-kind-width; label: "Type"; sorted: RunnerBase.sort-column == 7; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(7); } }
-            Title { width: Theme.base-card-width; label: "Puce"; sorted: RunnerBase.sort-column == 8; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(8); } }
-            Rectangle { width: Theme.base-duplicate-width; }
+            if root.full: Title { width: Theme.base-kind-width; label: "Type"; sorted: RunnerBase.sort-column == 7; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(7); } }
+            if root.full: Title { width: Theme.base-card-width; label: "Puce"; sorted: RunnerBase.sort-column == 8; ascending: RunnerBase.sort-ascending; clicked => { RunnerBase.sort-by(8); } }
+            Rectangle { width: root.duplicate-width; }
         }
         RowLine { vertical-stretch: 0; }
         if RunnerBase.empty != "": Text {
@@ -181,14 +183,14 @@ component RunnerBaseTable {
                             RowCell { width: Theme.base-category-width; Cell { text: row.category; } }
                             if root.full: RowCell { width: Theme.base-year-width; Cell { text: row.year; } }
                             if root.full: RowCell { width: Theme.base-licence-width; Cell { text: row.licence; } }
-                            RowCell { width: Theme.base-kind-width; Cell { text: row.kind; } }
-                            RowCell { width: Theme.base-card-width; Cell { text: row.card; } }
+                            if root.full: RowCell { width: Theme.base-kind-width; Cell { text: row.kind; } }
+                            if root.full: RowCell { width: Theme.base-card-width; Cell { text: row.card; } }
                             HorizontalLayout {
-                                width: Theme.base-duplicate-width;
+                                width: root.duplicate-width;
                                 padding-right: Theme.space;
                                 spacing: Theme.space;
                                 alignment: end;
-                                if row.duplicate: VerticalLayout { alignment: center; StatusBadge { status: Home.status-of({ word: "Doublon ?", kind: BadgeKind.to-check }); } }
+                                if row.duplicate && root.full: VerticalLayout { alignment: center; StatusBadge { status: Home.status-of({ word: "Doublon ?", kind: BadgeKind.to-check }); } }
                                 if row.duplicate: RowButton { label: "Comparer"; }
                             }
                         }
