@@ -2,6 +2,7 @@
 // parks in the column, the cards of the chosen park in a table, and the detail of a card.
 
 import { Theme } from "../theme.slint";
+import { Tabs } from "../components/tabs.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
@@ -10,7 +11,7 @@ import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, 
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
 import { AlertPill, BubbleFrame, BubbleLabel, Courses, RowLine, SearchToggle, SmallText, SummaryZone } from "courses.slint";
-import { Cell } from "participants.slint";
+import { Cell, StatBlock, StatsRows } from "participants.slint";
 import { ChipFlow, Head, LiveFilter, RowCell } from "live.slint";
 import { ReaderTile, ReaderState, Readers } from "../components/reader-tile.slint";
 
@@ -51,6 +52,9 @@ export struct OverdueCard {
 }
 
 export global Cards {
+    in-out property <bool> inventory;   // the panel: Parcs or Inventaire (brief Cowork, 12/11)
+    in property <[StatBlock]> stats;
+    callback pick-stat(int, int);
     in property <[CardParkItem]> parks;
     in property <[LiveFilter]> park-chips;
     in property <int> active-park;
@@ -358,14 +362,26 @@ component CardsContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
+        // A phone: the head and the list in one card. Wider: the head is a band of its own,
+        // over the card of the table (brief Cowork, 11/11).
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
-            background: Theme.card;
+            background: root.narrow ? Theme.card : transparent;
             border-radius: Theme.card-radius;
-            border-width: Theme.card-outline-width;
+            border-width: root.narrow ? Theme.card-outline-width : 0px;
             border-color: Theme.card-outline;
-            clip: true;
+            clip: false;
             VerticalLayout {
+                spacing: root.narrow ? 0px : Theme.space-medium;
+                Rectangle {
+                vertical-stretch: 0;
+                background: root.narrow ? transparent : Theme.card;
+                border-radius: Theme.sheet-radius;
+                border-width: root.narrow ? 0px : Theme.card-outline-width;
+                border-color: Theme.card-outline;
+                drop-shadow-blur: root.narrow ? 0px : Theme.sheet-shadow-blur;
+                drop-shadow-offset-y: root.narrow ? 0px : Theme.sheet-shadow-offset;
+                drop-shadow-color: Theme.sheet-shadow;
                 VerticalLayout {
                     vertical-stretch: 0;
                     padding: Theme.space;
@@ -374,8 +390,9 @@ component CardsContent {
                     // (brief zones-onglets § 6).
                     HorizontalLayout {
                         spacing: Theme.space;
-                        if !Cards.read-unknown: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
-                        if Cards.read-unknown: SecondaryButton { label: root.narrow ? "Ajouter" : "Ajouter des puces…"; }
+                        if !Cards.read-unknown: PrimaryButton { icon: Icons.plus; has-icon: true; label: root.narrow || root.stacked ? "Ajouter" : "Ajouter des puces…"; }
+                        if Cards.read-unknown: SecondaryButton { label: root.narrow || root.stacked ? "Ajouter" : "Ajouter des puces…"; }
+                        if !root.narrow: SecondaryButton { label: "Importer…"; }
                         if !root.narrow && !root.stacked: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
@@ -467,11 +484,27 @@ component CardsContent {
                         }
                     }
                 }
-                RowLine { vertical-stretch: 0; }
+                }
+                if root.narrow: RowLine { vertical-stretch: 0; }
                 if root.narrow: CardsList { }
-                if !root.narrow: CardsTable {
+                if !root.narrow && !Cards.inventory: Sheet {
                     vertical-stretch: 1;
-                    available-width: root.available-width;
+                    clip: true;
+                    CardsTable {
+                        width: parent.width;
+                        height: parent.height;
+                        available-width: root.available-width;
+                    }
+                }
+                // The inventory of the park chosen: to be designed; its title only (brief Cowork, 12/11).
+                if !root.narrow && Cards.inventory: Sheet {
+                    vertical-stretch: 1;
+                    Text {
+                        text: "Inventaire · " + Cards.title;
+                        color: Theme.text-secondary;
+                        font-size: Theme.text-body;
+                        font-weight: Theme.weight-screen-title;
+                    }
                 }
             }
         }
@@ -647,20 +680,31 @@ export component CardsPage {
         if root.layout-mode != LayoutMode.narrow: Rectangle {
             HorizontalLayout {
                 spacing: Theme.button-margin;
-                // The floating panel on the left (brief zones-onglets § 3).
-                Sheet {
+                // The panel: the parks, or the inventory, as sub-tabs; the parks; the figures;
+                // then the reader apart, at the bottom left (brief Cowork, 11/11 and 12/11).
+                VerticalLayout {
                     width: Theme.course-list-width;
-                    VerticalLayout {
-                        padding: Theme.button-margin;   // the reader close to the edges, as on Participants (Robin, 11/11)
-                        spacing: Theme.space;
-                        CardReader { vertical-stretch: 0; }
-                        ParkColumn {
-                            vertical-stretch: 1;
-                            parks: Cards.parks;
-                            active: Cards.active-park;
-                            selected(i) => { Cards.select-park(i); }
+                    spacing: Theme.button-margin;
+                    Sheet {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            padding: Theme.space;
+                            spacing: Theme.space;
+                            Tabs {
+                                tabs: [{ label: "Parcs" }, { label: "Inventaire" }];
+                                active: Cards.inventory ? 1 : 0;
+                                clicked(i) => { Cards.inventory = i == 1; }
+                            }
+                            ParkColumn {
+                                vertical-stretch: 1;
+                                parks: Cards.parks;
+                                active: Cards.active-park;
+                                selected(i) => { Cards.select-park(i); }
+                            }
+                            StatsRows { stats: Cards.stats; picked(g, c) => { Cards.pick-stat(g, c); } }
                         }
                     }
+                    CardReader { vertical-stretch: 0; }
                 }
                 CardsContent {
                     horizontal-stretch: 1;

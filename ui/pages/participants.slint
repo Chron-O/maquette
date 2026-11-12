@@ -505,6 +505,30 @@ export component StatTile inherits Rectangle {
     }
 }
 
+// The blocks of figures, two by row: four if the window is tall enough, two otherwise.
+export component StatsRows inherits VerticalLayout {
+    in property <[StatBlock]> stats;
+    callback picked(int, int);
+    property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;
+
+    spacing: Theme.space;
+    for row in [0, 2]: HorizontalLayout {
+        spacing: Theme.space;
+        visible: row < root.shown && root.stats.length > row;
+        height: self.visible ? self.preferred-height : 0px;
+        for n in [0, 1]: cell := Rectangle {
+            horizontal-stretch: 1;
+            min-height: tile.preferred-height;
+            tile := StatTile {
+                visible: root.stats.length > row + n;
+                width: cell.width;
+                block: root.stats[row + n];
+                clicked => { root.picked(self.block.group, self.block.choice); }
+            }
+        }
+    }
+}
+
 component ParticipantsPanel inherits Sheet {
     // Four blocks when the window is tall enough, two otherwise: never more (Robin, 11/11).
     property <int> shown: Participants.window-height >= Theme.panel-four-stats-height ? 4 : 2;

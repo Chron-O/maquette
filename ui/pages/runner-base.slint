@@ -5,7 +5,7 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold } from "../components/zones.slint";
+import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SideDetail, Unfold, Sheet } from "../components/zones.slint";
 import { PrimaryButton, SecondaryButton } from "../components/buttons.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Home } from "home.slint";
@@ -224,15 +224,26 @@ component RunnerBaseContent {
 
     VerticalLayout {
         spacing: root.narrow ? Theme.button-margin : Theme.space;
+        // A phone: the head and the list in one card. Wider: the head is a band of its own,
+        // over the card of the table (brief Cowork, 11/11).
         Rectangle {
             vertical-stretch: root.narrow ? 0 : 1;
-            background: Theme.card;
+            background: root.narrow ? Theme.card : transparent;
             border-radius: Theme.card-radius;
-            border-width: Theme.card-outline-width;
+            border-width: root.narrow ? Theme.card-outline-width : 0px;
             border-color: Theme.card-outline;
-            // On a phone the whole list is in the card: too tall for the layer a clip draws into.
-            clip: !root.narrow;
+            clip: false;
             VerticalLayout {
+                spacing: root.narrow ? 0px : Theme.space-medium;
+                Rectangle {
+                vertical-stretch: 0;
+                background: root.narrow ? transparent : Theme.card;
+                border-radius: Theme.sheet-radius;
+                border-width: root.narrow ? 0px : Theme.card-outline-width;
+                border-color: Theme.card-outline;
+                drop-shadow-blur: root.narrow ? 0px : Theme.sheet-shadow-blur;
+                drop-shadow-offset-y: root.narrow ? 0px : Theme.sheet-shadow-offset;
+                drop-shadow-color: Theme.sheet-shadow;
                 VerticalLayout {
                     vertical-stretch: 0;
                     padding: Theme.space;
@@ -246,6 +257,9 @@ component RunnerBaseContent {
                             icon: Icons.plus;
                             has-icon: true;
                         }
+                        // What we add, next to it (Robin, 12/11): the federal import, the merge.
+                        if !root.narrow: SecondaryButton { label: "Importer FFCO…"; }
+                        if !root.narrow: SecondaryButton { label: "Fusionner des clubs…"; }
                         if !root.narrow && !root.stacked: VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
@@ -337,11 +351,17 @@ component RunnerBaseContent {
                         }
                     }
                 }
-                RowLine { vertical-stretch: 0; }
+                }
+                if root.narrow: RowLine { vertical-stretch: 0; }
                 if root.narrow: RunnerBaseList { }
-                if !root.narrow: RunnerBaseTable {
+                if !root.narrow: Sheet {
                     vertical-stretch: 1;
-                    available-width: root.available-width;
+                    clip: true;
+                    RunnerBaseTable {
+                        width: parent.width;
+                        height: parent.height;
+                        available-width: root.available-width;
+                    }
                 }
             }
         }

@@ -3,11 +3,11 @@
 
 use crate::home::badge;
 use crate::test_data::{CardPlace, CardState, Generated, Kind, Label, LoanCard};
-use crate::{ActiveFilter, App, FilterChoice, FilterGroup, CardAction, CardEntry, CardParkItem, CardRow, Cards, LiveFilter, OverdueCard, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, CardAction, CardEntry, CardParkItem, CardRow, Cards, LiveFilter, OverdueCard, model, StatBlock};
 use slint::{ComponentHandle, SharedString};
 
 // The states, then where a card is out (puces-pret-parc.md § 12): the same words as the band.
-const FILTERS: [&str; 7] = ["Toutes", "En service", "À vérifier", "HS", "Perdues", "Prêtées", "Non rendues"];
+const FILTERS: [&str; 8] = ["Toutes", "En service", "À vérifier", "HS", "Perdues", "Prêtées", "Non rendues", "Au parc"];
 
 // What the buttons of the detail do.
 const ACT_IN_SERVICE: i32 = 0;
@@ -59,6 +59,7 @@ fn matches_filter(card: &LoanCard, filter: usize) -> bool {
         4 => card.state == CardState::Lost,
         5 => matches!(card.place, CardPlace::Lent { .. }),
         6 => matches!(card.place, CardPlace::NotReturned { .. }),
+        7 => card.place == CardPlace::Park,
         _ => true,
     }
 }
@@ -104,6 +105,11 @@ impl CardsState {
 
     pub fn clear_filters(&mut self) {
         self.filter = 0;
+    }
+
+    // A block of figures: its filter, alone; again, it goes away (brief Cowork, 12/11).
+    pub fn pick_stat(&mut self, choice: usize) {
+        self.toggle_filter(0, choice);
     }
 
     pub fn set_search(&mut self, text: &str) {
@@ -233,6 +239,27 @@ impl CardsState {
             format!("{total} · {at_park} au parc · {} · {}", plural(lent, "prêtée"), plural(not_returned, "non rendue")).into(),
         );
         page.set_summary_short(format!("{total} · {} · {}", plural(lent, "prêtée"), plural(not_returned, "non rendue")).into());
+
+        // The blocks of figures, by the moment of the event under way (brief Cowork, 12/11):
+        // before, the park; during, the loans; after, what did not come back.
+        let event = data.and_then(|d| d.events.get(crate::test_data::CURRENT_EVENT));
+        let started = event.is_some_and(|e| e.runners.iter().any(|r| r.started));
+        let racing = event.is_some_and(|e| e.runners.iter().any(|r| r.is_racing()));
+        let wanted: &[usize] = if !started { &[7, 5, 2] } else if racing { &[5] } else { &[6, 3, 4] };
+        page.set_stats(model(
+            wanted
+                .iter()
+                .map(|f| (*f, cards.iter().filter(|c| matches_filter(c, *f)).count()))
+                .filter(|(_, n)| *n > 0)
+                .map(|(f, n)| StatBlock {
+                    label: FILTERS[f].into(),
+                    count: n.to_string().into(),
+                    group: 0,
+                    choice: f as i32 - 1,
+                    active: self.filter == f,
+                })
+                .collect(),
+        ));
 
         let words: Vec<&str> = self.search.split_whitespace().collect();
         let rows: Vec<CardRow> = cards

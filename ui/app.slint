@@ -540,9 +540,10 @@ export component App inherits Window {
             vertical-stretch: 0;
             if Navigation.runners-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? RunnerBase.summary-short : RunnerBase.summary;
-                first-action: "Fusionner des clubs";
+                // Wider, the merge and the import are in the card head (Robin, 12/11).
+                first-action: root.layout-mode == LayoutMode.narrow ? "Fusionner des clubs" : "";
                 first-alone: true;   // the long warning takes the whole width on a phone
-                can-import: true;
+                can-import: root.layout-mode == LayoutMode.narrow;
                 import-label: "Importer FFCO";
                 can-print: false;
                 layout-mode: root.layout-mode;
@@ -552,8 +553,9 @@ export component App inherits Window {
             }
             if Navigation.stations-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? ClubStations.summary-short : ClubStations.summary;
-                first-action: "Inventaire";
-                can-import: true;
+                // Wider, Inventaire is in the panel and Importer in the card head (brief Cowork, 12/11).
+                first-action: root.layout-mode == LayoutMode.narrow ? "Inventaire" : "";
+                can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
                 left-margin: root.band-left;
                 right-margin: root.right-margin;
@@ -561,8 +563,9 @@ export component App inherits Window {
             }
             if Navigation.cards-page: PageBand {
                 summary: root.layout-mode == LayoutMode.narrow ? Cards.summary-short : Cards.summary;
-                first-action: "Inventaire";
-                can-import: true;
+                // Wider, Inventaire is in the panel and Importer in the card head (brief Cowork, 12/11).
+                first-action: root.layout-mode == LayoutMode.narrow ? "Inventaire" : "";
+                can-import: root.layout-mode == LayoutMode.narrow;
                 layout-mode: root.layout-mode;
                 left-margin: root.band-left;
                 right-margin: root.right-margin;

@@ -538,6 +538,8 @@ fn connect_cards(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<Cards>();
     page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
     page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    let pick = on_click(window, state, |x, (_g, c): (i32, i32)| x.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     let toggle = on_click(window, state, |page_state, (g, c): (i32, i32)| page_state.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |c, _: ()| c.clear_filters());
@@ -593,6 +595,8 @@ fn connect_club_stations(window: &App, state: &Rc<RefCell<AppState>>) {
     let page = window.global::<ClubStations>();
     page.on_select_park(on_click(window, state, |c, i: i32| c.select_park(i as usize)));
     page.on_select_filter(on_click(window, state, |c, i: i32| c.select_filter(i as usize)));
+    let pick = on_click(window, state, |x, (_g, c): (i32, i32)| x.pick_stat(c as usize));
+    page.on_pick_stat(move |g, c| pick((g, c)));
     let toggle = on_click(window, state, |page_state, (g, c): (i32, i32)| page_state.toggle_filter(g as usize, c as usize));
     page.on_toggle_filter(move |g, c| toggle((g, c)));
     let clear = on_click(window, state, |c, _: ()| c.clear_filters());

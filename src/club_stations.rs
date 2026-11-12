@@ -4,7 +4,7 @@
 use crate::cards::plural;
 use crate::home::badge;
 use crate::test_data::{CLOCK_MAX_GAP, Generated, Kind, Label, StockState, StockStation, UNIDENTIFIED_PARK};
-use crate::{ActiveFilter, App, FilterChoice, FilterGroup, BatteryDueItem, CardAction, CardEntry, CardParkItem, ClubStationRow, ClubStations, LiveFilter, model};
+use crate::{ActiveFilter, App, FilterChoice, FilterGroup, BatteryDueItem, CardAction, CardEntry, CardParkItem, ClubStationRow, ClubStations, LiveFilter, model, StatBlock};
 use slint::{ComponentHandle, SharedString};
 
 const FILTERS: [&str; 6] = ["Tous", "En service", "À vérifier", "Pile à changer", "En réparation", "Perdus"];
@@ -113,6 +113,11 @@ impl ClubStationsState {
     // The Filtres bubble (brief zones-onglets § 5): one group, the choices after « Tous ».
     pub fn toggle_filter(&mut self, _group: usize, choice: usize) {
         self.filter = if self.filter == choice + 1 { 0 } else { choice + 1 };
+    }
+
+    // A block of figures: its filter, alone; again, it goes away (brief Cowork, 12/11).
+    pub fn pick_stat(&mut self, choice: usize) {
+        self.toggle_filter(0, choice);
     }
 
     pub fn clear_filters(&mut self) {
@@ -225,6 +230,21 @@ impl ClubStationsState {
         let park = parks.get(self.park);
         let stations = park.map_or(&[][..], |p| &p.stations[..]);
         // Each filter says how many stations of the park shown it keeps.
+        // The blocks of figures, the same at any moment (brief Cowork, 12/11).
+        page.set_stats(model(
+            [1usize, 2, 3, 4]
+                .iter()
+                .map(|f| (*f, stations.iter().filter(|s| matches_filter(s, *f)).count()))
+                .filter(|(_, n)| *n > 0)
+                .map(|(f, n)| StatBlock {
+                    label: FILTERS[f].into(),
+                    count: n.to_string().into(),
+                    group: 0,
+                    choice: f as i32 - 1,
+                    active: self.filter == f,
+                })
+                .collect(),
+        ));
         page.set_filters(model(
             FILTERS.iter()
                 .enumerate()
