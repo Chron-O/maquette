@@ -5,7 +5,7 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { MoreButton, PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { MoreButton, PrimaryButton, QuietButton, SecondaryButton, RowButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
 import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, SettingRow, SettingsTab, Sheet, SheetTitle, SideDetail, Unfold, Zones } from "../components/zones.slint";
@@ -476,7 +476,7 @@ component StartLine inherits VerticalLayout {
                 width: root.state-width;
                 padding-left: Theme.space;
                 alignment: start;
-                SecondaryButton { label: "Réserver…"; }
+                RowButton { label: "Réserver…"; }
             }
         }
     }
@@ -649,7 +649,7 @@ component StartsList {
                                 VacantMark { }
                             }
                         }
-                        if row.index < 0: SecondaryButton { label: "Réserver…"; }
+                        if row.index < 0: RowButton { label: "Réserver…"; }
                     }
                 }
             }

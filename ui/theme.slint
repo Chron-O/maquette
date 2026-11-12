@@ -64,6 +64,14 @@ export global Theme {
     // Buttons
     out property <color> primary-button: #D9650C;
     out property <color> primary-button-text: #FFFFFF;
+    // A row's button (Robin, 11/11): an outlined pill, orange to do, dark green to go elsewhere.
+    out property <color> row-button-do: dark ? #F08A3C : #D9650C;
+    out property <color> row-button-do-hover: dark ? #3A2617 : #FDF0E6;
+    out property <color> row-button-go: dark ? #9FD9B8 : #163628;
+    out property <color> row-button-go-hover: dark ? #24352B : #E3EEE6;
+    out property <length> row-button-height: 32px;
+    out property <length> row-button-outline: 1.5px;
+    out property <length> row-button-padding: 14px;
     out property <color> secondary-button: dark ? #1F2F26 : #FFFFFF;   // light: white, as on the captures
 
     // Button on the header (tint changes on hover and press)

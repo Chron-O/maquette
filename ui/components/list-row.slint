@@ -1,6 +1,6 @@
 import { Theme } from "../theme.slint";
 import { StatusBlock, StatusBadge, Status } from "status.slint";
-import { PrimaryButton, MoreButton } from "buttons.slint";
+import { PrimaryButton, MoreButton, RowButton } from "buttons.slint";
 
 // A time. `struck`: the time does not count (PM): gray, lighter, struck through.
 // Slint cannot strike through: the line is drawn over the text, at its width.
@@ -112,8 +112,7 @@ export component ListRow inherits Rectangle {
         }
         if root.action != "": VerticalLayout {
             alignment: center;
-            PrimaryButton {
-                in-row: true;
+            RowButton {
                 label: root.action;
                 clicked => { root.action-clicked(); }
             }
@@ -233,8 +232,7 @@ export component TableRow inherits Rectangle {
         alignment: end;
         if root.action != "": VerticalLayout {
             alignment: center;
-            PrimaryButton {
-                in-row: true;
+            RowButton {
                 label: root.action;
                 clicked => { root.action-clicked(); }
             }

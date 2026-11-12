@@ -58,6 +58,7 @@ Une place par fonction, à tous les écrans (inspirée de `mise-en-page-universe
 - **Lecteur** au format moyen partout : nom et n° sur une ligne, l'état et l'épingle dessous, puis une zone fixe de 2 lignes (consigne, ou numéro lu et verdict, ou boutons d'une question ; alors le numéro remonte à la place de l'état). Écrans de boîtiers : un liseré orange épais ; l'état (lecture, inconnu, débranché) garde sa couleur.
 - **Filtres** : tous dans le bouton Filtres et sa bulle (un groupe par critère) ; les filtres actifs dans le bouton, chacun avec sa croix. Le « Voir » de l'alerte applique son filtre.
 - Un seul bouton orange par écran, hors actions de ligne.
+- **Bouton de ligne** (`RowButton`), le même dans tous les tableaux et listes (Robin, 11/11) : pilule à contour, orange pour une chose à faire (Attribuer, Rendre, Réserver), vert foncé pour aller voir ailleurs (Voir ses participants ›). Jamais plein.
 - Seul le contenu défile. Sur téléphone, c'est la page qui défile, jamais de côté, sauf les Colonnes de Classements (seule exception, ordinateur et téléphone) ; la recherche est une loupe qui se déplie.
 - Un aspect = un usage : ne pas donner le même dessin à un affichage et à un filtre.
 - Rien ne change de taille tout seul (lecture, alerte, appareil) : place réservée.

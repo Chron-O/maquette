@@ -6,7 +6,7 @@ import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { ReaderTile, Readers } from "../components/reader-tile.slint";
-import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton, RowButton } from "../components/buttons.slint";
 import { ChoiceSegments } from "../components/choice-segments.slint";
 import { ActiveFilter, FilterButton, FilterGroup, FiltersContent, SettingRow, Sheet, Unfold } from "../components/zones.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
@@ -270,7 +270,7 @@ component ParticipantsTable {
                                     if root.with-action || !row.no-card: Cell { text: row.card; wrap: word-wrap; }
                                     if !root.with-action && row.no-card: HorizontalLayout {
                                         alignment: start;
-                                        PrimaryButton { label: root.wide ? "Attribuer une puce" : "Attribuer"; in-row: true; }
+                                        RowButton { label: "Attribuer"; }
                                     }
                                 }
                                 if root.wide: HorizontalLayout {
@@ -285,7 +285,7 @@ component ParticipantsTable {
                                     alignment: start;
                                     if row.no-card: VerticalLayout {
                                         alignment: center;
-                                        PrimaryButton { label: "Attribuer une puce"; in-row: true; }
+                                        RowButton { label: "Attribuer"; }
                                     }
                                 }
                             }
@@ -335,7 +335,7 @@ component ParticipantsList {
                             font-weight: Theme.weight-screen-title;
                             horizontal-alignment: right;
                         }
-                        if row.no-card: PrimaryButton { label: "Attribuer"; in-row: true; }
+                        if row.no-card: RowButton { label: "Attribuer"; }
                     }
                 }
             }
@@ -598,7 +598,8 @@ component ClubsTable {
                             alignment: end;
                             VerticalLayout {
                                 alignment: center;
-                                SecondaryButton {
+                                RowButton {
+                                    go: true;
                                     label: "Voir ses participants ›";
                                     clicked => { Participants.show-club(club.name); }
                                 }
@@ -667,7 +668,7 @@ component LoansTable {
                                 }
                                 if loan.back == "À rendre": VerticalLayout {
                                     alignment: center;
-                                    SecondaryButton {
+                                    RowButton {
                                         label: "Rendre";
                                         clicked => { Participants.give-back(loan.index); }
                                     }

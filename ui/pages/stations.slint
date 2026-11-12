@@ -5,7 +5,7 @@ import { Theme } from "../theme.slint";
 import { LayoutMode } from "../navigation.slint";
 import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
-import { PrimaryButton, QuietButton, SecondaryButton } from "../components/buttons.slint";
+import { PrimaryButton, QuietButton, SecondaryButton, RowButton } from "../components/buttons.slint";
 import { Tabs, TabItem } from "../components/tabs.slint";
 import { StatusBadge } from "../components/status.slint";
 import { Badge, Home } from "home.slint";
@@ -159,9 +159,8 @@ component RowAction {
     HorizontalLayout {
         padding-left: Theme.space;
         alignment: start;
-        if root.label != "": PrimaryButton {
+        if root.label != "": RowButton {
             label: root.label;
-            in-row: true;
             clicked => {
                 if root.can-add {
                     Stations.add-row(root.index);

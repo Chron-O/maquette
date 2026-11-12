@@ -8,7 +8,7 @@ import { InputField } from "../components/field.slint";
 import { Icons } from "../components/icons.slint";
 import { LiveDot } from "../components/dot.slint";
 import { BarReader, ReaderMode, ReaderTile, Readers } from "../components/reader-tile.slint";
-import { MoreButton, PrimaryButton, SecondaryButton } from "../components/buttons.slint";
+import { MoreButton, PrimaryButton, SecondaryButton, RowButton } from "../components/buttons.slint";
 import { StatusBadge, StatusBlock } from "../components/status.slint";
 import { Badge, BadgeKind, Home, ToHandleButton } from "home.slint";
 import { ActiveFilter, BottomDetail, FilterButton, FilterGroup, FiltersContent, Sheet, SideDetail, Unfold } from "../components/zones.slint";
@@ -275,9 +275,8 @@ component RowEnd {
         padding-left: Theme.space;
         padding-right: Theme.space;
         spacing: Theme.space-small;
-        if root.entry.action != "": PrimaryButton {
+        if root.entry.action != "": RowButton {
             label: root.entry.action;
-            in-row: true;
             clicked => { Live.open-row(root.entry.index); }
         }
         if root.entry.settled != "": SettledMark { text: root.light ? "réglée" : root.entry.settled; }
@@ -463,9 +462,8 @@ component LiveList {
                     }
                     if row.action != "": VerticalLayout {
                         alignment: center;
-                        PrimaryButton {
+                        RowButton {
                             label: row.action;
-                            in-row: true;
                             clicked => { Live.open-row(row.index); }
                         }
                     }
